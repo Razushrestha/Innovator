@@ -1,8 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:innovator/books_pages.dart';
-import 'package:innovator/favorites_page.dart';
-import 'package:innovator/Message_page.dart';
-import 'package:innovator/profile_page.dart';
+import 'package:innovator/custom_drawer.dart';
+
+void main() => runApp(const MyApp());
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Innovator',
+      theme: ThemeData(primarySwatch: Colors.orange),
+      home: const InnovatorHomePage(),
+    );
+  }
+}
 
 class InnovatorHomePage extends StatefulWidget {
   const InnovatorHomePage({super.key});
@@ -38,7 +50,7 @@ class _InnovatorHomePageState extends State<InnovatorHomePage>
       ),
     );
 
-    _createScaleAnim = Tween<double>(begin: 1.0, end: 1).animate(
+    _createScaleAnim = Tween<double>(begin: 0.8, end: 1).animate(
       CurvedAnimation(
         parent: _controller,
         curve: const Interval(0.5, 1, curve: Curves.elasticOut),
@@ -56,11 +68,14 @@ class _InnovatorHomePageState extends State<InnovatorHomePage>
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
+
     return Scaffold(
+      appBar: AppBar(),
+      drawer: const CustomDrawer(),
       backgroundColor: Colors.grey[100],
       body: Stack(
         children: [
-          // Feed Section with fade-in
+          // Feed Section
           Center(
             child: FadeTransition(
               opacity: _feedFadeAnim,
@@ -72,27 +87,51 @@ class _InnovatorHomePageState extends State<InnovatorHomePage>
                   borderRadius: BorderRadius.circular(200),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.grey.withOpacity(0.15),
+                      color: const Color.fromRGBO(
+                        245,
+                        242,
+                        242,
+                        1,
+                      ).withOpacity(0.15),
                       blurRadius: 10,
                       offset: const Offset(0, 8),
                     ),
                   ],
                 ),
-                child: const Text(
-                  "Feed Section",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(
+                      Icons.lightbulb_outline,
+                      size: 48,
+                      color: Colors.orange,
+                    ),
+                    SizedBox(height: 18),
+                    Text(
+                      "Welcome, Innovator!",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      "Let's create something amazing today!",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 16, color: Colors.grey),
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
 
-          // Animated Floating Nav Bar (offset from right edge)
+          // Floating Nav Bar
           AnimatedBuilder(
             animation: _navWidthAnim,
             builder: (context, child) {
-              // vertical centering
-              final topOffset = (screenHeight - 340) / 2; // approx for 5 items
+              final topOffset = (screenHeight - 340) / 2;
               return Positioned(
                 top: topOffset,
                 right: 16,
@@ -107,27 +146,19 @@ class _InnovatorHomePageState extends State<InnovatorHomePage>
                       color: const Color(0xFFD2B48C),
                       padding: const EdgeInsets.symmetric(vertical: 24),
                       child:
-                          _navWidthAnim.value > 50
+                          _navWidthAnim.value > 30
                               ? Column(
                                 mainAxisSize: MainAxisSize.min,
                                 mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
+                                    MainAxisAlignment.spaceEvenly,
                                 children: [
                                   _animatedButton(
                                     icon: Icons.book,
-                                    onTap:
-                                        () => _navigate(
-                                          context,
-                                          const BooksPage(),
-                                        ),
+                                    onTap: () {},
                                   ),
                                   _animatedButton(
                                     icon: Icons.star,
-                                    onTap:
-                                        () => _navigate(
-                                          context,
-                                          const FavoritesPage(),
-                                        ),
+                                    onTap: () {},
                                   ),
                                   ScaleTransition(
                                     scale: _createScaleAnim,
@@ -139,12 +170,9 @@ class _InnovatorHomePageState extends State<InnovatorHomePage>
                                         shape: BoxShape.circle,
                                         boxShadow: [
                                           BoxShadow(
-                                            color: const Color.fromARGB(
-                                              255,
-                                              230,
-                                              227,
-                                              223,
-                                            ).withOpacity(0.4),
+                                            color: Colors.orange.withOpacity(
+                                              0.4,
+                                            ),
                                             blurRadius: 8,
                                             offset: const Offset(0, 4),
                                           ),
@@ -163,23 +191,15 @@ class _InnovatorHomePageState extends State<InnovatorHomePage>
                                   ),
                                   _animatedButton(
                                     icon: Icons.message,
-                                    onTap:
-                                        () => _navigate(
-                                          context,
-                                          const MessagesPage(),
-                                        ),
+                                    onTap: () {},
                                   ),
                                   _animatedButton(
                                     icon: Icons.person,
-                                    onTap:
-                                        () => _navigate(
-                                          context,
-                                          const ProfilePage(),
-                                        ),
+                                    onTap: () {},
                                   ),
                                 ],
                               )
-                              : const SizedBox.square(),
+                              : const SizedBox.shrink(),
                     ),
                   ),
                 ),
@@ -216,9 +236,5 @@ class _InnovatorHomePageState extends State<InnovatorHomePage>
         child: Icon(icon, color: Colors.white, size: 28),
       ),
     );
-  }
-
-  void _navigate(BuildContext context, Widget page) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => page));
   }
 }
