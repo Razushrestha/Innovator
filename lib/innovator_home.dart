@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:innovator/custom_drawer.dart';
+import 'package:innovator/utils/custom_drawer.dart';
 
 void main() => runApp(const MyApp());
 
@@ -131,7 +131,7 @@ class _InnovatorHomePageState extends State<InnovatorHomePage>
           AnimatedBuilder(
             animation: _navWidthAnim,
             builder: (context, child) {
-              final topOffset = (screenHeight - 340) / 2;
+              final topOffset = (screenHeight - 340) / 4;
               return Positioned(
                 top: topOffset,
                 right: 16,
@@ -146,7 +146,7 @@ class _InnovatorHomePageState extends State<InnovatorHomePage>
                       color: const Color(0xFFD2B48C),
                       padding: const EdgeInsets.symmetric(vertical: 24),
                       child:
-                          _navWidthAnim.value > 30
+                          _navWidthAnim.value > 20
                               ? Column(
                                 mainAxisSize: MainAxisSize.min,
                                 mainAxisAlignment:
@@ -181,7 +181,7 @@ class _InnovatorHomePageState extends State<InnovatorHomePage>
                                       child: IconButton(
                                         icon: const Icon(
                                           Icons.add,
-                                          size: 32,
+                                          size: 24,
                                           color: Colors.orange,
                                         ),
                                         tooltip: 'Create',
