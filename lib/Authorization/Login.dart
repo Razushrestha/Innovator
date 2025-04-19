@@ -41,14 +41,14 @@ class _LoginPageState extends State<LoginPage> {
         log('\nUserAddtionalInfo: ${user.additionalUserInfo}');
 
         if ((await APIs.userExists())) {
-          Navigator.push(
+          Navigator.pushReplacement(
               context,
               MaterialPageRoute(
                   builder: (_) => Homepage(user: APIs.me,
                       )));
         } else {
           await APIs.createUser().then((value) {
-            Navigator.push(
+            Navigator.pushReplacement(
                 context,
                 MaterialPageRoute(
                     builder: (_) => Homepage(user: APIs.me,
@@ -62,13 +62,13 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<UserCredential?> _signInWithGoogle() async {
   try {
+    // Check internet connection
     await InternetAddress.lookup('google.com');
     
-    // Initialize GoogleSignIn with options to show account picker
+    // Initialize GoogleSignIn
     final GoogleSignIn googleSignIn = GoogleSignIn(
-      clientId: '', // Optional for Android/iOS
       scopes: ['email', 'profile'],
-      signInOption: SignInOption.standard, // This shows account selection
+      signInOption: SignInOption.standard,
     );
 
     // Sign out first to ensure account picker appears
@@ -81,7 +81,18 @@ class _LoginPageState extends State<LoginPage> {
       return null; // User canceled the sign-in
     }
 
-    // Rest of your authentication code...
+    // Obtain the auth details from the request
+    final GoogleSignInAuthentication googleAuth = 
+        await googleUser.authentication;
+
+    // Create a new credential
+    final credential = GoogleAuthProvider.credential(
+      accessToken: googleAuth.accessToken,
+      idToken: googleAuth.idToken,
+    );
+
+    // Once signed in, return the UserCredential
+    return await FirebaseAuth.instance.signInWithCredential(credential);
   } catch (e) {
     log('\n_signInWithGoogle: $e');
     Dialogs.showSnackbar(context, 'Something Went Wrong (Check Internet!)');
@@ -285,7 +296,7 @@ onPressed: () async {
                           onPressed: () {
                             Navigator.push(
                                 context, //
-                                MaterialPageRoute(builder: (_) => signup()));
+                                MaterialPageRoute(builder: (_) => SignupPage()));
                           },
                           child: Text(
                             isLogin
@@ -310,200 +321,3 @@ onPressed: () async {
   }
 }
 
-// class signup extends StatefulWidget {
-//   const signup({super.key});
-
-//   @override
-//   State<signup> createState() => _signupState();
-// }
-
-// class _signupState extends State<signup> {
-//   bool _isPasswordVisible = false;
-
-//   final Color preciseGreen = Color.fromRGBO(76, 175, 80, 1);
-
-//   bool isLogin = true;
-//   TextEditingController name = TextEditingController();
-
-//   TextEditingController emailController = TextEditingController();
-//   TextEditingController passwordController = TextEditingController();
-
-//   @override
-//   Widget build(BuildContext context) {
-//     final Size screenSize = MediaQuery.of(context).size;
-//     return Theme(
-//       data: ThemeData(
-//         primaryColor: preciseGreen,
-//       ),
-//       child: Scaffold(
-//         appBar: AppBar(
-//           automaticallyImplyLeading: false,
-//           backgroundColor: Colors.green,
-//           centerTitle: true,
-//           title: Text('SignUp',
-//               style:
-//                   TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-//         ),
-//         body: Stack(
-//           children: [
-//             Container(
-//               width: MediaQuery.of(context).size.width,
-//               height: MediaQuery.of(context).size.height / 2.0,
-//               decoration: const BoxDecoration(
-//                 color: Color.fromRGBO(76, 175, 80, 1),
-//                 borderRadius:
-//                     BorderRadius.only(bottomRight: Radius.circular(70)),
-//               ),
-//               child: Padding(
-//                 padding: EdgeInsets.only(bottom: mq.height * 0.12),
-//                 child: Center(
-//                   child: Lottie.asset('animation/signupanima.json',
-//                       width: mq.width * .85),
-//                 ),
-//               ),
-//             ),
-//             Align(
-//               alignment: Alignment.bottomCenter,
-//               child: Container(
-//                 width: MediaQuery.of(context).size.width,
-//                 height: MediaQuery.of(context).size.height / 2.0,
-//                 decoration: const BoxDecoration(
-//                   color: Colors.white,
-//                   borderRadius: BorderRadius.only(topLeft: Radius.circular(70)),
-//                 ),
-//                 child: Padding(
-//                   padding: const EdgeInsets.all(20.0),
-//                   child: SingleChildScrollView(
-//                     child: Column(
-//                       mainAxisAlignment: MainAxisAlignment.center,
-//                       children: [
-//                         Container(
-//                           margin: EdgeInsets.symmetric(vertical: 8.0),
-//                           child: TextField(
-//                             controller: name,
-//                             decoration: InputDecoration(
-//                                 labelText: 'Enter Name',
-//                                 prefixIcon: Icon(Icons.person)),
-//                           ),
-//                         ),
-//                         Container(
-//                           margin: EdgeInsets.symmetric(vertical: 8.0),
-//                           child: TextField(
-//                             controller: emailController,
-//                             decoration: InputDecoration(
-//                                 labelText: 'Enter Email',
-//                                 prefixIcon: Icon(Icons.email)),
-//                           ),
-//                         ),
-//                         Container(
-//                           margin: EdgeInsets.symmetric(vertical: 8.0),
-//                           child: TextField(
-//                             obscureText: !_isPasswordVisible,
-//                             controller: passwordController,
-//                             decoration: InputDecoration(
-//                               labelText: 'Enter Password',
-//                               prefixIcon: Icon(Icons.password),
-//                               suffixIcon: IconButton(
-//                                 icon: Icon(
-//                                   _isPasswordVisible
-//                                       ? Icons.visibility_off
-//                                       : Icons
-//                                           .visibility, // Change icon based on visibility
-//                                   color: Colors.grey,
-//                                 ),
-//                                 onPressed: () {
-//                                   setState(() {
-//                                     _isPasswordVisible = !_isPasswordVisible;
-//                                   });
-//                                 },
-//                               ),
-//                             ),
-//                           ),
-//                         ),
-//                         ElevatedButton.icon(
-//                           style: ElevatedButton.styleFrom(
-//                             backgroundColor: Colors.green,
-
-//                             // Make the background color transparent
-//                             foregroundColor: Colors
-//                                 .white, // Replace with your desired text color
-//                             elevation:
-//                                 10, // Replace with your desired elevation
-//                             shadowColor: Colors
-//                                 .transparent, // Replace with your desired shadow color
-//                             minimumSize: Size(100,
-//                                 50), // Replace with your desired minimum size
-//                             maximumSize: Size(200,
-//                                 100), // Replace with your desired maximum size
-//                             padding: EdgeInsets.all(
-//                                 10), // Replace with your desired padding
-//                             side: BorderSide(
-//                                 width: 1,
-//                                 color: Colors
-//                                     .transparent), // Replace with your desired border
-//                             shape: RoundedRectangleBorder(
-//                                 borderRadius: BorderRadius.circular(
-//                                     10)), // Replace with your desired shape
-//                           ),
-//                           onPressed: () {
-//                             FirebaseAuth.instance
-//                                 .createUserWithEmailAndPassword(
-//                               email: emailController.text,
-//                               password: passwordController.text,
-//                             )
-//                                 .then((userCredential) {
-//                               // After creating the user, update the user's profile with the name
-//                               userCredential.user?.updateProfile(
-//                                 displayName: name.text,
-//                               );
-
-//                               Dialogs.showSnackbar(
-//                                   context, 'Account Has Successfully Created');
-//                               Navigator.push(
-//                                   context,
-//                                   MaterialPageRoute(
-//                                       builder: (_) => InnovatorHomePage(
-                                            
-//                                           )));
-//                             }).onError((error, stackTrace) {
-//                               print("Error creating account: $error");
-//                             });
-//                             // handle login
-//                           },
-//                           label: Text(
-//                             'Sign Up',
-//                             style: TextStyle(
-//                                 color: Colors.white,
-//                                 fontSize: 15,
-//                                 letterSpacing: 1.1),
-//                           ),
-//                           icon: Icon(Icons.person),
-//                         ),
-//                         ElevatedButton.icon(
-//                           onPressed: () {
-//                             Navigator.pop(context);
-//                           },
-//                           label: Text(
-//                             'Back',
-//                             style: TextStyle(
-//                               fontSize: 15,
-//                               color: Colors.white,
-//                             ),
-//                           ),
-//                           icon: Icon(Icons.arrow_back),
-//                           style: ElevatedButton.styleFrom(
-//                               iconColor: Colors.white,
-//                               backgroundColor: Colors.green),
-//                         )
-//                       ],
-//                     ),
-//                   ),
-//                 ),
-//               ),
-//             ),
-//           ],
-//         ),
-//       ),
-//     );
-//   }
-// }
