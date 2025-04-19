@@ -1,3 +1,5 @@
+// ignore_for_file: use_build_context_synchronously
+
 import 'dart:async';
 import 'dart:developer';
 import 'dart:io';
@@ -7,9 +9,9 @@ import 'package:innovator/chatroom/helper.dart';
 
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:get/get.dart';
+
 import 'package:innovator/innovator_home.dart';
-import 'package:innovator/screens/Inner_Homepage.dart';
+
 import 'package:lottie/lottie.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -41,6 +43,7 @@ class _LoginPageState extends State<LoginPage> {
         log('\nUserAddtionalInfo: ${user.additionalUserInfo}');
 
         if ((await APIs.userExists())) {
+<<<<<<< HEAD
           Navigator.pushReplacement(
               context,
               MaterialPageRoute(
@@ -54,6 +57,18 @@ class _LoginPageState extends State<LoginPage> {
                     builder: (_) => Homepage(user: APIs.me,
                          
                         )));
+=======
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => Homepage(user: APIs.me)),
+          );
+        } else {
+          await APIs.createUser().then((value) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => Homepage(user: APIs.me)),
+            );
+>>>>>>> 154adeb1735d90fceecbdf3f308ff6d867dca70c
           });
         }
       }
@@ -61,6 +76,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<UserCredential?> _signInWithGoogle() async {
+<<<<<<< HEAD
   try {
     // Check internet connection
     await InternetAddress.lookup('google.com');
@@ -70,16 +86,35 @@ class _LoginPageState extends State<LoginPage> {
       scopes: ['email', 'profile'],
       signInOption: SignInOption.standard,
     );
+=======
+    try {
+      await InternetAddress.lookup('google.com');
+>>>>>>> 154adeb1735d90fceecbdf3f308ff6d867dca70c
 
-    // Sign out first to ensure account picker appears
-    await googleSignIn.signOut();
-    
-    // Trigger the authentication flow
-    final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
-    
-    if (googleUser == null) {
-      return null; // User canceled the sign-in
+      // Initialize GoogleSignIn with options to show account picker
+      final GoogleSignIn googleSignIn = GoogleSignIn(
+        clientId: '', // Optional for Android/iOS
+        scopes: ['email', 'profile'],
+        signInOption: SignInOption.standard, // This shows account selection
+      );
+
+      // Sign out first to ensure account picker appears
+      await googleSignIn.signOut();
+
+      // Trigger the authentication flow
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+
+      if (googleUser == null) {
+        return null; // User canceled the sign-in
+      }
+
+      // Rest of your authentication code...
+    } catch (e) {
+      log('\n_signInWithGoogle: $e');
+      Dialogs.showSnackbar(context, 'Something Went Wrong (Check Internet!)');
+      return null;
     }
+<<<<<<< HEAD
 
     // Obtain the auth details from the request
     final GoogleSignInAuthentication googleAuth = 
@@ -96,9 +131,10 @@ class _LoginPageState extends State<LoginPage> {
   } catch (e) {
     log('\n_signInWithGoogle: $e');
     Dialogs.showSnackbar(context, 'Something Went Wrong (Check Internet!)');
+=======
+>>>>>>> 154adeb1735d90fceecbdf3f308ff6d867dca70c
     return null;
   }
-}
 
   @override
   Widget build(BuildContext context) {
@@ -106,9 +142,7 @@ class _LoginPageState extends State<LoginPage> {
     mq = MediaQuery.of(context).size;
     // final mq = MediaQuery.of(context).size;
     return Theme(
-      data: ThemeData(
-        primaryColor: preciseGreen,
-      ),
+      data: ThemeData(primaryColor: preciseGreen),
       child: Scaffold(
         appBar: AppBar(
           automaticallyImplyLeading: false,
@@ -126,14 +160,17 @@ class _LoginPageState extends State<LoginPage> {
               height: MediaQuery.of(context).size.height / 2.0,
               decoration: const BoxDecoration(
                 color: Color.fromRGBO(76, 175, 80, 1),
-                borderRadius:
-                    BorderRadius.only(bottomRight: Radius.circular(70)),
+                borderRadius: BorderRadius.only(
+                  bottomRight: Radius.circular(70),
+                ),
               ),
               child: Padding(
                 padding: EdgeInsets.only(bottom: mq.height * 0.15),
                 child: Center(
-                  child: Lottie.asset('animation/loginani.json',
-                      width: mq.width * .95),
+                  child: Lottie.asset(
+                    'animation/loginani.json',
+                    width: mq.width * .95,
+                  ),
                 ),
               ),
             ),
@@ -157,8 +194,9 @@ class _LoginPageState extends State<LoginPage> {
                           child: TextField(
                             controller: emailController,
                             decoration: InputDecoration(
-                                labelText: 'Email',
-                                prefixIcon: Icon(Icons.email)),
+                              labelText: 'Email',
+                              prefixIcon: Icon(Icons.email),
+                            ),
                           ),
                         ),
                         Container(
@@ -198,81 +236,91 @@ class _LoginPageState extends State<LoginPage> {
                         //   ),
                         // ),
                         ElevatedButton(
-  style: ElevatedButton.styleFrom(
-    backgroundColor: Colors.blue,
-    foregroundColor: Colors.white,
-    elevation: 10,
-    shadowColor: Colors.transparent,
-    minimumSize: const Size(200, 50),
-    maximumSize: const Size(200, 100),
-    padding: const EdgeInsets.all(10),
-    side: const BorderSide(
-      width: 1,
-      color: Colors.transparent,
-    ),
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(10),
-    ),
-  ),
- // In your login button's onPressed:
-onPressed: () async {
-  if (emailController.text.isEmpty || passwordController.text.isEmpty) {
-    Dialogs.showSnackbar(context, 'Please enter both email and password');
-    return;
-  }
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue,
+                            foregroundColor: Colors.white,
+                            elevation: 10,
+                            shadowColor: Colors.transparent,
+                            minimumSize: const Size(200, 50),
+                            maximumSize: const Size(200, 100),
+                            padding: const EdgeInsets.all(10),
+                            side: const BorderSide(
+                              width: 1,
+                              color: Colors.transparent,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          // In your login button's onPressed:
+                          onPressed: () async {
+                            if (emailController.text.isEmpty ||
+                                passwordController.text.isEmpty) {
+                              Dialogs.showSnackbar(
+                                context,
+                                'Please enter both email and password',
+                              );
+                              return;
+                            }
 
-  try {
-    Dialogs.showProgressBar(context);
-    await FirebaseAuth.instance.signInWithEmailAndPassword(
-      email: emailController.text.trim(),
-      password: passwordController.text.trim(),
-    );
-    
-    Navigator.pop(context); // Hide loading
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => Homepage(user: APIs.me,)),
-    );
-  } on FirebaseAuthException catch (e) {
-    Navigator.pop(context); // Hide loading
-    String errorMessage = 'Login failed';
-    
-    if (e.code == 'wrong-password') {
-      errorMessage = 'Incorrect password';
-    } else if (e.code == 'user-not-found') {
-      errorMessage = 'No user found with this email';
-    } else if (e.code == 'too-many-requests') {
-      errorMessage = 'Account temporarily locked. Try again later';
-    }
-    
-    Dialogs.showSnackbar(context, errorMessage);
-  } catch (e) {
-    Navigator.pop(context);
-    Dialogs.showSnackbar(context, 'Login error: ${e.toString()}');
-  }
-},
-  child: Text(
-    isLogin ? 'Login' : 'Sign Up',
-    style: const TextStyle(
-      fontSize: 16,
-      letterSpacing: 1.1,
-    ),
-  ),
-),
+                            try {
+                              Dialogs.showProgressBar(context);
+                              await FirebaseAuth.instance
+                                  .signInWithEmailAndPassword(
+                                    email: emailController.text.trim(),
+                                    password: passwordController.text.trim(),
+                                  );
+
+                              Navigator.pop(context); // Hide loading
+                              Navigator.pushReplacement(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => Homepage(user: APIs.me),
+                                ),
+                              );
+                            } on FirebaseAuthException catch (e) {
+                              Navigator.pop(context); // Hide loading
+                              String errorMessage = 'Login failed';
+
+                              if (e.code == 'wrong-password') {
+                                errorMessage = 'Incorrect password';
+                              } else if (e.code == 'user-not-found') {
+                                errorMessage = 'No user found with this email';
+                              } else if (e.code == 'too-many-requests') {
+                                errorMessage =
+                                    'Account temporarily locked. Try again later';
+                              }
+
+                              Dialogs.showSnackbar(context, errorMessage);
+                            } catch (e) {
+                              Navigator.pop(context);
+                              Dialogs.showSnackbar(
+                                context,
+                                'Login error: ${e.toString()}',
+                              );
+                            }
+                          },
+                          child: Text(
+                            isLogin ? 'Login' : 'Sign Up',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              letterSpacing: 1.1,
+                            ),
+                          ),
+                        ),
                         // ElevatedButton(
                         //     onPressed: () {
                         //       Navigator.push(context,
                         //           MaterialPageRoute(builder: (_) => Phoneauth()));
                         //     },
                         //     child: Text('Phone number')),
-                        SizedBox(
-                          height: 10,
-                        ),
+                        SizedBox(height: 10),
                         ElevatedButton.icon(
                           style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green,
-                              shape: StadiumBorder(),
-                              elevation: 1),
+                            backgroundColor: Colors.green,
+                            shape: StadiumBorder(),
+                            elevation: 1,
+                          ),
                           onPressed: () {
                             _handlegooglebtnclick();
                           },
@@ -281,31 +329,42 @@ onPressed: () async {
                             height: mq.height * .05,
                           ),
                           label: RichText(
-                              text: const TextSpan(
-                                  style: TextStyle(
-                                      color: Colors.black, fontSize: 19),
-                                  children: [
+                            text: const TextSpan(
+                              style: TextStyle(
+                                color: Colors.black,
+                                fontSize: 19,
+                              ),
+                              children: [
                                 TextSpan(text: 'Sign In with '),
                                 TextSpan(
-                                    text: 'Google',
-                                    style:
-                                        TextStyle(fontWeight: FontWeight.w500))
-                              ])),
+                                  text: 'Google',
+                                  style: TextStyle(fontWeight: FontWeight.w500),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                         TextButton(
                           onPressed: () {
                             Navigator.push(
+<<<<<<< HEAD
                                 context, //
                                 MaterialPageRoute(builder: (_) => SignupPage()));
+=======
+                              context, //
+                              MaterialPageRoute(builder: (_) => signup()),
+                            );
+>>>>>>> 154adeb1735d90fceecbdf3f308ff6d867dca70c
                           },
                           child: Text(
                             isLogin
                                 ? 'Create new account'
                                 : 'Already have an account?',
                             style: TextStyle(
-                                fontSize: 15,
-                                color: Colors.blue,
-                                fontWeight: FontWeight.bold),
+                              fontSize: 15,
+                              color: Colors.blue,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ],

@@ -43,7 +43,11 @@ dependencies:
   firebase_messaging: ^15.2.5
   googleapis_auth: ^2.0.0
   google_sign_in: ^6.3.0
+<<<<<<< HEAD
   intl_phone_field: ^3.2.0
+=======
+  http: ^1.3.0
+>>>>>>> 154adeb1735d90fceecbdf3f308ff6d867dca70c
 
 dev_dependencies:
   flutter_test:

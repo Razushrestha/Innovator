@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:innovator/chatroom/API/api.dart';
-import 'package:innovator/custom_drawer.dart';
 import 'package:innovator/main.dart';
 import 'package:innovator/models/chat_user.dart';
 import 'package:innovator/screens/Inner_Homepage.dart';
+import 'package:innovator/utils/custom_drawer.dart';
 
 class Homepage extends StatefulWidget {
   final ChatUser user;
@@ -15,7 +15,6 @@ class Homepage extends StatefulWidget {
 
 class _HomepageState extends State<Homepage>
     with SingleTickerProviderStateMixin {
-      
   late final AnimationController _controller;
   late final Animation<double> _navWidthAnim;
   late final Animation<double> _feedFadeAnim;
@@ -59,7 +58,7 @@ class _HomepageState extends State<Homepage>
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
-    
+
     // Initialize mq for global use
     mq = MediaQuery.of(context).size;
 
@@ -67,10 +66,7 @@ class _HomepageState extends State<Homepage>
       appBar: AppBar(
         title: const Text(
           'Innovator Home',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
         ),
         backgroundColor: Colors.blue.shade700,
         elevation: 2,
@@ -85,7 +81,7 @@ class _HomepageState extends State<Homepage>
       backgroundColor: Colors.grey[100],
       body: Stack(
         children: [
-            Inner_HomePage(user: APIs.me,),
+          Inner_HomePage(user: APIs.me),
           // Feed Section
           // Center(
           //   child: FadeTransition(
@@ -108,7 +104,7 @@ class _HomepageState extends State<Homepage>
           //       // child: SingleChildScrollView(
           //       //   child: Column(
           //       //     children: [
-                    
+
           //       //     ],
           //       //     // mainAxisSize: MainAxisSize.min,
           //       //     // children: [
@@ -139,7 +135,7 @@ class _HomepageState extends State<Homepage>
           //       //     //     "Let's create something amazing today!",
           //       //     //     textAlign: TextAlign.center,
           //       //     //     style: TextStyle(
-          //       //     //       fontSize: 16, 
+          //       //     //       fontSize: 16,
           //       //     //       color: Color(0xFF666666),
           //       //     //       height: 1.5,
           //       //     //     ),
@@ -165,7 +161,7 @@ class _HomepageState extends State<Homepage>
           //       //     //     ),
           //       //     //   ),
           //       //     // ],
-                    
+
           //       //   ),
           //       // ),
           //     ),
@@ -173,84 +169,84 @@ class _HomepageState extends State<Homepage>
           // ),
 
           // Floating Nav Bar
-          // AnimatedBuilder(
-          //   animation: _navWidthAnim,
-          //   builder: (context, child) {
-          //     final topOffset = (screenHeight - 380) / 2;
-          //     return Positioned(
-          //       top: topOffset,
-          //       right: 16,
-          //       child: Material(
-          //         elevation: 8,
-          //         borderRadius: BorderRadius.circular(50),
-          //         color: Colors.transparent,
-          //         child: ClipRRect(
-          //           borderRadius: BorderRadius.circular(50),
-          //           child: Container(
-          //             width: _navWidthAnim.value,
-          //             color: const Color(0xFFD2B48C),
-          //             padding: const EdgeInsets.symmetric(vertical: 24),
-          //             child: _navWidthAnim.value > 20
-          //                 ? Column(
-          //                     mainAxisSize: MainAxisSize.min,
-          //                     mainAxisAlignment: MainAxisAlignment.center,
-          //                     children: [
-          //                       _animatedButton(
-          //                         icon: Icons.book,
-          //                         onTap: () {},
-          //                       ),
-          //                       const SizedBox(height: 16),
-          //                       _animatedButton(
-          //                         icon: Icons.star,
-          //                         onTap: () {},
-          //                       ),
-          //                       const SizedBox(height: 16),
-          //                       ScaleTransition(
-          //                         scale: _createScaleAnim,
-          //                         child: Container(
-          //                           width: 60,
-          //                           height: 60,
-          //                           decoration: BoxDecoration(
-          //                             color: Colors.white,
-          //                             shape: BoxShape.circle,
-          //                             boxShadow: [
-          //                               BoxShadow(
-          //                                 color: Colors.orange.withOpacity(0.4),
-          //                                 blurRadius: 8,
-          //                                 offset: const Offset(0, 4),
-          //                               ),
-          //                             ],
-          //                           ),
-          //                           child: IconButton(
-          //                             icon: const Icon(
-          //                               Icons.add,
-          //                               size: 32,
-          //                               color: Colors.orange,
-          //                             ),
-          //                             tooltip: 'Create',
-          //                             onPressed: () {},
-          //                           ),
-          //                         ),
-          //                       ),
-          //                       const SizedBox(height: 16),
-          //                       _animatedButton(
-          //                         icon: Icons.message,
-          //                         onTap: () {},
-          //                       ),
-          //                       const SizedBox(height: 16),
-          //                       _animatedButton(
-          //                         icon: Icons.person,
-          //                         onTap: () {},
-          //                       ),
-          //                     ],
-          //                   )
-          //                 : const SizedBox.shrink(),
-          //           ),
-          //         ),
-          //       ),
-          //     );
-          //   },
-          // ),
+          AnimatedBuilder(
+            animation: _navWidthAnim,
+            builder: (context, child) {
+              final topOffset = (screenHeight - 340) / 2;
+              return Positioned(
+                top: topOffset,
+                right: 16,
+                child: Material(
+                  elevation: 8,
+                  borderRadius: BorderRadius.circular(50),
+                  color: Colors.transparent,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(50),
+                    child: Container(
+                      width: _navWidthAnim.value,
+                      color: const Color(0xFFD2B48C),
+                      padding: const EdgeInsets.symmetric(vertical: 24),
+                      child:
+                          _navWidthAnim.value > 30
+                              ? Column(
+                                mainAxisSize: MainAxisSize.min,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceEvenly,
+                                children: [
+                                  _animatedButton(
+                                    icon: Icons.book,
+                                    onTap: () {},
+                                  ),
+                                  _animatedButton(
+                                    icon: Icons.star,
+                                    onTap: () {},
+                                  ),
+                                  ScaleTransition(
+                                    scale: _createScaleAnim,
+                                    child: Container(
+                                      width: 60,
+                                      height: 60,
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        shape: BoxShape.circle,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.orange.withOpacity(
+                                              0.4,
+                                            ),
+                                            blurRadius: 8,
+                                            offset: const Offset(0, 4),
+                                          ),
+                                        ],
+                                      ),
+                                      child: IconButton(
+                                        icon: const Icon(
+                                          Icons.add,
+                                          size: 32,
+                                          color: Colors.orange,
+                                        ),
+                                        tooltip: 'Create',
+                                        onPressed: () {},
+                                      ),
+                                    ),
+                                  ),
+                                  _animatedButton(
+                                    icon: Icons.message,
+                                    onTap: () {},
+                                  ),
+                                  _animatedButton(
+                                    icon: Icons.person,
+                                    onTap: () {},
+                                  ),
+                                ],
+                              )
+                              : const SizedBox.shrink(),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
         ],
       ),
     );

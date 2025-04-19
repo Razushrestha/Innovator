@@ -4,25 +4,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:innovator/Authorization/Login.dart';
 import 'package:innovator/firebase_options.dart';
+import 'package:innovator/profile_page.dart';
 
-import 'package:innovator/innovator_home.dart';
-import 'package:innovator/utils/routing.dart';
-
-
-@pragma('vm:entry-point')Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
+@pragma('vm:entry-point')
+Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  
 }
+
 void main() async {
-    WidgetsFlutterBinding.ensureInitialized();
- SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-  SystemChrome.setPreferredOrientations(
-          [DeviceOrientation.portraitUp, DeviceOrientation.portraitDown])
-      .then((value) async {
+  WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]).then((value) async {
     await _initializeFirebase();
-    runApp(const InnovatorHomePage(
-     
-    ));
+    runApp(const InnovatorHomePage());
   });
 }
 
@@ -53,7 +50,7 @@ class InnovatorHomePage extends StatelessWidget {
           backgroundColor: Colors.white,
         ),
       ),
-      home: LoginPage(),
+      home: ProfilePage(),
 
       // //home:  InnovatorHomePage(),
       // initialRoute: '/',
@@ -64,7 +61,6 @@ class InnovatorHomePage extends StatelessWidget {
       //  '/': (context) => InnovatorHomePage(), //directing to splash screen
       //  //Authenticator.signuproute: (context) =>  signup(), //naviagting to signup page
       //  //Myroutes.homeroute: (context) => const InnovatorHomePage(), //naviagting to home page
-      
 
       //  // Myroutes.homeroute: (context) => const Homepage(), //naviagting to home page
       //   //Myroutes.loginroute: (context) => const LoginPage(), //naviagting to login page
