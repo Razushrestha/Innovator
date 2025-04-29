@@ -2,32 +2,50 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:get/get.dart';
+import 'package:innovator/App_DATA/App_data.dart';
+import 'package:innovator/Authorization/Forget_PWD.dart';
 import 'package:innovator/Authorization/Login.dart';
+import 'package:innovator/Authorization/signup.dart';
+import 'package:innovator/chatroom/API/api.dart';
 import 'package:innovator/firebase_options.dart';
-import 'package:innovator/profile_page.dart';
+import 'package:innovator/innovator_home.dart';
+import 'package:innovator/screens/splash_screen.dart';
+import 'package:innovator/utils/routing.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 }
 
+late Size mq;
+
+
 void main() async {
+
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]).then((value) async {
+      await AppData().initialize();
     await _initializeFirebase();
     runApp(const InnovatorHomePage());
   });
 }
 
-late Size mq;
 
-class InnovatorHomePage extends StatelessWidget {
+class InnovatorHomePage extends StatefulWidget {
   const InnovatorHomePage({super.key});
 
+  @override
+  State<InnovatorHomePage> createState() => _InnovatorHomePageState();
+}
+
+
+
+class _InnovatorHomePageState extends State<InnovatorHomePage> {
   @override
   Widget build(BuildContext context) {
     /*  
@@ -35,7 +53,7 @@ class InnovatorHomePage extends StatelessWidget {
     It is an enhanced version of Flutter's MaterialApp that integrates GetX's state management, 
     routing, and dependency injection features. It simplifies navigation and state management 
     in Flutter applications.*/
-    return MaterialApp(
+    return GetMaterialApp(
       title: 'Inovator',
       theme: ThemeData(
         primarySwatch: Colors.green,
@@ -50,22 +68,25 @@ class InnovatorHomePage extends StatelessWidget {
           backgroundColor: Colors.white,
         ),
       ),
-      home: ProfilePage(),
+      debugShowCheckedModeBanner: false,
+     //home: Signup(),
 
-      // //home:  InnovatorHomePage(),
-      // initialRoute: '/',
-      // debugShowCheckedModeBanner: false,
+      //home:  InnovatorHomePage(),
+      initialRoute: '/',
+     // debugShowCheckedModeBanner: false,
 
-      // //adding routes show that we can moved from one page to another page smoothly
-      // routes: {
-      //  '/': (context) => InnovatorHomePage(), //directing to splash screen
-      //  //Authenticator.signuproute: (context) =>  signup(), //naviagting to signup page
-      //  //Myroutes.homeroute: (context) => const InnovatorHomePage(), //naviagting to home page
+      //adding routes show that we can moved from one page to another page smoothly
+      routes: {
+       '/': (context) => SplashScreen(), //directing to splash screen
+       Authenticator.signuproute: (context) =>  Signup(), //naviagting to signup page
+       Authenticator.loginroute: (context) =>  LoginPage(), //naviagting to login page
+      Authenticator.forgetpwd: (context) =>  Forgot_PWD(), //naviagting to forget password page
+      // Myroutes.homeroute: (context) => const InnovatorHomePage(), //naviagting to home page
 
-      //  // Myroutes.homeroute: (context) => const Homepage(), //naviagting to home page
-      //   //Myroutes.loginroute: (context) => const LoginPage(), //naviagting to login page
-      //   //Myroutes.homeroute: (context) => const BooksPage(), //naviagting to books page
-      // },
+       Myroutes.homeroute: (context) => const Homepage(), //naviagting to home page
+      //  Myroutes.: (context) => const LoginPage(), //naviagting to login page
+       // Myroutes.homeroute: (context) => const BooksPage(), //naviagting to books page
+      },
     );
   }
 }

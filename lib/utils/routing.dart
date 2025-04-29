@@ -8,4 +8,5 @@ class Myroutes {
 class Authenticator{
   static const String loginroute = "/login";
   static const String signuproute = "/signup";
+  static const String forgetpwd = '/forgetpwd';
 }

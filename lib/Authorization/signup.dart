@@ -1,265 +1,233 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-<<<<<<< HEAD
+import 'package:flutter/services.dart';
+import 'package:innovator/Authorization/Login.dart';
+import 'package:innovator/chatroom/helper.dart';
+import 'package:innovator/innovator_home.dart';
+import 'package:innovator/chatroom/API/api.dart';
+import 'package:innovator/main.dart';
+import 'package:innovator/models/chat_user.dart';
+import 'package:innovator/screens/Profile/profile_page.dart';
+import 'package:lottie/lottie.dart';
+import 'package:intl_phone_field/intl_phone_field.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
-class SignupService {
-  // API endpoint
-  static const String apiUrl = 'http://182.93.94.210:3064/api/v1/register-user';
-  
-  // Function to register user
-  static Future<Map<String, dynamic>> registerUser({
-    required String name,
-    required String email,
-    required String password,
-    required String phone,
-  }) async {
-    try {
-      // Create request body
-      final Map<String, dynamic> requestBody = {
-        "name": name,
-        "email": email,
-        "password": password,
-        "phone": phone
-      };
-=======
-import 'package:innovator/chatroom/helper.dart';
-import 'package:innovator/main.dart';
->>>>>>> 154adeb1735d90fceecbdf3f308ff6d867dca70c
+class Signup extends StatefulWidget {
+  const Signup({super.key});
 
-      // Print request for debugging
-      debugPrint('Sending request to: $apiUrl');
-      debugPrint('Request body: ${jsonEncode(requestBody)}');
-      
-      // Set timeout to 60 seconds
+  @override
+  State<Signup> createState() => _SignupState();
+}
+
+class _SignupState extends State<Signup> {
+  bool _isPasswordVisible = false;
+  final Color preciseGreen = const Color.fromRGBO(244, 135, 6, 1);
+  TextEditingController nameController = TextEditingController();
+  TextEditingController emailController = TextEditingController();
+  TextEditingController passwordController = TextEditingController();
+  TextEditingController phoneController = TextEditingController();
+  TextEditingController dobController = TextEditingController();
+  String completePhoneNumber = '';
+  bool isLoading = false;
+  DateTime? selectedDate;
+
+  @override
+  void initState() {
+    super.initState();
+    // Pre-filling the form with the provided data for testing
+    nameController.text = "Ronit Shrivastav";
+    emailController.text = "ronit.shrivastav02@gmail.com";
+    passwordController.text = "ronit@123";
+    completePhoneNumber = "+9779812236482";
+    dobController.text = "2001-10-25";
+    // Parse the date from the string format YYYY-MM-DD
+    final dateParts = "2005-08-08".split('-');
+    if (dateParts.length == 3) {
+      selectedDate = DateTime(
+        int.parse(dateParts[0]), // year
+        int.parse(dateParts[1]), // month
+        int.parse(dateParts[2]), // day
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    // Dispose controllers to prevent memory leaks
+    nameController.dispose();
+    emailController.dispose();
+    passwordController.dispose();
+    phoneController.dispose();
+    dobController.dispose();
+    super.dispose();
+  }
+
+  // Format date as YYYY-MM-DD
+  String formatDate(DateTime date) {
+    String year = date.year.toString();
+    String month = date.month < 10 ? '0${date.month}' : date.month.toString();
+    String day = date.day < 10 ? '0${date.day}' : date.day.toString();
+    return '$year-$month-$day';
+  }
+
+  // Show date picker
+  Future<void> _selectDate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: selectedDate ?? DateTime(2000),
+      firstDate: DateTime(1900),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            colorScheme: ColorScheme.light(
+              primary: preciseGreen,
+              onPrimary: Colors.white,
+              onSurface: Colors.black,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    
+    if (picked != null && picked != selectedDate) {
+      setState(() {
+        selectedDate = picked;
+        dobController.text = formatDate(picked);
+      });
+    }
+  }
+
+  // Validate form fields
+  bool validateFields() {
+    if (nameController.text.trim().isEmpty) {
+      Dialogs.showSnackbar(context, 'Please enter your name');
+      return false;
+    }
+    if (emailController.text.trim().isEmpty) {
+      Dialogs.showSnackbar(context, 'Please enter your email');
+      return false;
+    }
+    if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(emailController.text)) {
+      Dialogs.showSnackbar(context, 'Please enter a valid email');
+      return false;
+    }
+    if (passwordController.text.isEmpty || passwordController.text.length < 6) {
+      Dialogs.showSnackbar(context, 'Password must be at least 6 characters');
+      return false;
+    }
+    if (completePhoneNumber.isEmpty) {
+      Dialogs.showSnackbar(context, 'Please enter your phone number');
+      return false;
+    }
+    if (dobController.text.isEmpty) {
+      Dialogs.showSnackbar(context, 'Please enter your date of birth');
+      return false;
+    }
+    return true;
+  }
+
+  Future<void> signUp() async {
+    if (!validateFields()) return;
+
+    setState(() {
+      isLoading = true;
+    });
+
+    try {
+      // Create request body for API
+      final Map<String, dynamic> requestBody = {
+        "name": nameController.text.trim(),
+        "email": emailController.text.trim(),
+        "password": passwordController.text,
+        "phone": completePhoneNumber,
+        "dob": dobController.text // Adding the DOB field
+      };
+
+      // Make API call
       final response = await http.post(
-        Uri.parse(apiUrl),
+        Uri.parse('http://182.93.94.210:3064/api/v1/register-user'),
         headers: {
           'Content-Type': 'application/json',
         },
         body: jsonEncode(requestBody),
-      ).timeout(const Duration(seconds: 60));
-      
-      // Parse and print response
-      final responseData = jsonDecode(response.body);
-      debugPrint('Response status: ${response.statusCode}');
-      debugPrint('Response body: ${response.body}');
-      
-      return {
-        'success': response.statusCode == 200 || response.statusCode == 201,
-        'data': responseData,
-        'statusCode': response.statusCode,
-      };
-    } catch (e) {
-      debugPrint('Error registering user: $e');
-      return {
-        'success': false,
-        'error': e.toString(),
-      };
-    }
-  }
-}
+      );
 
-class SignupPage extends StatefulWidget {
-  const SignupPage({Key? key}) : super(key: key);
-
-  @override
-<<<<<<< HEAD
-  _SignupPageState createState() => _SignupPageState();
-}
-
-class _SignupPageState extends State<SignupPage> {
-  final _formKey = GlobalKey<FormState>();
-  bool _isLoading = false;
-  
-  // Controllers
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _phoneController = TextEditingController();
-  
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _emailController.dispose();
-    _passwordController.dispose();
-    _phoneController.dispose();
-    super.dispose();
-  }
-  
-  // Show snackbar message
-  void _showSnackBar(String message, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: isError ? Colors.red : Colors.green,
-      ),
-    );
-  }
-  
-  // Submit form
-  Future<void> _submitForm() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isLoading = true;
-      });
-      
-      try {
-        final result = await SignupService.registerUser(
-          name: _nameController.text.trim(),
-          email: _emailController.text.trim(),
-          password: _passwordController.text,
-          phone: _phoneController.text.trim(),
-        );
+      // Handle response
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        // Successfully registered
+        final responseData = jsonDecode(response.body);
         
-        setState(() {
-          _isLoading = false;
-        });
+        // You might want to store user info or token here
+        // For example, if the API returns a user object or token:
+        // final user = responseData['user'];
+        // final token = responseData['token'];
+        // Save these to shared preferences or other storage
+
+        Dialogs.showSnackbar(context, 'Account successfully created');
         
-        if (result['success']) {
-          _showSnackBar('User registered successfully!');
-          // Navigate to home page or login page
-          // Navigator.pushReplacementNamed(context, '/home');
-        } else {
-          final errorMsg = result['data']?['message'] ?? 'Registration failed';
-          _showSnackBar(errorMsg, isError: true);
-        }
-      } catch (e) {
-        setState(() {
-          _isLoading = false;
-        });
-        _showSnackBar('An error occurred: $e', isError: true);
+        // Navigate to home page
+        Navigator.pushReplacement(context, MaterialPageRoute(
+          builder: (context) => Homepage(),
+        ));
+      } else {
+        // Registration failed
+        final responseData = jsonDecode(response.body);
+        final errorMessage = responseData['message'] ?? 'Registration failed';
+        Dialogs.showSnackbar(context, errorMessage);
       }
+    } catch (e) {
+      Dialogs.showSnackbar(context, 'Error creating account: $e');
+    } finally {
+      setState(() {
+        isLoading = false;
+      });
     }
   }
-  
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Sign Up'),
-        backgroundColor: Colors.green,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            children: [
-              TextFormField(
-                controller: _nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Name',
-                  border: OutlineInputBorder(),
-=======
-  Widget build(BuildContext context) {
-    final Size screenSize = MediaQuery.of(context).size;
     return Theme(
-      data: ThemeData(primaryColor: preciseGreen),
+      data: ThemeData(
+        primaryColor: preciseGreen,
+        inputDecorationTheme: InputDecorationTheme(
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: preciseGreen, width: 2),
+          ),
+        ),
+      ),
       child: Scaffold(
-        // appBar: AppBar(
-        //   automaticallyImplyLeading: false,
-        //   backgroundColor: Colors.green,
-        //   centerTitle: true,
-        //   title: Text('SignUp',
-        //       style:
-        //           TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        // ),
         body: Stack(
           children: [
+            // Top green container
             Container(
               width: MediaQuery.of(context).size.width,
               height: MediaQuery.of(context).size.height / 1.8,
               decoration: const BoxDecoration(
-                color: Color.fromRGBO(76, 175, 80, 1),
-                borderRadius: BorderRadius.only(
-                  bottomRight: Radius.circular(70),
-                ),
+                color: Color.fromRGBO(	244, 135, 6, 1),
+                borderRadius: BorderRadius.only(bottomRight: Radius.circular(70)),
               ),
               child: Padding(
                 padding: EdgeInsets.only(bottom: mq.height * 0.15),
                 child: Center(
-                  // child: Lottie.asset('animation/loginani.json',
-                  //     width: mq.width * .95),
->>>>>>> 154adeb1735d90fceecbdf3f308ff6d867dca70c
+                  child: Image.asset('animation/signup.gif',
+                      width: mq.width * .95),
                 ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter your name';
-                  }
-                  return null;
-                },
               ),
-<<<<<<< HEAD
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _emailController,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.emailAddress,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter your email';
-                  }
-                  if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
-                    return 'Please enter a valid email';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _passwordController,
-                decoration: const InputDecoration(
-                  labelText: 'Password',
-                  border: OutlineInputBorder(),
-                ),
-                obscureText: true,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter a password';
-                  }
-                  if (value.length < 6) {
-                    return 'Password must be at least 6 characters';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _phoneController,
-                decoration: const InputDecoration(
-                  labelText: 'Phone (with country code)',
-                  border: OutlineInputBorder(),
-                  hintText: '+9779845763432',
-                ),
-                keyboardType: TextInputType.phone,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter your phone number';
-                  }
-                  if (!value.startsWith('+')) {
-                    return 'Please include country code (e.g., +977)';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _submitForm,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-=======
             ),
+            
+            // White container with form
             Align(
               alignment: Alignment.bottomCenter,
               child: Container(
                 width: MediaQuery.of(context).size.width,
-                height: MediaQuery.of(context).size.height / 1.9,
+                height: MediaQuery.of(context).size.height / 1.6, // Slightly larger to accommodate the new field
                 decoration: const BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.only(topLeft: Radius.circular(70)),
@@ -270,152 +238,156 @@ class _SignupPageState extends State<SignupPage> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Container(
-                          margin: EdgeInsets.symmetric(vertical: 8.0),
-                          child: TextField(
-                            controller: name,
-                            decoration: InputDecoration(
-                              labelText: 'Enter Name',
-                              prefixIcon: Icon(Icons.person),
-                            ),
+                        const SizedBox(height: 20),
+                        
+                        // Name field
+                        TextField(
+                          controller: nameController,
+                          decoration: const InputDecoration(
+                            labelText: 'Enter Name',
+                            prefixIcon: Icon(Icons.person),
                           ),
                         ),
-                        Container(
-                          margin: EdgeInsets.symmetric(vertical: 8.0),
-                          child: TextField(
-                            controller: emailController,
-                            decoration: InputDecoration(
-                              labelText: 'Enter Email',
-                              prefixIcon: Icon(Icons.email),
-                            ),
+                        
+                        const SizedBox(height: 16),
+                        
+                        // Email field
+                        TextField(
+                          controller: emailController,
+                          keyboardType: TextInputType.emailAddress,
+                          decoration: const InputDecoration(
+                            labelText: 'Enter Email',
+                            prefixIcon: Icon(Icons.email),
                           ),
                         ),
-                        Container(
-                          margin: EdgeInsets.symmetric(vertical: 8.0),
-                          child: TextField(
-                            obscureText: !_isPasswordVisible,
-                            controller: passwordController,
-                            decoration: InputDecoration(
-                              labelText: 'Enter Password',
-                              prefixIcon: Icon(Icons.password),
-                              suffixIcon: IconButton(
-                                icon: Icon(
-                                  _isPasswordVisible
-                                      ? Icons.visibility_off
-                                      : Icons
-                                          .visibility, // Change icon based on visibility
-                                  color: Colors.grey,
-                                ),
-                                onPressed: () {
-                                  setState(() {
-                                    _isPasswordVisible = !_isPasswordVisible;
-                                  });
-                                },
+                        
+                        const SizedBox(height: 16),
+                        
+                        // Phone number field with country code picker
+                        IntlPhoneField(
+                          controller: phoneController,
+                          decoration: const InputDecoration(
+                            labelText: 'Phone Number',
+                          ),
+                          initialCountryCode: 'NP', // Changed to Nepal
+                          onChanged: (phone) {
+                            completePhoneNumber = phone.completeNumber;
+                          },
+                        ),
+                        
+                        const SizedBox(height: 16),
+                        
+                        // Date of Birth field
+                        TextField(
+                          controller: dobController,
+                          readOnly: true,
+                          decoration: InputDecoration(
+                            labelText: 'Date of Birth',
+                            prefixIcon: const Icon(Icons.calendar_today),
+                            suffixIcon: IconButton(
+                              icon: const Icon(Icons.date_range),
+                              onPressed: () => _selectDate(context),
+                            ),
+                          ),
+                          onTap: () => _selectDate(context),
+                        ),
+                        
+                        const SizedBox(height: 16),
+                        
+                        // Password field
+                        TextField(
+                          obscureText: !_isPasswordVisible,
+                          controller: passwordController,
+                          decoration: InputDecoration(
+                            labelText: 'Enter Password',
+                            prefixIcon: const Icon(Icons.lock),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _isPasswordVisible
+                                    ? Icons.visibility_off
+                                    : Icons.visibility,
+                                color: Colors.grey,
                               ),
+                              onPressed: () {
+                                setState(() {
+                                  _isPasswordVisible = !_isPasswordVisible;
+                                });
+                              },
                             ),
                           ),
                         ),
+                        
+                        const SizedBox(height: 32),
+                        
+                        // Sign up button
                         ElevatedButton.icon(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-
-                            // Make the background color transparent
-                            foregroundColor:
-                                Colors
-                                    .white, // Replace with your desired text color
-                            elevation:
-                                10, // Replace with your desired elevation
-                            shadowColor:
-                                Colors
-                                    .transparent, // Replace with your desired shadow color
-                            minimumSize: Size(
-                              100,
-                              50,
-                            ), // Replace with your desired minimum size
-                            maximumSize: Size(
-                              200,
-                              100,
-                            ), // Replace with your desired maximum size
-                            padding: EdgeInsets.all(
-                              10,
-                            ), // Replace with your desired padding
-                            side: BorderSide(
-                              width: 1,
-                              color: Colors.transparent,
-                            ), // Replace with your desired border
+                            backgroundColor: Color.fromRGBO(244, 135, 6, 1),
+                            foregroundColor: Colors.white,
+                            elevation: 10,
+                            minimumSize: const Size(200, 50),
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10),
-                            ), // Replace with your desired shape
+                            ),
                           ),
-                          onPressed: () {
-                            FirebaseAuth.instance
-                                .createUserWithEmailAndPassword(
-                                  email: emailController.text,
-                                  password: passwordController.text,
-                                )
-                                .then((userCredential) {
-                                  // After creating the user, update the user's profile with the name
-                                  userCredential.user?.updateProfile(
-                                    displayName: name.text,
-                                  );
-
-                                  Dialogs.showSnackbar(
-                                    context,
-                                    'Account Has Successfully Created',
-                                  );
-                                  // Navigator.push(
-                                  //     context,
-                                  //     MaterialPageRoute(
-                                  //         builder: (_) => MainNavigationScreen(
-                                  //               user: APIs.me,
-                                  //             )));
-                                })
-                                .onError((error, stackTrace) {
-                                  print("Error creating account: $error");
-                                });
-                            // handle login
-                          },
+                          onPressed: isLoading ? null : signUp,
+                          icon: isLoading 
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.person_add),
                           label: Text(
-                            'Sign Up',
-                            style: TextStyle(
+                            isLoading ? 'Creating Account...' : 'Sign Up',
+                            style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 15,
+                              fontSize: 16,
                               letterSpacing: 1.1,
                             ),
                           ),
-                          icon: Icon(Icons.person),
                         ),
-                        ElevatedButton.icon(
+                        
+                        const SizedBox(height: 16),
+                        
+                        // Back button
+                        TextButton.icon(
                           onPressed: () {
-                            Navigator.pop(context);
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>  LoginPage(),
+                              ),
+                            );
                           },
-                          label: Text(
-                            'Back',
-                            style: TextStyle(fontSize: 15, color: Colors.white),
-                          ),
-                          icon: Icon(Icons.arrow_back),
-                          style: ElevatedButton.styleFrom(
-                            iconColor: Colors.white,
-                            backgroundColor: Colors.green,
+                          icon: const Icon(Icons.arrow_back),
+                          label: const Text('Back to Login'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: preciseGreen,
                           ),
                         ),
                       ],
                     ),
->>>>>>> 154adeb1735d90fceecbdf3f308ff6d867dca70c
                   ),
-                  child: _isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text('SIGN UP', style: TextStyle(fontSize: 16)),
                 ),
               ),
-            ],
-          ),
+            ),
+            
+            // Show loading indicator if needed
+            if (isLoading)
+              Container(
+                color: Colors.black.withOpacity(0.3),
+                child: const Center(
+                  child: CircularProgressIndicator(),
+                ),
+              ),
+          ],
         ),
       ),
     );
   }
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> 154adeb1735d90fceecbdf3f308ff6d867dca70c

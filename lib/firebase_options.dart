@@ -63,6 +63,6 @@ class DefaultFirebaseOptions {
     messagingSenderId: '565447947765',
     projectId: 'innovator-250f8',
     storageBucket: 'innovator-250f8.firebasestorage.app',
-    iosBundleId: 'com.example.innovator',
+    iosBundleId: 'com.innovation.innovator',
   );
 }

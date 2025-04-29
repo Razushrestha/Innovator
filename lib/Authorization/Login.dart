@@ -1,19 +1,21 @@
-// ignore_for_file: use_build_context_synchronously
-
-import 'dart:async';
+import 'dart:convert';
 import 'dart:developer';
 import 'dart:io';
-
+import 'dart:math' as Math;
+import 'package:innovator/App_DATA/App_data.dart';
+import 'package:innovator/Authorization/Forget_PWD.dart';
 import 'package:innovator/Authorization/signup.dart';
 import 'package:innovator/chatroom/helper.dart';
-
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
+import 'package:get/get.dart';
 import 'package:innovator/innovator_home.dart';
-
+import 'package:innovator/screens/Feed/Inner_Homepage.dart';
+import 'package:innovator/screens/Profile/profile_page.dart';
 import 'package:lottie/lottie.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../chatroom/api/api.dart';
 import '../main.dart';
@@ -26,13 +28,107 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final Color preciseGreen = Color.fromRGBO(76, 175, 80, 1);
+  final Color preciseGreen = Color.fromRGBO(235, 111, 70, 1);
   bool _isPasswordVisible = false;
 
   bool isLogin = true;
+  bool _isLoading = false;
 
   TextEditingController emailController = TextEditingController();
   TextEditingController passwordController = TextEditingController();
+
+  Future<void> _loginWithAPI() async {
+  if (emailController.text.isEmpty || passwordController.text.isEmpty) {
+    Dialogs.showSnackbar(context, 'Please enter both email and password');
+    return;
+  }
+
+  setState(() {
+    _isLoading = true;
+  });
+
+  try {
+    final url = Uri.parse('http://182.93.94.210:3064/api/v1/login');
+    final body = jsonEncode({
+      'email': emailController.text.trim(),
+      'password': passwordController.text.trim(),
+    });
+
+    final headers = {
+      'Content-Type': 'application/json',
+    };
+
+    final response = await http.post(
+      url,
+      headers: headers,
+      body: body,
+    );
+
+    // Debug: Print full response
+    log('API Response: ${response.statusCode} - ${response.body}');
+
+    if (response.statusCode == 200) {
+      final responseData = jsonDecode(response.body);
+      
+      // More detailed token extraction logic
+      String? token;
+      
+      // Check various possible locations for the token
+      if (responseData['token'] != null) {
+        token = responseData['token'];
+      } else if (responseData['access_token'] != null) {
+        token = responseData['access_token'];
+      } else if (responseData['data'] != null && responseData['data']['token'] != null) {
+        token = responseData['data']['token'];
+      } else if (responseData['authToken'] != null) {
+        token = responseData['authToken'];
+      } else if (responseData['accessToken'] != null) {
+        token = responseData['accessToken'];
+      }
+
+      log('Extracted token: $token');
+      
+      if (token != null && token.isNotEmpty) {
+        await AppData().setAuthToken(token);
+        
+        // Verify token was saved
+        final savedToken = await AppData().authToken;
+        log('Token saved verification: ${savedToken != null ? "Success" : "Failed"}');
+        
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => Homepage()),
+        );
+      } else {
+        log('Token not found in response. Full response: ${response.body}');
+        Dialogs.showSnackbar(context, 'Login successful but no token received');
+        
+        // As a fallback, check if there's user data that might indicate success
+        if (responseData['user'] != null || responseData['data'] != null) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => LoginPage()),
+          );
+        } else {
+          Dialogs.showSnackbar(context, 'Login failed - no token or user data received');
+        }
+      }
+    } else {
+      final responseData = jsonDecode(response.body);
+      final message = responseData['message'] ?? 
+                     responseData['error'] ?? 
+                     'Login failed with status ${response.statusCode}';
+      Dialogs.showSnackbar(context, message);
+    }
+  } catch (e) {
+    log('Login error: $e');
+    Dialogs.showSnackbar(context, 'Network error. Please check your connection.');
+  } finally {
+    setState(() {
+      _isLoading = false;
+    });
+  }
+}
 
   _handlegooglebtnclick() {
     Dialogs.showProgressBar(context);
@@ -43,114 +139,144 @@ class _LoginPageState extends State<LoginPage> {
         log('\nUserAddtionalInfo: ${user.additionalUserInfo}');
 
         if ((await APIs.userExists())) {
-<<<<<<< HEAD
-          Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                  builder: (_) => Homepage(user: APIs.me,
-                      )));
-        } else {
-          await APIs.createUser().then((value) {
+          // Get token after Google sign-in (if your API provides one)
+          final token = await _getTokenAfterGoogleSignIn(user);
+          
+          if (token != null && token.isNotEmpty) {
+            // Save token using AppData
+            await AppData().setAuthToken(token);
+            
             Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(
-                    builder: (_) => Homepage(user: APIs.me,
-                         
-                        )));
-=======
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => Homepage(user: APIs.me)),
-          );
-        } else {
-          await APIs.createUser().then((value) {
-            Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => Homepage(user: APIs.me)),
+              MaterialPageRoute(builder: (_) => UserProfileScreen())
             );
->>>>>>> 154adeb1735d90fceecbdf3f308ff6d867dca70c
+          } else {
+            // Fallback to Homepage if no token
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => Homepage())
+            );
+          }
+        } else {
+          await APIs.createUser().then((value) async {
+            // Get token after user creation
+            final token = await _getTokenAfterGoogleSignIn(user);
+            
+            if (token != null && token.isNotEmpty) {
+              // Save token using AppData
+              await AppData().setAuthToken(token);
+              
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => UserProfileScreen())
+              );
+            } else {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => Homepage())
+              );
+            }
           });
         }
       }
     });
   }
 
-  Future<UserCredential?> _signInWithGoogle() async {
-<<<<<<< HEAD
-  try {
-    // Check internet connection
-    await InternetAddress.lookup('google.com');
-    
-    // Initialize GoogleSignIn
-    final GoogleSignIn googleSignIn = GoogleSignIn(
-      scopes: ['email', 'profile'],
-      signInOption: SignInOption.standard,
-    );
-=======
+  // Method to get token after Google sign-in
+  Future<String?> _getTokenAfterGoogleSignIn(UserCredential user) async {
     try {
-      await InternetAddress.lookup('google.com');
->>>>>>> 154adeb1735d90fceecbdf3f308ff6d867dca70c
+      // Get ID token from Firebase user
+      final idToken = await user.user?.getIdToken();
+      
+      // Send ID token to your backend to exchange for your app token
+      final response = await http.post(
+        Uri.parse('http://182.93.94.210:3064/api/v1/google-auth'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'idToken': idToken,
+          'email': user.user?.email,
+          'name': user.user?.displayName,
+          // Add any other fields needed by your API
+        }),
+      );
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        log('Google auth response: ${response.body}');
+        
+        // Extract token - check in different possible locations based on your API
+        String? token;
+        
+        if (data['token'] != null) {
+          token = data['token'];
+        } else if (data['access_token'] != null) {
+          token = data['access_token'];
+        } else if (data['data'] != null && data['data']['token'] != null) {
+          token = data['data']['token'];
+        }
+        
+        return token;
+      }
+      return null;
+    } catch (e) {
+      log('Error getting token after Google sign-in: $e');
+      return null;
+    }
+  }
 
-      // Initialize GoogleSignIn with options to show account picker
+  Future<UserCredential?> _signInWithGoogle() async {
+    try {
+      // Check internet connection
+      await InternetAddress.lookup('google.com');
+      
+      // Initialize GoogleSignIn
       final GoogleSignIn googleSignIn = GoogleSignIn(
-        clientId: '', // Optional for Android/iOS
         scopes: ['email', 'profile'],
-        signInOption: SignInOption.standard, // This shows account selection
+        signInOption: SignInOption.standard,
       );
 
       // Sign out first to ensure account picker appears
       await googleSignIn.signOut();
-
+      
       // Trigger the authentication flow
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
-
+      
       if (googleUser == null) {
         return null; // User canceled the sign-in
       }
 
-      // Rest of your authentication code...
+      // Obtain the auth details from the request
+      final GoogleSignInAuthentication googleAuth = 
+          await googleUser.authentication;
+
+      // Create a new credential
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      // Once signed in, return the UserCredential
+      return await FirebaseAuth.instance.signInWithCredential(credential);
     } catch (e) {
       log('\n_signInWithGoogle: $e');
       Dialogs.showSnackbar(context, 'Something Went Wrong (Check Internet!)');
       return null;
     }
-<<<<<<< HEAD
-
-    // Obtain the auth details from the request
-    final GoogleSignInAuthentication googleAuth = 
-        await googleUser.authentication;
-
-    // Create a new credential
-    final credential = GoogleAuthProvider.credential(
-      accessToken: googleAuth.accessToken,
-      idToken: googleAuth.idToken,
-    );
-
-    // Once signed in, return the UserCredential
-    return await FirebaseAuth.instance.signInWithCredential(credential);
-  } catch (e) {
-    log('\n_signInWithGoogle: $e');
-    Dialogs.showSnackbar(context, 'Something Went Wrong (Check Internet!)');
-=======
->>>>>>> 154adeb1735d90fceecbdf3f308ff6d867dca70c
-    return null;
   }
 
   @override
   Widget build(BuildContext context) {
     final Size screenSize = MediaQuery.of(context).size;
     mq = MediaQuery.of(context).size;
-    // final mq = MediaQuery.of(context).size;
     return Theme(
-      data: ThemeData(primaryColor: preciseGreen),
+      data: ThemeData(
+        primaryColor: preciseGreen,
+      ),
       child: Scaffold(
         appBar: AppBar(
           automaticallyImplyLeading: false,
-          title: Text(
-            isLogin ? 'Login' : 'Sign Up',
-            style: TextStyle(color: Color.fromARGB(255, 233, 238, 241)),
-          ),
-          backgroundColor: Color.fromRGBO(76, 175, 80, 1),
+          
+          backgroundColor: Color.fromRGBO(244, 135, 6, 1),
           centerTitle: true,
         ),
         body: Stack(
@@ -159,18 +285,16 @@ class _LoginPageState extends State<LoginPage> {
               width: MediaQuery.of(context).size.width,
               height: MediaQuery.of(context).size.height / 2.0,
               decoration: const BoxDecoration(
-                color: Color.fromRGBO(76, 175, 80, 1),
-                borderRadius: BorderRadius.only(
-                  bottomRight: Radius.circular(70),
-                ),
+                color: Color.fromRGBO(244, 135, 6, 1),
+                borderRadius:
+                    BorderRadius.only(bottomRight: Radius.circular(70)),
+                    
               ),
               child: Padding(
                 padding: EdgeInsets.only(bottom: mq.height * 0.15),
                 child: Center(
-                  child: Lottie.asset(
-                    'animation/loginani.json',
-                    width: mq.width * .95,
-                  ),
+                  child: Image.asset('animation/login.gif',
+                      width: mq.width * .95),
                 ),
               ),
             ),
@@ -194,9 +318,8 @@ class _LoginPageState extends State<LoginPage> {
                           child: TextField(
                             controller: emailController,
                             decoration: InputDecoration(
-                              labelText: 'Email',
-                              prefixIcon: Icon(Icons.email),
-                            ),
+                                labelText: 'Email',
+                                prefixIcon: Icon(Icons.email)),
                           ),
                         ),
                         Container(
@@ -211,8 +334,7 @@ class _LoginPageState extends State<LoginPage> {
                                 icon: Icon(
                                   _isPasswordVisible
                                       ? Icons.visibility_off
-                                      : Icons
-                                          .visibility, // Change icon based on visibility
+                                      : Icons.visibility,
                                   color: Colors.grey,
                                 ),
                                 onPressed: () {
@@ -222,22 +344,21 @@ class _LoginPageState extends State<LoginPage> {
                                 },
                               ),
                             ),
-                            //obscureText: true,
                           ),
                         ),
-                        // Align(
-                        //   alignment: Alignment.centerRight,
-                        //   child: TextButton(
-                        //     onPressed: (() => Get.to(Forgot_PWD())),
-                        //     child: Text(
-                        //       'Forgot Password ?',
-                        //       style: TextStyle(fontSize: 15),
-                        //     ),
-                        //   ),
-                        // ),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: (() => Get.to(Forgot_PWD())),
+                            child: Text(
+                              'Forgot Password ?',
+                              style: TextStyle(fontSize: 15),
+                            ),
+                          ),
+                        ),
                         ElevatedButton(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue,
+                            backgroundColor: Color.fromRGBO(244, 135, 6, 1),
                             foregroundColor: Colors.white,
                             elevation: 10,
                             shadowColor: Colors.transparent,
@@ -252,75 +373,29 @@ class _LoginPageState extends State<LoginPage> {
                               borderRadius: BorderRadius.circular(10),
                             ),
                           ),
-                          // In your login button's onPressed:
-                          onPressed: () async {
-                            if (emailController.text.isEmpty ||
-                                passwordController.text.isEmpty) {
-                              Dialogs.showSnackbar(
-                                context,
-                                'Please enter both email and password',
-                              );
-                              return;
-                            }
-
-                            try {
-                              Dialogs.showProgressBar(context);
-                              await FirebaseAuth.instance
-                                  .signInWithEmailAndPassword(
-                                    email: emailController.text.trim(),
-                                    password: passwordController.text.trim(),
-                                  );
-
-                              Navigator.pop(context); // Hide loading
-                              Navigator.pushReplacement(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => Homepage(user: APIs.me),
+                          onPressed: _isLoading ? null : _loginWithAPI,
+                          child: _isLoading 
+                              ? SizedBox(
+                                  width: 20, 
+                                  height: 20, 
+                                  child: CircularProgressIndicator(color: Colors.white)
+                                )
+                              : Text(
+                                  isLogin ? 'Login' : 'Sign Up',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    letterSpacing: 1.1,
+                                  ),
                                 ),
-                              );
-                            } on FirebaseAuthException catch (e) {
-                              Navigator.pop(context); // Hide loading
-                              String errorMessage = 'Login failed';
-
-                              if (e.code == 'wrong-password') {
-                                errorMessage = 'Incorrect password';
-                              } else if (e.code == 'user-not-found') {
-                                errorMessage = 'No user found with this email';
-                              } else if (e.code == 'too-many-requests') {
-                                errorMessage =
-                                    'Account temporarily locked. Try again later';
-                              }
-
-                              Dialogs.showSnackbar(context, errorMessage);
-                            } catch (e) {
-                              Navigator.pop(context);
-                              Dialogs.showSnackbar(
-                                context,
-                                'Login error: ${e.toString()}',
-                              );
-                            }
-                          },
-                          child: Text(
-                            isLogin ? 'Login' : 'Sign Up',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              letterSpacing: 1.1,
-                            ),
-                          ),
                         ),
-                        // ElevatedButton(
-                        //     onPressed: () {
-                        //       Navigator.push(context,
-                        //           MaterialPageRoute(builder: (_) => Phoneauth()));
-                        //     },
-                        //     child: Text('Phone number')),
-                        SizedBox(height: 10),
+                        SizedBox(
+                          height: 10,
+                        ),
                         ElevatedButton.icon(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            shape: StadiumBorder(),
-                            elevation: 1,
-                          ),
+                              backgroundColor: Color.fromRGBO(244, 135, 6, 1),
+                              shape: StadiumBorder(),
+                              elevation: 1),
                           onPressed: () {
                             _handlegooglebtnclick();
                           },
@@ -329,42 +404,31 @@ class _LoginPageState extends State<LoginPage> {
                             height: mq.height * .05,
                           ),
                           label: RichText(
-                            text: const TextSpan(
-                              style: TextStyle(
-                                color: Colors.black,
-                                fontSize: 19,
-                              ),
-                              children: [
-                                TextSpan(text: 'Sign In with '),
+                              text: const TextSpan(
+                                  style: TextStyle(
+                                      color: Colors.black, fontSize: 19),
+                                  children: [
+                                TextSpan(text: 'Sign In with ',style: TextStyle(color: Colors.white)),
                                 TextSpan(
-                                  text: 'Google',
-                                  style: TextStyle(fontWeight: FontWeight.w500),
-                                ),
-                              ],
-                            ),
-                          ),
+                                    text: 'Google',
+                                    style:
+                                        TextStyle(fontWeight: FontWeight.w500))
+                              ])),
                         ),
                         TextButton(
                           onPressed: () {
                             Navigator.push(
-<<<<<<< HEAD
-                                context, //
-                                MaterialPageRoute(builder: (_) => SignupPage()));
-=======
-                              context, //
-                              MaterialPageRoute(builder: (_) => signup()),
-                            );
->>>>>>> 154adeb1735d90fceecbdf3f308ff6d867dca70c
+                                context,
+                                MaterialPageRoute(builder: (_) => Signup()));
                           },
                           child: Text(
                             isLogin
                                 ? 'Create new account'
                                 : 'Already have an account?',
                             style: TextStyle(
-                              fontSize: 15,
-                              color: Colors.blue,
-                              fontWeight: FontWeight.bold,
-                            ),
+                                fontSize: 15,
+                                color: Colors.blue,
+                                fontWeight: FontWeight.bold),
                           ),
                         ),
                       ],
@@ -379,4 +443,3 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 }
-

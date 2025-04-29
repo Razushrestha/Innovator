@@ -1,9 +1,9 @@
-import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
-import 'package:innovator/chatroom/helper.dart';
+import 'package:http/http.dart' as http;
+import 'package:innovator/Authorization/OTP_Verification.dart';
 import 'package:lottie/lottie.dart';
-
+import 'package:innovator/chatroom/helper.dart';
 import '../main.dart';
 
 class Forgot_PWD extends StatefulWidget {
@@ -15,15 +15,72 @@ class Forgot_PWD extends StatefulWidget {
 
 class _Forgot_PWDState extends State<Forgot_PWD> {
   TextEditingController email = TextEditingController();
+  bool _isLoading = false;
 
-  reset() async {
-    await FirebaseAuth.instance.sendPasswordResetEmail(email: email.text);
-    Dialogs.showSnackbar(
-        context, 'An Verification Link Has Been Sent. Please Check Your Email');
+  Future<void> sendOTP() async {
+    if (email.text.isEmpty) {
+      Dialogs.showSnackbar(context, 'Please enter your email address');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // API endpoint
+      final url = Uri.parse('http://182.93.94.210:3064/api/v1/send-otp');
+      
+      // Request body
+      final body = jsonEncode({
+        'email': email.text.trim(),
+      });
+
+      // Headers
+      final headers = {
+        'Content-Type': 'application/json',
+      };
+
+      // Make POST request
+      final response = await http.post(
+        url,
+        headers: headers,
+        body: body,
+      );
+
+      // Process response
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        Dialogs.showSnackbar(
+          context, 
+          responseData['message'] ?? 'OTP has been sent to your email'
+        );
+        
+        // Navigate to OTP verification screen
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => OTPVerificationScreen(email: email.text)),
+        );
+      } else {
+        final responseData = jsonDecode(response.body);
+        Dialogs.showSnackbar(
+          context, 
+          responseData['message'] ?? 'Failed to send OTP. Please try again.'
+        );
+      }
+    } catch (e) {
+      Dialogs.showSnackbar(context, 'Network error. Please check your connection.');
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final mq = MediaQuery.of(context).size;
+    
     return Scaffold(
       body: Stack(
         children: [
@@ -31,18 +88,18 @@ class _Forgot_PWDState extends State<Forgot_PWD> {
             width: MediaQuery.of(context).size.width,
             height: MediaQuery.of(context).size.height / 2.0,
             decoration: const BoxDecoration(
-              color: Color.fromRGBO(76, 175, 80, 1),
-              borderRadius: BorderRadius.only(
-                  bottomRight: Radius.circular(70),
-                  bottomLeft: Radius.circular(70)),
+              color: Color.fromRGBO(235, 111, 70, 1),
+              borderRadius: BorderRadius.only(bottomRight: Radius.circular(70)),
             ),
-            child: Padding(
-              padding: EdgeInsets.only(bottom: mq.height * 0.01),
-              child: Center(
-                child: Lottie.asset('animation/Forgotpwd.json',
-                    width: mq.width * .95),
-              ),
-            ),
+            // child: Padding(
+            //   padding: EdgeInsets.only(bottom: mq.height * 0.15),
+            //   child: Center(
+            //     child: Lottie.asset(
+            //       'animation/forgot_password.json',  // Add a suitable animation asset
+            //       width: mq.width * .6,
+            //     ),
+            //   ),
+            // ),
           ),
           Align(
             alignment: Alignment.bottomCenter,
@@ -58,47 +115,81 @@ class _Forgot_PWDState extends State<Forgot_PWD> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // ElevatedButton(
-                    //     onPressed: () {
-                    //       Navigator.push(context,
-                    //           MaterialPageRoute(builder: (_) => Phoneauth()));
-                    //     },
-                    //     child: Text('Phone number')),
+                    Text(
+                      'Forgot Password',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Color.fromRGBO(235, 111, 70, 1),
+                      ),
+                    ),
+                    SizedBox(height: 20),
+                    Text(
+                      'Enter your email to receive a verification code',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    SizedBox(height: 20),
                     TextField(
                       controller: email,
+                      keyboardType: TextInputType.emailAddress,
                       decoration: InputDecoration(
-                          hintText: 'Enter Email',
-                          suffixIcon: Icon(Icons.email),
-                          border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(20)),
-                          labelText: 'Email'),
-                    ),
-                    SizedBox(
-                      height: 20,
-                    ),
-                    ElevatedButton.icon(
-                      onPressed: (() => reset()),
-                      label: Text(
-                        'Get Verification',
-                        style: TextStyle(fontSize: 16, color: Colors.white),
+                        hintText: 'Enter Email',
+                        prefixIcon: Icon(Icons.email, color: Color.fromRGBO(235, 111, 70, 1)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          borderSide: BorderSide(color: Color.fromRGBO(235, 111, 70, 1)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          borderSide: BorderSide(color: Color.fromRGBO(235, 111, 70, 1), width: 2),
+                        ),
+                        labelText: 'Email',
+                        labelStyle: TextStyle(color: Color.fromRGBO(235, 111, 70, 1)),
                       ),
-                      style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          iconColor: Colors.white),
-                      icon: Icon(Icons.verified),
                     ),
+                    SizedBox(height: 30),
                     ElevatedButton.icon(
+                      onPressed: _isLoading ? null : sendOTP,
+                      label: _isLoading
+                          ? SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : Text(
+                              'Send Verification Code',
+                              style: TextStyle(fontSize: 16, color: Colors.white),
+                            ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Color.fromRGBO(235, 111, 70, 1),
+                        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        minimumSize: Size(double.infinity, 50),
+                      ),
+                      icon: Icon(Icons.send, color: Colors.white),
+                    ),
+                    SizedBox(height: 15),
+                    TextButton.icon(
                       onPressed: () {
                         Navigator.pop(context);
                       },
+                      icon: Icon(Icons.arrow_back, color: Color.fromRGBO(235, 111, 70, 1)),
                       label: Text(
-                        'Back',
-                        style: TextStyle(fontSize: 16, color: Colors.white),
+                        'Back to Login',
+                        style: TextStyle(
+                          color: Color.fromRGBO(235, 111, 70, 1),
+                          fontSize: 14,
+                        ),
                       ),
-                      style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          iconColor: Colors.white),
-                      icon: Icon(Icons.arrow_back),
                     )
                   ],
                 ),
@@ -110,3 +201,4 @@ class _Forgot_PWDState extends State<Forgot_PWD> {
     );
   }
 }
+

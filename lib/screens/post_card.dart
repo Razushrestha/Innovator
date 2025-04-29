@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:innovator/screens/Inner_Homepage.dart';
+import 'package:innovator/screens/Feed/Inner_Homepage.dart';
 
 class PostCard extends StatelessWidget {
   final Post post;
@@ -9,6 +9,7 @@ class PostCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
+      color: Color(0xFFFAFAFA),
       margin: EdgeInsets.all(8.0),
       child: Column(
         mainAxisSize: MainAxisSize.min, // Important to prevent overflow
@@ -24,15 +25,16 @@ class PostCard extends StatelessWidget {
           Padding(
             padding: EdgeInsets.symmetric(horizontal: 16.0),
             child: Text(post.description),
+            
           ),
           if (post.imageUrl.isNotEmpty)
             Image.network(
               post.imageUrl,
               width: double.infinity,
-              height: 200,
+              height: 300,
               fit: BoxFit.cover,
             ),
-          ButtonBar(
+          OverflowBar(
             children: [
               IconButton(
                 icon: Icon(post.isLiked ? Icons.favorite : Icons.favorite_border),
@@ -45,7 +47,9 @@ class PostCard extends StatelessWidget {
               ),
               IconButton(
                 icon: Icon(Icons.share),
-                onPressed: () {},
+                onPressed: () {
+                  
+                },
               ),
             ],
           ),
