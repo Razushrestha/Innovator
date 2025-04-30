@@ -10,7 +10,7 @@ import 'package:innovator/Authorization/signup.dart';
 import 'package:innovator/chatroom/API/api.dart';
 import 'package:innovator/firebase_options.dart';
 import 'package:innovator/innovator_home.dart';
-import 'package:innovator/screens/splash_screen.dart';
+import 'package:innovator/screens/Splash_Screen/splash_screen.dart';
 import 'package:innovator/utils/routing.dart';
 
 @pragma('vm:entry-point')

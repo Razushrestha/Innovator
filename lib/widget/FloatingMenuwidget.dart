@@ -1,6 +1,7 @@
 // floating_menu_widget.dart
 import 'package:flutter/material.dart';
 import 'package:innovator/innovator_home.dart';
+import 'package:innovator/sample/screens/course/course.dart';
 import 'package:innovator/sample/screens/home_page.dart';
 import 'package:innovator/screens/Add_Content/Create_post.dart';
 import 'package:innovator/screens/Shop/shop_page.dart';
@@ -89,7 +90,7 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
 
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => Course_HomePage()),
+          MaterialPageRoute(builder: (context) => CoursePage()),
         );
         break;
 

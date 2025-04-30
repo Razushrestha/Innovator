@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:innovator/screens/Feed/Inner_Homepage.dart';
+import 'package:innovator/screens/Feed/Post.dart';
+import 'package:innovator/screens/comment/comment_Model.dart';
+import 'package:innovator/screens/comment/comment_section.dart';
 
 class PostCard extends StatelessWidget {
   final Post post;
@@ -36,21 +39,25 @@ class PostCard extends StatelessWidget {
             ),
           OverflowBar(
             children: [
-              IconButton(
-                icon: Icon(post.isLiked ? Icons.favorite : Icons.favorite_border),
-                color: post.isLiked ? Colors.red : null,
-                onPressed: () {},
-              ),
-              IconButton(
-                icon: Icon(Icons.comment),
-                onPressed: () {},
-              ),
-              IconButton(
-                icon: Icon(Icons.share),
-                onPressed: () {
+              // IconButton(
+              //   icon: Icon(post.isLiked ? Icons.favorite : Icons.favorite_border),
+              //   color: post.isLiked ? Colors.red : null,
+              //   onPressed: () {},
+              // ),
+              // IconButton(
+              //   icon: Icon(Icons.comment),
+              //   onPressed: () {
+              //     CommentSection(
+              //       contentId,
+              //     );
+              //   },
+              // ),
+              // IconButton(
+              //   icon: Icon(Icons.share),
+              //   onPressed: () {
                   
-                },
-              ),
+              //   },
+              // ),
             ],
           ),
         ],

@@ -59,6 +59,7 @@ dependencies:
   chewie: ^1.11.3
   open_file: ^3.5.10
   cached_network_image: ^3.4.1
+  timeago: ^3.2.2
 
 dev_dependencies:
   flutter_test:

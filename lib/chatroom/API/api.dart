@@ -7,8 +7,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart';
-import 'package:innovator/models/chat_user.dart';
-import 'package:innovator/models/message.dart';
+import 'package:innovator/models/Chat_Message/chat_user.dart';
+import 'package:innovator/models/Chat_Message/message.dart';
 import 'notification_access_token.dart';
 
 

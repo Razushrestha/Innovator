@@ -6,7 +6,7 @@ import 'package:innovator/chatroom/helper.dart';
 import 'package:innovator/innovator_home.dart';
 import 'package:innovator/chatroom/API/api.dart';
 import 'package:innovator/main.dart';
-import 'package:innovator/models/chat_user.dart';
+import 'package:innovator/models/Chat_Message/chat_user.dart';
 import 'package:innovator/screens/Profile/profile_page.dart';
 import 'package:lottie/lottie.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
