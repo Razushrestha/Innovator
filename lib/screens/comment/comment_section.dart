@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:innovator/App_data/App_data.dart';
+import 'package:innovator/screens/comment/JWT_Helper.dart';
 import 'package:innovator/screens/comment/comment_Model.dart';
 import 'package:innovator/screens/comment/comment_services.dart';
 
@@ -7,14 +8,11 @@ class CommentSection extends StatefulWidget {
   final String contentId;
   final VoidCallback? onCommentAdded;
 
-  const CommentSection({
-    Key? key,
-    required this.contentId,
-    this.onCommentAdded,
-  }) : super(key: key);
+  const CommentSection({Key? key, required this.contentId, this.onCommentAdded})
+    : super(key: key);
 
   @override
-  _CommentSectionState createState() => _CommentSectionState();
+  State<CommentSection> createState() => _CommentSectionState();
 }
 
 class _CommentSectionState extends State<CommentSection> {
@@ -26,13 +24,23 @@ class _CommentSectionState extends State<CommentSection> {
   int _currentPage = 0;
   bool _hasMore = true;
   String? _editingCommentId;
+  String? _currentUserId;
 
   @override
   void initState() {
     super.initState();
     _loadComments();
     _scrollController.addListener(_scrollListener);
-    print('Initialized comment section for content: ${widget.contentId}');
+    _getCurrentUserId(); // Get current user ID on initialization
+  }
+
+  // Get current user ID using JwtHelper
+  void _getCurrentUserId() {
+    final authToken = AppData().authToken;
+    if (authToken != null) {
+      _currentUserId = JwtHelper.extractUserId(authToken);
+      debugPrint('Current user ID: $_currentUserId');
+    }
   }
 
   void _scrollListener() {
@@ -45,43 +53,38 @@ class _CommentSectionState extends State<CommentSection> {
   }
 
   Future<void> _loadComments() async {
-    print('Loading initial comments for content: ${widget.contentId}');
     setState(() => _isLoading = true);
     try {
       final comments = await _commentService.getComments(widget.contentId);
-      print('Successfully loaded ${comments.length} comments');
       setState(() {
         _comments = comments.map((c) => Comment.fromJson(c)).toList();
         _isLoading = false;
         _currentPage = 1;
-        _hasMore = comments.length >= 10; // Assuming 10 comments per page
+        _hasMore = comments.length >= 10;
       });
     } catch (e) {
-      print('Error loading comments: $e');
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load comments: $e')),
-      );
+      _showErrorSnackbar('Failed to load comments: $e');
     }
   }
 
   Future<void> _loadMoreComments() async {
     if (!_hasMore) return;
-    print('Loading more comments, page $_currentPage');
     setState(() => _isLoading = true);
     try {
-      final comments =
-          await _commentService.getComments(widget.contentId, page: _currentPage);
-      print('Successfully loaded ${comments.length} more comments');
+      final comments = await _commentService.getComments(
+        widget.contentId,
+        page: _currentPage,
+      );
       setState(() {
         _comments.addAll(comments.map((c) => Comment.fromJson(c)));
         _isLoading = false;
         _currentPage++;
-        _hasMore = comments.length >= 10; // Assuming 10 comments per page
+        _hasMore = comments.length >= 10;
       });
     } catch (e) {
-      print('Error loading more comments: $e');
       setState(() => _isLoading = false);
+      _showErrorSnackbar('Failed to load more comments: $e');
     }
   }
 
@@ -89,120 +92,113 @@ class _CommentSectionState extends State<CommentSection> {
     final commentText = _commentController.text.trim();
     if (commentText.isEmpty) return;
 
-    print('Submitting comment: $commentText');
     setState(() => _isLoading = true);
     try {
       if (_editingCommentId != null) {
+        // This is an edit operation
         await _commentService.updateComment(
           commentId: _editingCommentId!,
           newComment: commentText,
         );
-        print('Comment updated successfully');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Comment updated successfully!')),
-        );
+        // Reload comments to show the edited comment
+        await _loadComments();
+        widget.onCommentAdded?.call();
+        _showSuccessSnackbar('Comment updated successfully!');
+
+        // Clear edit state
+        _editingCommentId = null;
+        _commentController.clear();
+
       } else {
+        // This is a new comment
         await _commentService.addComment(
           contentId: widget.contentId,
           commentText: commentText,
         );
-        print('Comment added successfully');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Comment added successfully!')),
-        );
+        _showSuccessSnackbar('Comment added successfully!');
+        _commentController.clear();
+        await _loadComments();
         widget.onCommentAdded?.call();
       }
-      _commentController.clear();
-      _editingCommentId = null;
-      await _loadComments(); // Refresh comments
     } catch (e) {
-      print('Error submitting comment: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${e.toString()}')),
-      );
+      _showErrorSnackbar('Error: ${e.toString()}');
     } finally {
       setState(() => _isLoading = false);
     }
   }
 
   Future<void> _deleteComment(String commentId) async {
-    print('Deleting comment: $commentId');
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Delete Comment'),
+            content: const Text(
+              'Are you sure you want to delete this comment?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text(
+                  'Delete',
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            ],
+          ),
+    );
+
+    if (confirmed != true) return;
+
     setState(() => _isLoading = true);
     try {
       await _commentService.deleteComment(commentId);
-      print('Comment deleted successfully');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Comment deleted successfully!')),
-      );
-      await _loadComments(); // Refresh comments
+      _showSuccessSnackbar('Comment deleted successfully!');
+      await _loadComments();
+      widget.onCommentAdded?.call();
     } catch (e) {
-      print('Error deleting comment: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to delete comment: $e')),
-      );
+      _showErrorSnackbar('Failed to delete comment: $e');
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   void _startEditingComment(Comment comment) {
-    print('Starting to edit comment: ${comment.id}');
-    _commentController.text = comment.comment;
-    _editingCommentId = comment.id;
-    FocusScope.of(context).requestFocus(FocusNode());
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _showCommentDialog();
+    setState(() {
+      _commentController.text = comment.comment;
+      _editingCommentId = comment.id;
     });
+    // Focus the text field
+    FocusScope.of(context).requestFocus(FocusNode());
   }
 
-  void _showCommentDialog() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-        ),
-        child: Container(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _commentController,
-                decoration: InputDecoration(
-                  hintText: _editingCommentId != null
-                      ? 'Edit your comment...'
-                      : 'Write a comment...',
-                  border: OutlineInputBorder(),
-                  suffixIcon: IconButton(
-                    icon: const Icon(Icons.send),
-                    onPressed: _isLoading ? null : _submitComment,
-                  ),
-                ),
-                maxLines: 3,
-                autofocus: true,
-              ),
-              if (_isLoading)
-                const Padding(
-                  padding: EdgeInsets.all(8.0),
-                  child: CircularProgressIndicator(),
-                ),
-            ],
-          ),
-        ),
-      ),
-    ).then((_) {
+  void _cancelEditing() {
+    setState(() {
       _commentController.clear();
       _editingCommentId = null;
     });
+  }
+
+  void _showSuccessSnackbar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.green),
+    );
+  }
+
+  void _showErrorSnackbar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // Comment input field
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
           child: Row(
@@ -211,7 +207,10 @@ class _CommentSectionState extends State<CommentSection> {
                 child: TextField(
                   controller: _commentController,
                   decoration: InputDecoration(
-                    hintText: 'Add a comment...',
+                    hintText:
+                        _editingCommentId != null
+                            ? 'Edit your comment...'
+                            : 'Add a comment...',
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(20.0),
                     ),
@@ -219,9 +218,27 @@ class _CommentSectionState extends State<CommentSection> {
                       horizontal: 16.0,
                       vertical: 8.0,
                     ),
-                    suffixIcon: IconButton(
-                      icon: const Icon(Icons.send),
-                      onPressed: _isLoading ? null : _submitComment,
+                    suffixIcon: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_editingCommentId != null)
+                          IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: _cancelEditing,
+                            tooltip: 'Cancel editing',
+                          ),
+                        IconButton(
+                          icon:
+                              _editingCommentId != null
+                                  ? const Icon(Icons.save)
+                                  : const Icon(Icons.send),
+                          onPressed: _isLoading ? null : _submitComment,
+                          tooltip:
+                              _editingCommentId != null
+                                  ? 'Save edit'
+                                  : 'Send comment',
+                        ),
+                      ],
                     ),
                   ),
                   onSubmitted: (_) => _submitComment(),
@@ -230,42 +247,62 @@ class _CommentSectionState extends State<CommentSection> {
             ],
           ),
         ),
-        
-        // Comments list
-        Container(
-          constraints: BoxConstraints(maxHeight: 300,
-    minWidth: MediaQuery.of(context).size.width, ),// Add this),),
-          child: _isLoading && _comments.isEmpty
-              ? const Center(child: CircularProgressIndicator())
-              : ListView.builder(
-                  controller: _scrollController,
-                  shrinkWrap: true,
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  itemCount: _comments.length + (_hasMore ? 1 : 0),
-                  itemBuilder: (context, index) {
-                    if (index == _comments.length) {
-                      return _hasMore
-                          ? const Padding(
-                              padding: EdgeInsets.all(16.0),
-                              child: Center(
-                                child: CircularProgressIndicator(),
-                              ),
-                            )
-                          : const SizedBox();
-                    }
-                    
-                    final comment = _comments[index];
-                    return _buildCommentTile(comment);
-                  },
+
+        if (_editingCommentId != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Row(
+              children: [
+                const Icon(Icons.edit, size: 12, color: Colors.grey),
+                const SizedBox(width: 4),
+                Text(
+                  'Editing comment',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                    fontStyle: FontStyle.italic,
+                  ),
                 ),
+              ],
+            ),
+          ),
+
+        Container(
+          constraints: BoxConstraints(
+            maxHeight: 300,
+            minWidth: MediaQuery.of(context).size.width,
+          ),
+          child:
+              _isLoading && _comments.isEmpty
+                  ? const Center(child: CircularProgressIndicator())
+                  : ListView.builder(
+                    controller: _scrollController,
+                    shrinkWrap: true,
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    itemCount: _comments.length + (_hasMore ? 1 : 0),
+                    itemBuilder: (context, index) {
+                      if (index == _comments.length) {
+                        return _hasMore
+                            ? const Padding(
+                              padding: EdgeInsets.all(16.0),
+                              child: Center(child: CircularProgressIndicator()),
+                            )
+                            : const SizedBox();
+                      }
+
+                      final comment = _comments[index];
+                      return _buildCommentTile(comment);
+                    },
+                  ),
         ),
       ],
     );
   }
 
   Widget _buildCommentTile(Comment comment) {
-    final isCurrentUser = widget.contentId == AppData().authToken?.split('|').first;
-    
+    final isCurrentUser =
+        _currentUserId != null && _currentUserId == comment.user.id;
+
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 8.0),
       leading: CircleAvatar(
@@ -279,53 +316,65 @@ class _CommentSectionState extends State<CommentSection> {
         children: [
           Text(
             comment.user.name,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-            ),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
           ),
-          Text(
-            comment.comment,
-            style: const TextStyle(fontSize: 14),
-          ),
+          Text(comment.comment, style: const TextStyle(fontSize: 14)),
           const SizedBox(height: 4),
-          Text(
-            _formatTimeAgo(comment.createdAt),
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[600],
-            ),
+          Row(
+            children: [
+              Text(
+                _formatTimeAgo(comment.createdAt),
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              ),
+              if (comment.edited)
+                Padding(
+                  padding: const EdgeInsets.only(left: 8.0),
+                  child: Text(
+                    '(edited)',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
+            ],
           ),
         ],
       ),
-      trailing: isCurrentUser
-          ? PopupMenuButton(
-              icon: const Icon(Icons.more_vert, size: 16),
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'edit',
-                  child: Text('Edit'),
-                ),
-                const PopupMenuItem(
-                  value: 'delete',
-                  child: Text('Delete'),
-                ),
-              ],
-              onSelected: (value) {
-                if (value == 'edit') {
-                  _startEditingComment(comment);
-                } else if (value == 'delete') {
-                  _deleteComment(comment.id);
-                }
-              },
-            )
-          : null,
+      trailing:
+          isCurrentUser
+              ? PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert, size: 16),
+                itemBuilder:
+                    (context) => [
+                      const PopupMenuItem<String>(
+                        value: 'edit',
+                        child: Text('Edit'),
+                      ),
+                      const PopupMenuItem<String>(
+                        value: 'delete',
+                        child: Text(
+                          'Delete',
+                          style: TextStyle(color: Colors.red),
+                        ),
+                      ),
+                    ],
+                onSelected: (value) async {
+                  if (value == 'edit') {
+                    _startEditingComment(comment);
+                  } else if (value == 'delete') {
+                    await _deleteComment(comment.id);
+                  }
+                },
+              )
+              : null,
     );
   }
 
   String _formatTimeAgo(DateTime dateTime) {
     final difference = DateTime.now().difference(dateTime);
-    
+
     if (difference.inDays > 365) {
       return '${(difference.inDays / 365).floor()}y';
     } else if (difference.inDays > 30) {

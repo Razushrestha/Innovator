@@ -170,7 +170,7 @@ class _SignupState extends State<Signup> {
         
         // Navigate to home page
         Navigator.pushReplacement(context, MaterialPageRoute(
-          builder: (context) => Homepage(),
+          builder: (context) => LoginPage(),
         ));
       } else {
         // Registration failed

@@ -55,4 +55,9 @@ class AppData {
   
   // Check if user is authenticated
   bool get isAuthenticated => _authToken != null && _authToken!.isNotEmpty;
+
+
+  //Current user
+  //
+  // 
 }

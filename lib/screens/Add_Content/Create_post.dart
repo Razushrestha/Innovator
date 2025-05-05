@@ -91,7 +91,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         Uri.parse(uploadUrl),
       );
 
-      request.headers['Authorization'] = 'Bearer ${_appData.authToken}';
+      request.headers['authorization'] = 'Bearer ${_appData.authToken}';
 
       for (var file in _selectedFiles) {
         final mimeType = lookupMimeType(file.path!) ?? 'application/octet-stream';

@@ -60,6 +60,7 @@ dependencies:
   open_file: ^3.5.10
   cached_network_image: ^3.4.1
   timeago: ^3.2.2
+  connectivity_plus: ^6.1.4
 
 dev_dependencies:
   flutter_test:

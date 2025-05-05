@@ -1,71 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:innovator/main.dart';
-
-class shop_page extends StatefulWidget {
-  const shop_page({Key? key}) : super(key: key);
-
-  @override
-  State<shop_page> createState() => _shop_pageState();
-}
-
-class _shop_pageState extends State<shop_page> {
-  int _selectedIndex = 0;
-  
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      
-      // appBar: AppBar(
-      //   title: const Text(
-      //     'TechBot Store',
-      //     style: TextStyle(fontWeight: FontWeight.bold),
-      //   ),
-      //   actions: [
-      //     IconButton(
-      //       icon: const Icon(Icons.search),
-      //       onPressed: () {
-      //         // Search functionality
-      //       },
-      //     ),
-      //     IconButton(
-      //       icon: const Badge(
-      //         label: Text('3'),
-      //         child: Icon(Icons.shopping_cart),
-      //       ),
-      //       onPressed: () {
-      //         // Cart functionality
-      //       },
-      //     ),
-      //     const SizedBox(width: 8),
-      //   ],
-      // ),
-      body: ShopPage()
-      // bottomNavigationBar: NavigationBar(
-      //   selectedIndex: _selectedIndex,
-      //   onDestinationSelected: (index) {
-      //     setState(() {
-      //       _selectedIndex = index;
-      //     });
-      //   },
-      //   destinations: const [
-      //     NavigationDestination(
-      //       icon: Icon(Icons.store),
-      //       label: 'Shop',
-      //     ),
-      //     NavigationDestination(
-      //       icon: Icon(Icons.person),
-      //       label: 'Profile',
-      //     ),
-      //   ],
-      // ),
-    );
-  }
-
-  
-}
-
-
- 
 
 class ShopPage extends StatefulWidget {
   const ShopPage({Key? key}) : super(key: key);
@@ -74,16 +7,23 @@ class ShopPage extends StatefulWidget {
   State<ShopPage> createState() => _ShopPageState();
 }
 
-class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin {
+class _ShopPageState extends State<ShopPage>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  final List<String> categories = ['All', 'IoT Devices', 'Robots', 'Components', 'Kits'];
-  
+  final List<String> categories = [
+    'All',
+    'IoT Devices',
+    'Robots',
+    'Components',
+    'Kits',
+  ];
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: categories.length, vsync: this);
   }
-  
+
   @override
   void dispose() {
     _tabController.dispose();
@@ -94,74 +34,76 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
   Widget build(BuildContext context) {
     return Column(
       children: [
-        SizedBox(height: 20),
-        Row(children: [
-          Padding(
-            padding:  EdgeInsets.all(16.0),
-            child: Container(
-                            margin:  EdgeInsets.only(top: 5, bottom: 20),
-                            width: mq.width * 0.49,
-                            //height: 55,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(15),
-                            ),
-                            child: TextFormField(
-                              onTap: () {
-                               
-                              },
-                              readOnly: false,
-                              decoration: InputDecoration(
-                                border: OutlineInputBorder(
-                                  borderSide: BorderSide.none,
-                                  borderRadius: BorderRadius.circular(15),
-                                ),
-                                hintText: "Search",
-                                hintStyle: TextStyle(
-                                    color: Colors.black.withOpacity(0.5)),
-                                prefixIcon: const Icon(
-                                  Icons.search,
-                                  size: 30,
-                                ),
-                              ),
-                            ),
-                          ),
-          ),
-          Container(
-            margin: EdgeInsets.all(1.0),
-           // padding: EdgeInsets.symmetric(horizontal: 10),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(15),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                hint: Text("Category"),
-                value: null, // Add a state variable for selected value
-                items: ['All', 'IoT Devices', 'Robots', 'Components', 'Kits']
-                    .map((String value) {
-                  return DropdownMenuItem<String>(
-                    value: value,
-                    child: Text(value),
-                  );
-                }).toList(),
-                onChanged: (String? newValue) {
-                  // Handle dropdown selection
-                },
+       //  SizedBox(height: 20),
+        Row(
+          children: [
+            Padding(
+              padding: EdgeInsets.all(16.0),
+              child: Container(
+                margin: EdgeInsets.only(top: 5, bottom: 20),
+                width: MediaQuery.of(context).size.width * 0.6,
+                //height: 55,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: TextFormField(
+                  onTap: () {},
+                  readOnly: false,
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(
+                      borderSide: BorderSide.none,
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                    hintText: "Search",
+                    hintStyle: TextStyle(color: Colors.black.withOpacity(0.5)),
+                    prefixIcon: const Icon(Icons.search, size: 30),
+                  ),
+                ),
               ),
             ),
-          ),
-          IconButton(
-            icon: const Badge(
-              label: Text('3'),
-              child: Icon(Icons.shopping_cart),
+            Container(
+              margin: EdgeInsets.all(1.0),
+              // padding: EdgeInsets.symmetric(horizontal: 10),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(15),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  hint: Text("Category"),
+                  value: null, // Add a state variable for selected value
+                  items:
+                      [
+                        'All',
+                        'IoT Devices',
+                        'Robots',
+                        'Components',
+                        'Kits',
+                      ].map((String value) {
+                        return DropdownMenuItem<String>(
+                          value: value,
+                          child: Text(value),
+                        );
+                      }).toList(),
+                  onChanged: (String? newValue) {
+                    // Handle dropdown selection
+                  },
+                ),
+              ),
             ),
-            onPressed: () {
-              // Cart functionality
-            },
-          ),
-        ],),
+            IconButton(
+              icon: const Badge(
+                label: Text('3'),
+                child: Icon(Icons.shopping_cart),
+              ),
+              onPressed: () {
+                // Cart functionality
+              },
+            ),
+          ],
+        ),
         // Row(
         //   //mainAxisAlignment: MainAxisAlignment.end,
         //   children: [
@@ -220,7 +162,11 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
                       height: 160,
                       width: 140,
                       alignment: Alignment.center,
-                      child: const Icon(Icons.smart_toy, size: 80, color: Colors.white54),
+                      child: const Icon(
+                        Icons.smart_toy,
+                        size: 80,
+                        color: Colors.white54,
+                      ),
                     );
                   },
                 ),
@@ -232,7 +178,10 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(16),
@@ -268,11 +217,10 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
                   ],
                 ),
               ),
-              
             ],
           ),
         ),
-        
+
         // Categories tabs
         Container(
           height: 50,
@@ -281,7 +229,9 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
             controller: _tabController,
             isScrollable: true,
             labelColor: Theme.of(context).colorScheme.primary,
-            unselectedLabelColor: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+            unselectedLabelColor: Theme.of(
+              context,
+            ).colorScheme.onSurface.withOpacity(0.6),
             indicator: BoxDecoration(
               borderRadius: BorderRadius.circular(50),
               color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
@@ -289,14 +239,15 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
             tabs: categories.map((category) => Tab(text: category)).toList(),
           ),
         ),
-        
+
         // Products grid
         Expanded(
           child: TabBarView(
             controller: _tabController,
-            children: categories.map((category) => 
-              ProductGrid(category: category)
-            ).toList(),
+            children:
+                categories
+                    .map((category) => ProductGrid(category: category))
+                    .toList(),
           ),
         ),
       ],
@@ -306,24 +257,26 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
 
 class ProductGrid extends StatelessWidget {
   final String category;
-  
+
   const ProductGrid({Key? key, required this.category}) : super(key: key);
 
   List<Product> getFilteredProducts() {
     if (category == 'All') {
       return demoProducts;
     } else {
-      return demoProducts.where((product) => product.category == category).toList();
+      return demoProducts
+          .where((product) => product.category == category)
+          .toList();
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final filteredProducts = getFilteredProducts();
-    
+
     return filteredProducts.isEmpty
-      ? const Center(child: Text('No products in this category yet'))
-      : GridView.builder(
+        ? const Center(child: Text('No products in this category yet'))
+        : GridView.builder(
           padding: const EdgeInsets.all(16),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 2,
@@ -341,13 +294,13 @@ class ProductGrid extends StatelessWidget {
 
 class ProductCard extends StatelessWidget {
   final Product product;
-  
+
   const ProductCard({Key? key, required this.product}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
+
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -375,37 +328,43 @@ class ProductCard extends StatelessWidget {
             // Product image
             Expanded(
               child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(12),
+                ),
                 child: Container(
                   width: double.infinity,
                   color: isDarkMode ? Colors.grey[850] : Colors.orange,
                   child: Stack(
                     children: [
                       Center(
-                        child: product.imageUrl != null
-                          ? Image.asset(
-                              product.imageUrl!,
-                              fit: BoxFit.contain,
-                              errorBuilder: (context, error, stackTrace) {
-                                return Icon(
+                        child:
+                            product.imageUrl != null
+                                ? Image.asset(
+                                  product.imageUrl!,
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return Icon(
+                                      getIconForCategory(product.category),
+                                      size: 60,
+                                      color: Colors.white,
+                                    );
+                                  },
+                                )
+                                : Icon(
                                   getIconForCategory(product.category),
                                   size: 60,
                                   color: Colors.white,
-                                );
-                              },
-                            )
-                          : Icon(
-                              getIconForCategory(product.category),
-                              size: 60,
-                              color: Colors.white,
-                            ),
+                                ),
                       ),
                       if (product.isNew)
                         Positioned(
                           top: 8,
                           left: 8,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.blue,
                               borderRadius: BorderRadius.circular(4),
@@ -425,7 +384,7 @@ class ProductCard extends StatelessWidget {
                 ),
               ),
             ),
-            
+
             // Product info
             Padding(
               padding: const EdgeInsets.all(12),
@@ -447,7 +406,9 @@ class ProductCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withOpacity(0.6),
                       fontSize: 12,
                     ),
                   ),
@@ -497,7 +458,7 @@ class ProductCard extends StatelessWidget {
       ),
     );
   }
-  
+
   IconData getIconForCategory(String category) {
     switch (category) {
       case 'IoT Devices':
@@ -506,7 +467,7 @@ class ProductCard extends StatelessWidget {
         return Icons.smart_toy;
       case 'Components':
         return Icons.memory;
-      case 'Kits': 
+      case 'Kits':
         return Icons.science;
       default:
         return Icons.devices_other;
@@ -516,13 +477,13 @@ class ProductCard extends StatelessWidget {
 
 class ProductDetailPage extends StatelessWidget {
   final Product product;
-  
+
   const ProductDetailPage({Key? key, required this.product}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Scaffold(
       appBar: AppBar(
         title: Text(product.name),
@@ -549,26 +510,27 @@ class ProductDetailPage extends StatelessWidget {
                     width: double.infinity,
                     color: isDarkMode ? Colors.grey[850] : Colors.grey[100],
                     child: Center(
-                      child: product.imageUrl != null
-                        ? Image.asset(
-                            product.imageUrl!,
-                            fit: BoxFit.contain,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Icon(
+                      child:
+                          product.imageUrl != null
+                              ? Image.asset(
+                                product.imageUrl!,
+                                fit: BoxFit.contain,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Icon(
+                                    _getIconForCategory(product.category),
+                                    size: 100,
+                                    color: Colors.grey.withOpacity(0.3),
+                                  );
+                                },
+                              )
+                              : Icon(
                                 _getIconForCategory(product.category),
                                 size: 100,
                                 color: Colors.grey.withOpacity(0.3),
-                              );
-                            },
-                          )
-                        : Icon(
-                            _getIconForCategory(product.category),
-                            size: 100,
-                            color: Colors.grey.withOpacity(0.3),
-                          ),
+                              ),
                     ),
                   ),
-                  
+
                   // Product information
                   Padding(
                     padding: const EdgeInsets.all(16),
@@ -600,24 +562,36 @@ class ProductDetailPage extends StatelessWidget {
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            const Icon(Icons.star, color: Colors.amber, size: 18),
+                            const Icon(
+                              Icons.star,
+                              color: Colors.amber,
+                              size: 18,
+                            ),
                             const SizedBox(width: 4),
                             Text(
                               '${product.rating}',
-                              style: const TextStyle(fontWeight: FontWeight.bold),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                             const SizedBox(width: 4),
                             Text(
                               '(${product.reviews} reviews)',
                               style: TextStyle(
-                                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withOpacity(0.6),
                               ),
                             ),
                             const Spacer(),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
                               decoration: BoxDecoration(
-                                color: product.inStock ? Colors.green : Colors.red,
+                                color:
+                                    product.inStock ? Colors.green : Colors.red,
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
@@ -644,10 +618,12 @@ class ProductDetailPage extends StatelessWidget {
                           product.fullDescription,
                           style: TextStyle(
                             height: 1.5,
-                            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withOpacity(0.8),
                           ),
                         ),
-                        
+
                         const SizedBox(height: 16),
                         const Text(
                           'Specifications',
@@ -657,27 +633,29 @@ class ProductDetailPage extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        ...product.specifications.entries.map((spec) => Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              SizedBox(
-                                width: 120,
-                                child: Text(
-                                  spec.key,
-                                  style: TextStyle(
-                                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                        ...product.specifications.entries.map(
+                          (spec) => Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                SizedBox(
+                                  width: 120,
+                                  child: Text(
+                                    spec.key,
+                                    style: TextStyle(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurface.withOpacity(0.6),
+                                    ),
                                   ),
                                 ),
-                              ),
-                              Expanded(
-                                child: Text(spec.value),
-                              ),
-                            ],
+                                Expanded(child: Text(spec.value)),
+                              ],
+                            ),
                           ),
-                        )),
-                        
+                        ),
+
                         const SizedBox(height: 16),
                         const Text(
                           'Related Products',
@@ -691,7 +669,10 @@ class ProductDetailPage extends StatelessWidget {
                           height: 200,
                           child: ListView.builder(
                             scrollDirection: Axis.horizontal,
-                            itemCount: demoProducts.length > 5 ? 5 : demoProducts.length,
+                            itemCount:
+                                demoProducts.length > 5
+                                    ? 5
+                                    : demoProducts.length,
                             itemBuilder: (context, index) {
                               final relatedProduct = demoProducts[index];
                               if (relatedProduct.id == product.id) {
@@ -701,7 +682,10 @@ class ProductDetailPage extends StatelessWidget {
                                 width: 140,
                                 margin: const EdgeInsets.only(right: 16),
                                 decoration: BoxDecoration(
-                                  color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+                                  color:
+                                      isDarkMode
+                                          ? const Color(0xFF1E1E1E)
+                                          : Colors.white,
                                   borderRadius: BorderRadius.circular(12),
                                   boxShadow: [
                                     BoxShadow(
@@ -717,36 +701,53 @@ class ProductDetailPage extends StatelessWidget {
                                     Expanded(
                                       child: Container(
                                         decoration: BoxDecoration(
-                                          color: isDarkMode ? Colors.grey[850] : Colors.grey[100],
-                                          borderRadius: const BorderRadius.vertical(
-                                            top: Radius.circular(12),
-                                          ),
+                                          color:
+                                              isDarkMode
+                                                  ? Colors.grey[850]
+                                                  : Colors.grey[100],
+                                          borderRadius:
+                                              const BorderRadius.vertical(
+                                                top: Radius.circular(12),
+                                              ),
                                         ),
                                         child: Center(
-                                          child: relatedProduct.imageUrl != null
-                                            ? Image.asset(
-                                                relatedProduct.imageUrl!,
-                                                fit: BoxFit.contain,
-                                                errorBuilder: (context, error, stackTrace) {
-                                                  return Icon(
-                                                    _getIconForCategory(relatedProduct.category),
+                                          child:
+                                              relatedProduct.imageUrl != null
+                                                  ? Image.asset(
+                                                    relatedProduct.imageUrl!,
+                                                    fit: BoxFit.contain,
+                                                    errorBuilder: (
+                                                      context,
+                                                      error,
+                                                      stackTrace,
+                                                    ) {
+                                                      return Icon(
+                                                        _getIconForCategory(
+                                                          relatedProduct
+                                                              .category,
+                                                        ),
+                                                        size: 40,
+                                                        color: Colors.grey
+                                                            .withOpacity(0.3),
+                                                      );
+                                                    },
+                                                  )
+                                                  : Icon(
+                                                    _getIconForCategory(
+                                                      relatedProduct.category,
+                                                    ),
                                                     size: 40,
-                                                    color: Colors.grey.withOpacity(0.3),
-                                                  );
-                                                },
-                                              )
-                                            : Icon(
-                                                _getIconForCategory(relatedProduct.category),
-                                                size: 40,
-                                                color: Colors.grey.withOpacity(0.3),
-                                              ),
+                                                    color: Colors.grey
+                                                        .withOpacity(0.3),
+                                                  ),
                                         ),
                                       ),
                                     ),
                                     Padding(
                                       padding: const EdgeInsets.all(8),
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Text(
                                             relatedProduct.name,
@@ -761,7 +762,10 @@ class ProductDetailPage extends StatelessWidget {
                                             '\$${relatedProduct.price.toStringAsFixed(2)}',
                                             style: TextStyle(
                                               fontWeight: FontWeight.bold,
-                                              color: Theme.of(context).colorScheme.primary,
+                                              color:
+                                                  Theme.of(
+                                                    context,
+                                                  ).colorScheme.primary,
                                             ),
                                           ),
                                         ],
@@ -780,7 +784,7 @@ class ProductDetailPage extends StatelessWidget {
               ),
             ),
           ),
-          
+
           // Bottom bar with add to cart button
           Container(
             padding: const EdgeInsets.all(16),
@@ -800,7 +804,9 @@ class ProductDetailPage extends StatelessWidget {
                   Container(
                     decoration: BoxDecoration(
                       border: Border.all(
-                        color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.primary.withOpacity(0.3),
                       ),
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -835,14 +841,19 @@ class ProductDetailPage extends StatelessWidget {
                   const SizedBox(width: 16),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: product.inStock ? () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('${product.name} added to cart'),
-                            duration: const Duration(seconds: 1),
-                          ),
-                        );
-                      } : null,
+                      onPressed:
+                          product.inStock
+                              ? () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      '${product.name} added to cart',
+                                    ),
+                                    duration: const Duration(seconds: 1),
+                                  ),
+                                );
+                              }
+                              : null,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Theme.of(context).colorScheme.primary,
                         foregroundColor: Colors.white,
@@ -865,7 +876,7 @@ class ProductDetailPage extends StatelessWidget {
       ),
     );
   }
-  
+
   IconData _getIconForCategory(String category) {
     switch (category) {
       case 'IoT Devices':
@@ -874,7 +885,7 @@ class ProductDetailPage extends StatelessWidget {
         return Icons.smart_toy;
       case 'Components':
         return Icons.memory;
-      case 'Kits': 
+      case 'Kits':
         return Icons.science;
       default:
         return Icons.devices_other;
@@ -942,7 +953,7 @@ class ProductDetailPage extends StatelessWidget {
 //           ),
 //         ),
 //         const SizedBox(height: 24),
-        
+
 //         // Orders section
 //         const Text(
 //           'My Orders',
@@ -990,7 +1001,7 @@ class ProductDetailPage extends StatelessWidget {
 //           ),
 //         ),
 //         const SizedBox(height: 24),
-        
+
 //         // Account section
 //         const Text(
 //           'Account Settings',
@@ -1045,7 +1056,7 @@ class ProductDetailPage extends StatelessWidget {
 //           ),
 //         ),
 //         const SizedBox(height: 24),
-        
+
 //         // Other section
 //         const Text(
 //           'Other',
@@ -1097,7 +1108,7 @@ class ProductDetailPage extends StatelessWidget {
 //       ],
 //     );
 //   }
-  
+
 //   Widget _buildProfileListTile(
 //     BuildContext context,
 //     IconData icon,
@@ -1133,7 +1144,7 @@ class Product {
   final bool inStock;
   final bool isNew;
   final Map<String, String> specifications;
-  
+
   Product({
     required this.id,
     required this.name,
@@ -1156,7 +1167,8 @@ final List<Product> demoProducts = [
     id: 1,
     name: 'Smart Home Robot',
     description: 'AI-powered home assistant robot',
-    fullDescription: 'Meet your new home companion! This AI-powered smart robot connects to your home network and integrates with your existing smart devices. With advanced voice recognition, facial recognition, and learning capabilities, it adapts to your preferences and routines. Features include autonomous navigation, automatic docking for charging, video calls, home monitoring, and entertainment functions. Perfect for families, tech enthusiasts, or anyone looking to step into the future of smart home technology.',
+    fullDescription:
+        'Meet your new home companion! This AI-powered smart robot connects to your home network and integrates with your existing smart devices. With advanced voice recognition, facial recognition, and learning capabilities, it adapts to your preferences and routines. Features include autonomous navigation, automatic docking for charging, video calls, home monitoring, and entertainment functions. Perfect for families, tech enthusiasts, or anyone looking to step into the future of smart home technology.',
     price: 499.99,
     category: 'Robots',
     imageUrl: null, // Replace with actual image path
@@ -1180,7 +1192,8 @@ final List<Product> demoProducts = [
     id: 2,
     name: 'IoT Smart Thermostat',
     description: 'Energy-saving smart temperature control',
-    fullDescription: 'Transform your home climate control with our premium IoT Smart Thermostat. This device learns your schedule and preferences to automatically adjust heating and cooling for optimal comfort and energy savings. The intuitive touchscreen interface and mobile app make it easy to monitor and control your home temperature from anywhere. Features include geofencing, which adjusts settings based on your location, detailed energy consumption reports, and compatibility with major smart home ecosystems. Save up to 23% on yearly heating and cooling costs.',
+    fullDescription:
+        'Transform your home climate control with our premium IoT Smart Thermostat. This device learns your schedule and preferences to automatically adjust heating and cooling for optimal comfort and energy savings. The intuitive touchscreen interface and mobile app make it easy to monitor and control your home temperature from anywhere. Features include geofencing, which adjusts settings based on your location, detailed energy consumption reports, and compatibility with major smart home ecosystems. Save up to 23% on yearly heating and cooling costs.',
     price: 129.99,
     category: 'IoT Devices',
     imageUrl: null, // Replace with actual image path
@@ -1201,7 +1214,8 @@ final List<Product> demoProducts = [
     id: 3,
     name: 'Arduino Robotics Kit',
     description: 'Complete DIY robotics learning kit',
-    fullDescription: 'Start your robotics journey with this comprehensive Arduino-based robotics kit. Perfect for beginners and intermediate makers, this kit includes everything you need to build and program your own robot. The set comes with a detailed step-by-step instruction manual and access to online video tutorials. You\'ll learn about electronics, programming, mechanics, and problem-solving while creating a functional robot that can navigate obstacles, follow lines, and be controlled wirelessly via a smartphone app. No prior experience necessary—just bring your curiosity!',
+    fullDescription:
+        'Start your robotics journey with this comprehensive Arduino-based robotics kit. Perfect for beginners and intermediate makers, this kit includes everything you need to build and program your own robot. The set comes with a detailed step-by-step instruction manual and access to online video tutorials. You\'ll learn about electronics, programming, mechanics, and problem-solving while creating a functional robot that can navigate obstacles, follow lines, and be controlled wirelessly via a smartphone app. No prior experience necessary—just bring your curiosity!',
     price: 89.99,
     category: 'Kits',
     imageUrl: null, // Replace with actual image path
@@ -1209,7 +1223,8 @@ final List<Product> demoProducts = [
     reviews: 123,
     inStock: true,
     specifications: {
-      'Components': '1x Arduino UNO, 2x DC Motors, 1x Motor Driver, 1x Ultrasonic Sensor, 1x Bluetooth Module',
+      'Components':
+          '1x Arduino UNO, 2x DC Motors, 1x Motor Driver, 1x Ultrasonic Sensor, 1x Bluetooth Module',
       'Material': 'Acrylic chassis, metal components',
       'Programming': 'Arduino IDE (C/C++)',
       'Power': '4x AA Batteries (not included)',
@@ -1222,7 +1237,8 @@ final List<Product> demoProducts = [
     id: 4,
     name: 'Raspberry Pi 5',
     description: 'Latest single-board computer for IoT projects',
-    fullDescription: 'The Raspberry Pi 5 raises the bar for single-board computing with significantly improved performance and capabilities. Featuring a powerful quad-core processor, enhanced GPU, and increased RAM options, this tiny computer packs a serious punch. Perfect for IoT projects, home automation, retro gaming, media centers, learning programming, and countless DIY projects. The familiar form factor maintains compatibility with most existing Pi accessories while adding new features like dual 4K display support, improved thermal management, and upgraded USB ports. Get started with endless possibilities in the palm of your hand.',
+    fullDescription:
+        'The Raspberry Pi 5 raises the bar for single-board computing with significantly improved performance and capabilities. Featuring a powerful quad-core processor, enhanced GPU, and increased RAM options, this tiny computer packs a serious punch. Perfect for IoT projects, home automation, retro gaming, media centers, learning programming, and countless DIY projects. The familiar form factor maintains compatibility with most existing Pi accessories while adding new features like dual 4K display support, improved thermal management, and upgraded USB ports. Get started with endless possibilities in the palm of your hand.',
     price: 59.99,
     category: 'Components',
     imageUrl: null, // Replace with actual image path
@@ -1243,7 +1259,8 @@ final List<Product> demoProducts = [
     id: 5,
     name: 'Smart Security Camera',
     description: '1080p wireless security with motion detection',
-    fullDescription: 'Keep your home or business secure with our advanced Smart Security Camera. This weatherproof, wireless camera delivers crystal-clear 1080p HD video day and night. With intelligent motion detection, it can distinguish between people, animals, and vehicles to send relevant alerts directly to your smartphone. Two-way audio allows you to communicate with visitors or deter intruders. Cloud storage options and local SD card backup ensure your footage is always available when you need it. Easy installation and an intuitive app make this the perfect security solution for any property.',
+    fullDescription:
+        'Keep your home or business secure with our advanced Smart Security Camera. This weatherproof, wireless camera delivers crystal-clear 1080p HD video day and night. With intelligent motion detection, it can distinguish between people, animals, and vehicles to send relevant alerts directly to your smartphone. Two-way audio allows you to communicate with visitors or deter intruders. Cloud storage options and local SD card backup ensure your footage is always available when you need it. Easy installation and an intuitive app make this the perfect security solution for any property.',
     price: 79.99,
     category: 'IoT Devices',
     imageUrl: null, // Replace with actual image path
@@ -1265,7 +1282,8 @@ final List<Product> demoProducts = [
     id: 6,
     name: 'Drone Programming Kit',
     description: 'Learn to program autonomous drones',
-    fullDescription: 'Take to the skies with our comprehensive Drone Programming Kit. This educational package includes a fully assembled quadcopter drone with programmable flight controller, sensors, and camera. The included curriculum guides you through the basics of drone physics, programming autonomous flight patterns, computer vision, and even machine learning applications for drones. Perfect for STEM education, hobbyists wanting to go beyond manual controls, or professionals looking to expand their skills. The drone comes with safety features like propeller guards and emergency landing protocols to ensure a safe learning experience.',
+    fullDescription:
+        'Take to the skies with our comprehensive Drone Programming Kit. This educational package includes a fully assembled quadcopter drone with programmable flight controller, sensors, and camera. The included curriculum guides you through the basics of drone physics, programming autonomous flight patterns, computer vision, and even machine learning applications for drones. Perfect for STEM education, hobbyists wanting to go beyond manual controls, or professionals looking to expand their skills. The drone comes with safety features like propeller guards and emergency landing protocols to ensure a safe learning experience.',
     price: 249.99,
     category: 'Kits',
     imageUrl: null, // Replace with actual image path
@@ -1288,7 +1306,8 @@ final List<Product> demoProducts = [
     id: 7,
     name: 'IoT Starter Kit',
     description: 'Complete package to begin IoT development',
-    fullDescription: 'Launch your IoT journey with our comprehensive Starter Kit. This all-in-one package contains everything needed to create your first connected devices. The kit includes an ESP32 development board, breadboard, jumper wires, resistors, capacitors, LEDs, various sensors (temperature, humidity, motion, light), relay modules, and an OLED display. The detailed guidebook walks you through 15 progressive projects, from basic sensor reading to creating your own smart home devices. All components come in a durable storage case to keep everything organized. No prior experience necessary!',
+    fullDescription:
+        'Launch your IoT journey with our comprehensive Starter Kit. This all-in-one package contains everything needed to create your first connected devices. The kit includes an ESP32 development board, breadboard, jumper wires, resistors, capacitors, LEDs, various sensors (temperature, humidity, motion, light), relay modules, and an OLED display. The detailed guidebook walks you through 15 progressive projects, from basic sensor reading to creating your own smart home devices. All components come in a durable storage case to keep everything organized. No prior experience necessary!',
     price: 69.99,
     category: 'Kits',
     imageUrl: null, // Replace with actual image path
@@ -1309,7 +1328,8 @@ final List<Product> demoProducts = [
     id: 8,
     name: 'Smart Plant Monitor',
     description: 'IoT device for monitoring plant health',
-    fullDescription: 'Give your plants a voice with our Smart Plant Monitor. This innovative IoT device tracks soil moisture, light levels, temperature, and nutrient concentrations to ensure your plants thrive. The sleek, waterproof probe sits discreetly in the soil while continuously monitoring conditions and sending data to the companion app. Receive notifications when your plants need water, fertilizer, or different light conditions. The app maintains a history of readings and provides care recommendations specific to your plant species. Perfect for both beginning gardeners and plant enthusiasts who want to optimize growing conditions.',
+    fullDescription:
+        'Give your plants a voice with our Smart Plant Monitor. This innovative IoT device tracks soil moisture, light levels, temperature, and nutrient concentrations to ensure your plants thrive. The sleek, waterproof probe sits discreetly in the soil while continuously monitoring conditions and sending data to the companion app. Receive notifications when your plants need water, fertilizer, or different light conditions. The app maintains a history of readings and provides care recommendations specific to your plant species. Perfect for both beginning gardeners and plant enthusiasts who want to optimize growing conditions.',
     price: 39.99,
     category: 'IoT Devices',
     imageUrl: null, // Replace with actual image path
@@ -1330,7 +1350,8 @@ final List<Product> demoProducts = [
     id: 9,
     name: 'Humanoid Robot Arm',
     description: 'Programmable 6-axis robotic arm',
-    fullDescription: 'Bring industrial-grade robotics to your desktop with this 6-axis Humanoid Robot Arm. Designed for education, research, and hobby applications, this arm mimics human-like movement with precision and repeatability. The arm can be programmed using Python, C++, or our visual programming interface. Applications include pick-and-place operations, light assembly tasks, drawing, and education in robotics concepts. The open architecture allows for customization and expansion with additional tools and sensors. Each servo motor features position feedback and overload protection for safety and reliability.',
+    fullDescription:
+        'Bring industrial-grade robotics to your desktop with this 6-axis Humanoid Robot Arm. Designed for education, research, and hobby applications, this arm mimics human-like movement with precision and repeatability. The arm can be programmed using Python, C++, or our visual programming interface. Applications include pick-and-place operations, light assembly tasks, drawing, and education in robotics concepts. The open architecture allows for customization and expansion with additional tools and sensors. Each servo motor features position feedback and overload protection for safety and reliability.',
     price: 329.99,
     category: 'Robots',
     imageUrl: null, // Replace with actual image path
@@ -1352,7 +1373,8 @@ final List<Product> demoProducts = [
     id: 10,
     name: 'Motor Driver Module',
     description: 'H-bridge DC motor controller for robots',
-    fullDescription: 'Control DC motors with precision using our dual H-bridge Motor Driver Module. This compact but powerful board allows you to independently control the speed and direction of two DC motors or one stepper motor. Perfect for robotics projects, automated systems, or any application requiring motor control. The module features thermal and overcurrent protection, status LEDs, and logic-level compatibility with Arduino, Raspberry Pi, and other microcontrollers. Screw terminals make connecting motors and power supply easy and secure. An essential component for any robotics toolkit.',
+    fullDescription:
+        'Control DC motors with precision using our dual H-bridge Motor Driver Module. This compact but powerful board allows you to independently control the speed and direction of two DC motors or one stepper motor. Perfect for robotics projects, automated systems, or any application requiring motor control. The module features thermal and overcurrent protection, status LEDs, and logic-level compatibility with Arduino, Raspberry Pi, and other microcontrollers. Screw terminals make connecting motors and power supply easy and secure. An essential component for any robotics toolkit.',
     price: 12.99,
     category: 'Components',
     imageUrl: null, // Replace with actual image path

@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:innovator/screens/Feed/Inner_Homepage.dart';
 import 'package:innovator/screens/Feed/Post.dart';
-import 'package:innovator/screens/comment/comment_Model.dart';
-import 'package:innovator/screens/comment/comment_section.dart';
 
 class PostCard extends StatelessWidget {
   final Post post;

@@ -5,7 +5,6 @@ import 'package:innovator/App_data/App_data.dart';
 class CommentService {
   static const String _baseUrl = 'http://182.93.94.210:3064/api/v1';
 
-  // Add a new comment
   Future<Map<String, dynamic>> addComment({
     required String contentId,
     required String commentText,
@@ -34,31 +33,25 @@ class CommentService {
     }
   }
 
-  // Get comments for content
-  // Update the getComments method in CommentService
-Future<List<dynamic>> getComments(String contentId, {int page = 0}) async {
-  final authToken = AppData().authToken;
-  if (authToken == null) throw Exception('User not authenticated');
+  Future<List<dynamic>> getComments(String contentId, {int page = 0}) async {
+    final authToken = AppData().authToken;
+    if (authToken == null) throw Exception('User not authenticated');
 
-  print('Fetching comments for content: $contentId, page: $page');
-  
-  final response = await http.get(
-    Uri.parse('$_baseUrl/get-comments/$page?uid=$contentId'),
-    headers: {
-      'Authorization': 'Bearer $authToken',
-    },
-  );
+    final response = await http.get(
+      Uri.parse('$_baseUrl/get-comments/$page?uid=$contentId'),
+      headers: {
+        'authorization': 'Bearer $authToken',
+      },
+    );
 
-  if (response.statusCode == 200) {
-    final data = jsonDecode(response.body);
-    print('Successfully fetched comments: ${data['data']?.length ?? 0}');
-    return data['data'] ?? [];
-  } else {
-    print('Failed to get comments: ${response.statusCode}');
-    throw Exception('Failed to get comments: ${response.statusCode}');
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['data'] ?? [];
+    } else {
+      throw Exception('Failed to get comments: ${response.statusCode}');
+    }
   }
-}
-  // Update a comment
+
   Future<bool> updateComment({
     required String commentId,
     required String newComment,
@@ -78,10 +71,13 @@ Future<List<dynamic>> getComments(String contentId, {int page = 0}) async {
       }),
     );
 
-    return response.statusCode == 200;
+    if (response.statusCode == 200) {
+      return true;
+    } else {
+      throw Exception('Failed to update comment: ${response.statusCode}');
+    }
   }
 
-  // Delete a comment
   Future<bool> deleteComment(String commentId) async {
     final authToken = AppData().authToken;
     if (authToken == null) throw Exception('User not authenticated');
@@ -93,6 +89,10 @@ Future<List<dynamic>> getComments(String contentId, {int page = 0}) async {
       },
     );
 
-    return response.statusCode == 200;
+    if (response.statusCode == 200) {
+      return true;
+    } else {
+      throw Exception('Failed to delete comment: ${response.statusCode}');
+    }
   }
 }

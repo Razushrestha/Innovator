@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:innovator/App_data/App_data.dart';
 import 'package:innovator/screens/Feed/OptimizeMediaScreen.dart';
+import 'package:innovator/screens/Follow/follow_Button.dart';
 import 'package:innovator/screens/Likes/Content-Like-Service.dart';
 import 'package:innovator/screens/Likes/content-Like-Button.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart';
+import 'package:innovator/screens/SHow_Specific_Profile/Show_Specific_Profile.dart';
 import 'package:innovator/screens/comment/comment_section.dart';
+import 'dart:io'; // For SocketException
 
-// Author model
+// Enhanced Author model
 class Author {
   final String id;
   final String name;
@@ -32,10 +37,10 @@ class Author {
   }
 }
 
-// Model for API response data
+// Enhanced FeedContent model with better error handling
 class FeedContent {
   final String id;
-  final String status;
+  String status;
   final String type;
   final List<String> files;
   final Author author;
@@ -44,8 +49,8 @@ class FeedContent {
   int likes;
   int comments;
   bool isLiked;
+  bool isFollowed; // Added followed property
 
-  // Add these cached properties to avoid repeated calculations
   late final List<String> _mediaUrls;
   late final bool _hasImages;
   late final bool _hasVideos;
@@ -63,90 +68,126 @@ class FeedContent {
     this.likes = 0,
     this.comments = 0,
     this.isLiked = false,
+    this.isFollowed = false, // Initialize followed property
   }) {
-    // Initialize cached properties
-    _mediaUrls = files.map((file) => 'http://182.93.94.210:3064$file').toList();
+    try {
+      _mediaUrls =
+          files.map((file) {
+            if (file.startsWith('http')) return file;
+            return 'http://182.93.94.210:3064${file.startsWith('/') ? file : '/$file'}';
+          }).toList();
 
-    _hasImages = files.any((file) {
-      final lowerFile = file.toLowerCase();
-      return lowerFile.endsWith('.jpg') ||
-          lowerFile.endsWith('.jpeg') ||
-          lowerFile.endsWith('.png') ||
-          lowerFile.endsWith('.gif');
-    });
+      _hasImages = files.any((file) {
+        final lowerFile = file.toLowerCase();
+        return lowerFile.endsWith('.jpg') ||
+            lowerFile.endsWith('.jpeg') ||
+            lowerFile.endsWith('.png') ||
+            lowerFile.endsWith('.gif');
+      });
 
-    _hasVideos = files.any((file) {
-      final lowerFile = file.toLowerCase();
-      return lowerFile.endsWith('.mp4') ||
-          lowerFile.endsWith('.mov') ||
-          lowerFile.endsWith('.avi');
-    });
+      _hasVideos = files.any((file) {
+        final lowerFile = file.toLowerCase();
+        return lowerFile.endsWith('.mp4') ||
+            lowerFile.endsWith('.mov') ||
+            lowerFile.endsWith('.avi');
+      });
 
-    _hasPdfs = files.any((file) {
-      final lowerFile = file.toLowerCase();
-      return lowerFile.endsWith('.pdf');
-    });
-
-    _hasWordDocs = files.any((file) {
-      final lowerFile = file.toLowerCase();
-      return lowerFile.endsWith('.doc') || lowerFile.endsWith('.docx');
-    });
+      _hasPdfs = files.any((file) => file.toLowerCase().endsWith('.pdf'));
+      _hasWordDocs = files.any((file) {
+        final lowerFile = file.toLowerCase();
+        return lowerFile.endsWith('.doc') || lowerFile.endsWith('.docx');
+      });
+    } catch (e) {
+      // Fallback values if parsing fails
+      _mediaUrls = [];
+      _hasImages = false;
+      _hasVideos = false;
+      _hasPdfs = false;
+      _hasWordDocs = false;
+    }
   }
 
   factory FeedContent.fromJson(Map<String, dynamic> json) {
-    return FeedContent(
-      id: json['_id'] ?? '',
-      status: json['status'] ?? '',
-      type: json['type'] ?? '',
-      files: List<String>.from(json['files'] ?? []),
-      author: Author.fromJson(json['author'] ?? {}),
-      createdAt:
-          json['createdAt'] != null
-              ? DateTime.parse(json['createdAt'])
-              : DateTime.now(),
-      updatedAt:
-          json['updatedAt'] != null
-              ? DateTime.parse(json['updatedAt'])
-              : DateTime.now(),
-      likes: json['likes'] ?? 0,
-      comments: json['comments'] ?? 0,
-    );
+    try {
+      return FeedContent(
+        id: json['_id'] ?? '',
+        status: json['status'] ?? '',
+        type: json['type'] ?? '',
+        files: List<String>.from(json['files'] ?? []),
+        author: Author.fromJson(json['author'] ?? {}),
+        createdAt:
+            json['createdAt'] != null
+                ? DateTime.parse(json['createdAt'])
+                : DateTime.now(),
+        updatedAt:
+            json['updatedAt'] != null
+                ? DateTime.parse(json['updatedAt'])
+                : DateTime.now(),
+        likes: json['likes'] ?? 0,
+        comments: json['comments'] ?? 0,
+        isLiked: json['liked'] ?? false,
+        isFollowed: json['followed'] ?? false, // Parse followed property
+      );
+    } catch (e) {
+      // Return empty content if parsing fails
+      return FeedContent(
+        id: '',
+        status: '',
+        type: '',
+        files: [],
+        author: Author(id: '', name: 'Error', email: '', picture: ''),
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+    }
   }
 
-  // Get all media URLs - now returns cached value
   List<String> get mediaUrls => _mediaUrls;
-
-  // Optimized getters that use cached values
   bool get hasImages => _hasImages;
   bool get hasVideos => _hasVideos;
   bool get hasPdfs => _hasPdfs;
   bool get hasWordDocs => _hasWordDocs;
 }
 
-// Helper class to determine file types efficiently
 class FileTypeHelper {
   static bool isImage(String url) {
-    final lowerUrl = url.toLowerCase();
-    return lowerUrl.endsWith('.jpg') ||
-        lowerUrl.endsWith('.jpeg') ||
-        lowerUrl.endsWith('.png') ||
-        lowerUrl.endsWith('.gif');
+    try {
+      final lowerUrl = url.toLowerCase();
+      return lowerUrl.endsWith('.jpg') ||
+          lowerUrl.endsWith('.jpeg') ||
+          lowerUrl.endsWith('.png') ||
+          lowerUrl.endsWith('.gif');
+    } catch (e) {
+      return false;
+    }
   }
 
   static bool isVideo(String url) {
-    final lowerUrl = url.toLowerCase();
-    return lowerUrl.endsWith('.mp4') ||
-        lowerUrl.endsWith('.mov') ||
-        lowerUrl.endsWith('.avi');
+    try {
+      final lowerUrl = url.toLowerCase();
+      return lowerUrl.endsWith('.mp4') ||
+          lowerUrl.endsWith('.mov') ||
+          lowerUrl.endsWith('.avi');
+    } catch (e) {
+      return false;
+    }
   }
 
   static bool isPdf(String url) {
-    return url.toLowerCase().endsWith('.pdf');
+    try {
+      return url.toLowerCase().endsWith('.pdf');
+    } catch (e) {
+      return false;
+    }
   }
 
   static bool isWordDoc(String url) {
-    final lowerUrl = url.toLowerCase();
-    return lowerUrl.endsWith('.doc') || lowerUrl.endsWith('.docx');
+    try {
+      final lowerUrl = url.toLowerCase();
+      return lowerUrl.endsWith('.doc') || lowerUrl.endsWith('.docx');
+    } catch (e) {
+      return false;
+    }
   }
 }
 
@@ -164,22 +205,25 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
   int _currentPage = 0;
   bool _hasError = false;
   String _errorMessage = '';
-
-  // For pagination optimization
   bool _hasMoreData = true;
-  static const _loadTriggerThreshold =
-      500.0; // Load more content when 500px from bottom
+  static const _loadTriggerThreshold = 500.0;
+  final AppData _appData = AppData();
+  bool _isRefreshingToken = false;
 
   @override
   void initState() {
     super.initState();
-    _loadMoreContent();
-
+    _initializeData();
     _scrollController.addListener(_scrollListener);
   }
 
+  Future<void> _initializeData() async {
+    // Wait for AppData to initialize if needed
+    await _appData.initialize();
+    _loadMoreContent();
+  }
+
   void _scrollListener() {
-    // Only fetch more data if we have more to fetch and not already loading
     if (!_isLoading &&
         _hasMoreData &&
         _scrollController.position.pixels >=
@@ -190,7 +234,7 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
   }
 
   Future<void> _loadMoreContent() async {
-    if (_isLoading || !_hasMoreData) return;
+    if (_isLoading || !_hasMoreData || _isRefreshingToken) return;
 
     setState(() {
       _isLoading = true;
@@ -198,56 +242,146 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
     });
 
     try {
-      final response = await http.get(
-        Uri.parse(
-          'http://182.93.94.210:3064/api/v1/list-contents/$_currentPage',
-        ),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-      );
+      // Verify token exists and is valid
+      if (!await _verifyToken()) {
+        return;
+      }
+
+      final response = await _makeApiRequest();
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
-
-        if (data.containsKey('data') && data['data'] is List) {
-          final List<dynamic> contentList = data['data'];
-          final List<FeedContent> newContents =
-              contentList.map((item) => FeedContent.fromJson(item)).toList();
-
-          setState(() {
-            _contents.addAll(newContents);
-            _currentPage++;
-            _isLoading = false;
-
-            // Check if we got fewer items than expected (usually means we're at the end)
-            if (newContents.isEmpty || newContents.length < 10) {
-              // Assuming page size is 10
-              _hasMoreData = false;
-            }
-          });
-        } else {
-          setState(() {
-            _isLoading = false;
-            _hasError = true;
-            _errorMessage = 'Invalid data format received from server';
-          });
-        }
+        _handleSuccessfulResponse(data);
+      } else if (response.statusCode == 401) {
+        await _handleUnauthorizedError();
       } else {
-        setState(() {
-          _isLoading = false;
-          _hasError = true;
-          _errorMessage = 'Failed to load data: ${response.statusCode}';
-        });
+        _handleApiError(response.statusCode);
       }
+    } on SocketException {
+      _handleNetworkError();
     } catch (e) {
+      _handleGenericError(e);
+    }
+  }
+
+  Future<bool> _verifyToken() async {
+    if (_appData.authToken == null || _appData.authToken!.isEmpty) {
       setState(() {
         _isLoading = false;
         _hasError = true;
-        _errorMessage = 'Error: ${e.toString()}';
+        _errorMessage = 'Authentication required. Please login.';
+      });
+      return false;
+    }
+    return true;
+  }
+
+  Future<http.Response> _makeApiRequest() async {
+    return await http.get(
+      Uri.parse('http://182.93.94.210:3064/api/v1/list-contents/$_currentPage'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'authorization': 'Bearer ${_appData.authToken}',
+      },
+    );
+  }
+
+  void _handleSuccessfulResponse(Map<String, dynamic> data) {
+    if (data.containsKey('data') && data['data'] is List) {
+      final List<dynamic> contentList = data['data'];
+      final List<FeedContent> newContents =
+          contentList.map((item) => FeedContent.fromJson(item)).toList();
+
+      setState(() {
+        _contents.addAll(newContents);
+        _currentPage++;
+        _isLoading = false;
+        _hasMoreData = newContents.isNotEmpty && newContents.length >= 10;
+      });
+    } else {
+      setState(() {
+        _isLoading = false;
+        _hasError = true;
+        _errorMessage = 'Invalid data format received from server';
       });
     }
+  }
+
+  Future<void> _handleUnauthorizedError() async {
+    // Try to refresh token first
+    if (!_isRefreshingToken) {
+      _isRefreshingToken = true;
+      final success = await _refreshToken();
+      _isRefreshingToken = false;
+
+      if (success) {
+        await _loadMoreContent();
+        return;
+      }
+    }
+
+    // If token refresh fails or not attempted
+    await _appData.clearAuthToken();
+    setState(() {
+      _isLoading = false;
+      _hasError = true;
+      _errorMessage = 'Session expired. Please login again.';
+    });
+  }
+
+  Future<bool> _refreshToken() async {
+    // Implement your token refresh logic here
+    // This is a placeholder - replace with your actual refresh endpoint
+    try {
+      final refreshToken =
+          await _getRefreshToken(); // You need to implement this
+      if (refreshToken == null) return false;
+
+      final response = await http.post(
+        Uri.parse('http://182.93.94.210:3064/api/v1/refresh-token'),
+        body: json.encode({'refreshToken': refreshToken}),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        await _appData.setAuthToken(data['accessToken']);
+        return true;
+      }
+    } catch (e) {
+      debugPrint('Token refresh failed: $e');
+    }
+    return false;
+  }
+
+  Future<String?> _getRefreshToken() async {
+    // Implement your refresh token retrieval logic
+    // This typically comes from secure storage
+    return null;
+  }
+
+  void _handleApiError(int statusCode) {
+    setState(() {
+      _isLoading = false;
+      _hasError = true;
+      _errorMessage = 'Server error: $statusCode';
+    });
+  }
+
+  void _handleNetworkError() {
+    setState(() {
+      _isLoading = false;
+      _hasError = true;
+      _errorMessage = 'Network error. Please check your connection.';
+    });
+  }
+
+  void _handleGenericError(dynamic e) {
+    setState(() {
+      _isLoading = false;
+      _hasError = true;
+      _errorMessage = 'Error: ${e.toString()}';
+    });
   }
 
   Future<void> _refresh() async {
@@ -271,14 +405,54 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
     return Scaffold(
       body: RefreshIndicator(
         onRefresh: _refresh,
-        child:
-            _hasError
-                ? _buildErrorView()
-                : _contents.isEmpty && !_isLoading
-                ? _buildEmptyView()
-                : _buildContentList(),
+        child: CustomScrollView(
+          controller: _scrollController,
+          slivers: [
+            SliverList(
+              delegate: SliverChildBuilderDelegate((context, index) {
+                if (index == _contents.length) {
+                  return _buildLoadingIndicator();
+                }
+                return _buildContentItem(index);
+              }, childCount: _contents.length + (_hasMoreData ? 1 : 0)),
+            ),
+            if (_hasError) SliverFillRemaining(child: _buildErrorView()),
+            if (_contents.isEmpty && !_isLoading && !_hasError)
+              SliverFillRemaining(child: _buildEmptyView()),
+          ],
+        ),
       ),
     );
+  }
+
+  Widget _buildContentItem(int index) {
+    final content = _contents[index];
+    return RepaintBoundary(
+      key: ValueKey(content.id),
+      child: FeedItem(
+        content: content,
+        onLikeToggled: (isLiked) {
+          setState(() {
+            content.isLiked = isLiked;
+            content.likes += isLiked ? 1 : -1;
+          });
+        },
+        onFollowToggled: (isFollowed) {
+          setState(() {
+            content.isFollowed = isFollowed;
+          });
+        },
+      ),
+    );
+  }
+
+  Widget _buildLoadingIndicator() {
+    return _isLoading
+        ? const Padding(
+          padding: EdgeInsets.all(16.0),
+          child: Center(child: CircularProgressIndicator()),
+        )
+        : const SizedBox.shrink();
   }
 
   Widget _buildErrorView() {
@@ -288,11 +462,44 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, size: 48, color: Colors.red),
+            Icon(
+              _errorMessage.contains('expired') ||
+                      _errorMessage.contains('Authentication')
+                  ? Icons.warning_amber
+                  : Icons.error_outline,
+              size: 48,
+              color:
+                  _errorMessage.contains('expired') ||
+                          _errorMessage.contains('Authentication')
+                      ? Colors.orange
+                      : Colors.red,
+            ),
             const SizedBox(height: 16),
-            Text(_errorMessage, textAlign: TextAlign.center),
+            Text(
+              _errorMessage,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color:
+                    _errorMessage.contains('expired') ||
+                            _errorMessage.contains('Authentication')
+                        ? Colors.orange
+                        : Colors.red,
+              ),
+            ),
             const SizedBox(height: 16),
-            ElevatedButton(onPressed: _refresh, child: const Text('Try Again')),
+            if (_errorMessage.contains('expired') ||
+                _errorMessage.contains('Authentication'))
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.of(context).pushReplacementNamed('/login');
+                },
+                child: const Text('Login'),
+              )
+            else
+              ElevatedButton(
+                onPressed: _refresh,
+                child: const Text('Try Again'),
+              ),
           ],
         ),
       ),
@@ -307,77 +514,44 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
           const Icon(Icons.inbox, size: 48, color: Colors.grey),
           const SizedBox(height: 16),
           const Text('No content available'),
+
           const SizedBox(height: 16),
           ElevatedButton(onPressed: _refresh, child: const Text('Refresh')),
         ],
       ),
     );
   }
-
-  Widget _buildContentList() {
-    return ListView.builder(
-      controller: _scrollController,
-      // Use cacheExtent to keep more items in memory
-      cacheExtent: 500.0,
-      itemCount: _contents.length + (_hasMoreData ? 1 : 0),
-      // Using itemBuilder with key for better list item identification
-      itemBuilder: (context, index) {
-        if (index == _contents.length) {
-          return _isLoading
-              ? const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: CircularProgressIndicator(),
-                ),
-              )
-              : const SizedBox.shrink();
-        }
-
-        final content = _contents[index];
-
-        // Using RepaintBoundary to optimize painting operations
-        return RepaintBoundary(
-          key: ValueKey(content.id),
-          child: FeedItem(
-            content: content,
-            onLikeToggled: (isLiked) {
-              setState(() {
-                content.isLiked = isLiked;
-                content.likes += isLiked ? 1 : -1;
-              });
-            },
-          ),
-        );
-      },
-    );
-  }
 }
 
-// Extracted feed item into separate stateful widget to improve performance
 class FeedItem extends StatefulWidget {
   final FeedContent content;
   final Function(bool) onLikeToggled;
+  final Function(bool) onFollowToggled;
 
-  const FeedItem({Key? key, required this.content, required this.onLikeToggled})
-    : super(key: key);
+  const FeedItem({
+    Key? key,
+    required this.content,
+    required this.onLikeToggled,
+    required this.onFollowToggled,
+  }) : super(key: key);
 
   @override
   State<FeedItem> createState() => _FeedItemState();
 }
 
-class _FeedItemState extends State<FeedItem> {
+class _FeedItemState extends State<FeedItem>
+    with SingleTickerProviderStateMixin {
+  bool _isExpanded = false;
+static const int _maxLinesCollapsed = 3; 
+
+  late AnimationController _controller;
+  bool isChecked = false;
+
   final ContentLikeService likeService = ContentLikeService(
     baseUrl: 'http://182.93.94.210:3064',
   );
   late String formattedTimeAgo;
-  bool _showComments = false; // Add this at the top of the state class
-
-  @override
-  void initState() {
-    super.initState();
-
-    formattedTimeAgo = _formatTimeAgo(widget.content.createdAt);
-  }
+  bool _showComments = false;
 
   String _formatTimeAgo(DateTime dateTime) {
     final difference = DateTime.now().difference(dateTime);
@@ -398,7 +572,24 @@ class _FeedItemState extends State<FeedItem> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: Duration(milliseconds: 300),
+    );
+    formattedTimeAgo = _formatTimeAgo(widget.content.createdAt);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 12.0),
       decoration: BoxDecoration(
@@ -415,6 +606,7 @@ class _FeedItemState extends State<FeedItem> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          SizedBox(height: 8.0), // Add some space at the top
           // Author section
           Padding(
             padding: const EdgeInsets.all(12.0),
@@ -423,123 +615,469 @@ class _FeedItemState extends State<FeedItem> {
                 _buildAuthorAvatar(),
                 const SizedBox(width: 12.0),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.content.author.name,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16.0,
+                  child: GestureDetector(
+                    onTap: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => SpecificUserProfilePage(userId: widget.content.author.id,)));
+                      //Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => ProfilePage()), (route) => false,);
+                    },
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.content.author.name,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16.0,
+                          ),
                         ),
-                      ),
-                      Text(
-                        '${widget.content.type} • $formattedTimeAgo',
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 12.0,
+                        Text(
+                          '${widget.content.type} • $formattedTimeAgo',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 12.0,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
+                FollowButton(
+                  targetUserEmail: widget.content.author.email,
+                  initialFollowStatus:
+                      widget.content.isFollowed, // Pass the initial status
+                  onFollowSuccess: () {
+                    widget.onFollowToggled(
+                      true,
+                    ); // Update parent state when follow succeeds
+                  },
+                  onUnfollowSuccess: () {
+                    widget.onFollowToggled(
+                      false,
+                    ); // Update parent state when unfollow succeeds
+                  },
+                ),
+                
                 IconButton(
                   icon: const Icon(Icons.more_vert),
                   onPressed: () {
+                     // final bool isOwnContent = widget.content.id == AppData().curre.id;
+
+                    _showQuickSuggestions(context);
                     // Show more options
                   },
                 ),
               ],
             ),
           ),
+          
 
           // Status/description text
           if (widget.content.status.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16.0,
-                vertical: 8.0,
-              ),
-              child: Text(
-                widget.content.status,
-                style: const TextStyle(fontSize: 15.0),
-              ),
-            ),
+  Padding(
+    padding: const EdgeInsets.symmetric(
+      horizontal: 16.0,
+      vertical: 8.0,
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        LayoutBuilder(
+          builder: (context, constraints) {
+            // Create a TextSpan with the same text style as your Text widget
+            final span = TextSpan(
+              text: widget.content.status,
+              style: const TextStyle(fontSize: 15.0),
+            );
 
+            // Use a TextPainter to determine if the text will overflow
+            final tp = TextPainter(
+              text: span,
+              maxLines: _maxLinesCollapsed,
+              textDirection: TextDirection.ltr,
+            );
+            tp.layout(maxWidth: constraints.maxWidth);
+
+            final needsExpandCollapse = tp.didExceedMaxLines;
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.content.status,
+                  style: const TextStyle(fontSize: 15.0),
+                  maxLines: _isExpanded ? null : _maxLinesCollapsed,
+                  overflow: _isExpanded ? null : TextOverflow.ellipsis,
+                ),
+                if (needsExpandCollapse)
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _isExpanded = !_isExpanded;
+                      });
+                    },
+                    child: Text(
+                      _isExpanded ? 'Show Less' : 'Show More',
+                      style: TextStyle(
+                        color: Colors.blue,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
+      ],
+    ),
+  ),
           // Media content preview - only build if there are files
           if (widget.content.files.isNotEmpty) _buildMediaPreview(),
 
           // Interaction buttons
-          // In your FeedItem build method, modify the interaction buttons and comment section like this:
-
-// Interaction buttons
-Padding(
-  padding: const EdgeInsets.all(12.0),
-  child: Row(
-    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-    children: [
-      Row(
-        children: [
-          LikeButton(
-            contentId: widget.content.id,
-            initialLikeStatus: widget.content.isLiked,
-            likeService: likeService,
-            onLikeToggled: (isLiked) {
-              widget.onLikeToggled(isLiked);
-            },
-          ),
-          Text('${widget.content.likes}'),
-        ],
-      ),
-      Row(
-        children: [
-          IconButton(
-            onPressed: () {
-              setState(() {
-                _showComments = !_showComments;
-              });
-              if (_showComments) {
-                print('Showing comments for content: ${widget.content.id}');
-              } else {
-                print('Hiding comments for content: ${widget.content.id}');
-              }
-            },
-            icon: Icon(
-              _showComments ? Icons.comment : Icons.comment_outlined,
-              color: _showComments ? Colors.blue : null,
+          Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    LikeButton(
+                      contentId: widget.content.id,
+                      initialLikeStatus: widget.content.isLiked,
+                      likeService: likeService,
+                      onLikeToggled: (isLiked) {
+                        widget.onLikeToggled(isLiked);
+                      },
+                    ),
+                    Text('${widget.content.likes}'),
+                  ],
+                ),
+                Row(
+                  children: [
+                    IconButton(
+                      onPressed: () {
+                        setState(() {
+                          _showComments = !_showComments;
+                        });
+                      },
+                      icon: Icon(
+                        _showComments ? Icons.comment : Icons.comment_outlined,
+                        color: _showComments ? Colors.blue : null,
+                      ),
+                    ),
+                    Text('${widget.content.comments}'),
+                  ],
+                ),
+                IconButton(
+                  icon: const Icon(Icons.share_outlined),
+                  onPressed: () {
+                    //_showQuickSuggestions(context);
+                    // Share content
+                  },  
+                ),
+              ],
             ),
           ),
-          Text('${widget.content.comments}'),
-        ],
-      ),
-      IconButton(
-        icon: const Icon(Icons.share_outlined),
-        onPressed: () {
-          // Share content
-        },
-      ),
-    ],
-  ),
-),
 
-// Add the CommentSection outside the Row but inside the parent Column
-if (_showComments)
-  Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 12.0),
-    child: CommentSection(
-      contentId: widget.content.id,
-      onCommentAdded: () {
-        print('New comment added, refreshing comment count...');
-        setState(() {
-          widget.content.comments++;
-        });
-      },
-    ),
-  ),
+          // Add the CommentSection outside the Row but inside the parent Column
+          if (_showComments)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12.0),
+              child: CommentSection(
+                contentId: widget.content.id,
+                onCommentAdded: () {
+                  setState(() {
+                    widget.content.comments++;
+                  });
+                },
+              ),
+            ),
         ],
       ),
     );
   }
+
+
+  void _showQuickSuggestions(BuildContext context) {
+  final RenderBox button = context.findRenderObject() as RenderBox;
+  final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+  
+  // Calculate position relative to the overlay
+  final RelativeRect position = RelativeRect.fromRect(
+    // Use the button's top-right corner as the reference point
+    Rect.fromPoints(
+      button.localToGlobal(button.size.topRight(Offset(-40, 0)), ancestor: overlay),
+      button.localToGlobal(button.size.topRight(Offset.zero), ancestor: overlay),
+    ),
+    Offset.zero & overlay.size,
+  );
+
+  showMenu<String>(
+    context: context,
+    position: position,
+    items: [
+      const PopupMenuItem<String>(
+        value: 'edit',
+        child: Text('Edit content'),
+      ),
+      const PopupMenuItem<String>(
+        value: 'delete',
+        child: Text('Delete post'),
+      ),
+      if (widget.content.files.isNotEmpty)
+        const PopupMenuItem<String>(
+          value: 'delete_files',
+          child: Text('Delete files'),
+        ),
+      const PopupMenuItem<String>(
+        value: 'copy',
+        child: Text('Copy content'),
+      ),
+      const PopupMenuItem<String>(
+        value: 'report',
+        child: Text('Report'),
+      ),
+    ],
+  ).then((value) {
+    if (value == null) return;
+    
+    switch (value) {
+      case 'edit':
+        _showEditContentDialog(context);
+        break;
+      case 'delete':
+        _showDeleteConfirmation(context);
+        break;
+      case 'delete_files':
+        _showDeleteFilesConfirmation(context);
+       break;
+      case 'copy':
+        _copyContentToClipboard();
+        break;
+      case 'report':
+        _showReportDialog(context);
+        break;
+    }
+  });
+}
+
+// Add these methods to handle each action:
+
+void _showEditContentDialog(BuildContext context) {
+  final TextEditingController controller = TextEditingController(text: widget.content.status);
+  
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Edit Content'),
+      content: TextField(
+        controller: controller,
+        decoration: const InputDecoration(
+          labelText: 'Status',
+          border: OutlineInputBorder(),
+        ),
+        maxLines: 5,
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () {
+            _updateContentStatus(controller.text);
+            Navigator.of(context).pop();
+          },
+          child: const Text('Update'),
+        ),
+      ],
+    ),
+  );
+}
+
+Future<void> _updateContentStatus(String newStatus) async {
+  try {
+    final response = await http.put(
+      Uri.parse('http://182.93.94.210:3064/api/v1/update-contents/${widget.content.id}'),
+      headers: {
+        'Content-Type': 'application/json',
+        'authorization': 'Bearer ${AppData().authToken}',
+      },
+      body: jsonEncode({
+        'status': newStatus,
+      }),
+    );
+    
+    if (response.statusCode == 200) {
+      setState(() {
+        widget.content.status= newStatus;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Content updated successfully')),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to update content: ${response.statusCode}')),
+      );
+    }
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Error: ${e.toString()}')),
+    );
+  }
+}
+
+Future<bool?> _showDeleteConfirmation(BuildContext context) {
+  return showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Delete Post'),
+      content: const Text('Are you sure you want to delete this post? This action cannot be undone.'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () {
+            Navigator.of(context).pop(true);
+            _deleteContent();
+          },
+          child: const Text('Delete', style: TextStyle(color: Colors.red)),
+        ),
+      ],
+    ),
+  );
+}
+
+Future<void> _deleteContent() async {
+  try {
+    final response = await http.delete(
+      Uri.parse('http://182.93.94.210:3064/api/v1/delete-content/${widget.content.id}'),
+      headers: {
+        'authorization': 'Bearer ${AppData().authToken}',
+      },
+    );
+    
+    if (response.statusCode == 200) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Post deleted successfully')),
+      );
+      // You might want to refresh the feed here or remove this item
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete post: ${response.statusCode}')),
+      );
+    }
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Error: ${e.toString()}')),
+    );
+  }
+}
+
+Future<bool?> _showDeleteFilesConfirmation(BuildContext context) {
+  return showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Delete Files'),
+      content: const Text('Are you sure you want to delete all files attached to this post?'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () {
+            Navigator.of(context).pop(true);
+            _deleteFiles();
+          },
+          child: const Text('Delete Files', style: TextStyle(color: Colors.red)),
+        ),
+      ],
+    ),
+  );
+}
+
+Future<void> _deleteFiles() async {
+  try {
+    final response = await http.post(
+      Uri.parse('http://182.93.94.210:3064/api/v1/delete-files'),
+      headers: {
+        'Content-Type': 'application/json',
+        'authorization': 'Bearer ${AppData().authToken}',
+      },
+      body: jsonEncode(widget.content.files),
+    );
+    
+    if (response.statusCode == 200) {
+      setState(() {
+        // Clear files in the local content object
+        (widget.content as dynamic).files = <String>[];
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Files deleted successfully')),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete files: ${response.statusCode}')),
+      );
+    }
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Error: ${e.toString()}')),
+    );
+  }
+}
+
+void _copyContentToClipboard() {
+  Clipboard.setData(ClipboardData(text: widget.content.status));
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(content: Text('Content copied to clipboard')),
+  );
+}
+
+void _showReportDialog(BuildContext context) {
+  final TextEditingController controller = TextEditingController();
+  
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Report Content'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('Please tell us why you are reporting this content:'),
+          const SizedBox(height: 16),
+          TextField(
+            controller: controller,
+            decoration: const InputDecoration(
+              labelText: 'Reason',
+              border: OutlineInputBorder(),
+            ),
+            maxLines: 3,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () {
+            // Here you would add the code to send the report
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Your report has been submitted')),
+            );
+            Navigator.of(context).pop();
+          },
+          child: const Text('Submit'),
+        ),
+      ],
+    ),
+  );
+}
 
   Widget _buildAuthorAvatar() {
     if (widget.content.author.picture.isEmpty) {
@@ -773,7 +1311,6 @@ if (_showComments)
   }
 }
 
-// Optimized network image component
 class _OptimizedNetworkImage extends StatelessWidget {
   final String url;
   final double? height;
@@ -782,8 +1319,6 @@ class _OptimizedNetworkImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Use a late initializer for anything that needs MediaQuery
-    // so it's only called inside build()
     return CachedNetworkImage(
       imageUrl: url,
       fit: BoxFit.cover,
@@ -805,152 +1340,33 @@ class _OptimizedNetworkImage extends StatelessWidget {
             color: Colors.grey[300],
             child: const Center(child: Icon(Icons.error, color: Colors.white)),
           ),
-      // Move this to a late initializer, only reference MediaQuery inside build
       memCacheWidth: (MediaQuery.of(context).size.width * 1.2).toInt(),
     );
   }
 }
 
-// Additional Page for viewing all media in a post
-class AllMediaScreen extends StatelessWidget {
-  final List<String> mediaUrls;
-
-  const AllMediaScreen({required this.mediaUrls, Key? key}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('All Media'),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 1,
-      ),
-      body: GridView.builder(
-        padding: const EdgeInsets.all(8.0),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
-          crossAxisSpacing: 8.0,
-          mainAxisSpacing: 8.0,
-        ),
-        itemCount: mediaUrls.length,
-        itemBuilder: (context, index) {
-          final url = mediaUrls[index];
-
-          if (FileTypeHelper.isImage(url)) {
-            return GestureDetector(
-              onTap: () => _openGallery(context, index),
-              child: CachedNetworkImage(
-                imageUrl: url,
-                fit: BoxFit.cover,
-                placeholder:
-                    (context, url) => Container(
-                      color: Colors.grey[300],
-                      child: const Center(
-                        child: SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(strokeWidth: 2.0),
-                        ),
-                      ),
-                    ),
-                errorWidget:
-                    (context, url, error) => Container(
-                      color: Colors.grey[300],
-                      child: const Center(
-                        child: Icon(Icons.error, color: Colors.white),
-                      ),
-                    ),
-              ),
-            );
-          } else if (FileTypeHelper.isVideo(url)) {
-            return GestureDetector(
-              onTap: () => _openGallery(context, index),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Container(color: Colors.black),
-                  const Center(
-                    child: Icon(
-                      Icons.play_circle_fill,
-                      color: Colors.white,
-                      size: 32.0,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          } else if (FileTypeHelper.isPdf(url)) {
-            return GestureDetector(
-              onTap: () => _openGallery(context, index),
-              child: Container(
-                color: Colors.grey[200],
-                child: const Center(
-                  child: Icon(
-                    Icons.picture_as_pdf,
-                    size: 32,
-                    color: Colors.red,
-                  ),
-                ),
-              ),
-            );
-          } else if (FileTypeHelper.isWordDoc(url)) {
-            return GestureDetector(
-              onTap: () => _openGallery(context, index),
-              child: Container(
-                color: Colors.grey[200],
-                child: const Center(
-                  child: Icon(Icons.description, size: 32, color: Colors.blue),
-                ),
-              ),
-            );
-          }
-
-          return GestureDetector(
-            onTap: () => _openGallery(context, index),
-            child: Container(
-              color: Colors.grey[200],
-              child: const Center(
-                child: Icon(
-                  Icons.insert_drive_file,
-                  size: 32,
-                  color: Colors.grey,
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  void _openGallery(BuildContext context, int index) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder:
-            (context) => OptimizedMediaGalleryScreen(
-              mediaUrls: mediaUrls,
-              initialIndex: index,
-            ),
-      ),
-    );
-  }
-}
-
-// API service class for better separation of concerns
 class FeedApiService {
   static const String baseUrl = 'http://182.93.94.210:3064';
 
   // Fetch feed contents with pagination
   static Future<List<FeedContent>> fetchContents(int page) async {
     try {
+      // Get auth token from AppData if available
+      final String? authToken = AppData().authToken;
+
+      // Prepare headers with auth token if available
+      final Map<String, String> headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      };
+
+      if (authToken != null && authToken.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $authToken';
+      }
+
       final response = await http.get(
         Uri.parse('$baseUrl/api/v1/list-contents/$page'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
+        headers: headers,
       );
 
       if (response.statusCode == 200) {
@@ -960,6 +1376,9 @@ class FeedApiService {
           final List<dynamic> contentList = data['data'];
           return contentList.map((item) => FeedContent.fromJson(item)).toList();
         }
+      } else if (response.statusCode == 401) {
+        // Handle unauthorized access - token might be expired
+        throw Exception('Authentication required');
       }
 
       throw Exception('Failed to load data: ${response.statusCode}');
@@ -967,49 +1386,8 @@ class FeedApiService {
       throw Exception('Error: ${e.toString()}');
     }
   }
-
-  // Toggle like status for a post
-  // static Future<bool> toggleLike(String contentId, bool isLiking) async {
-  //   try {
-  //     final endpoint = isLiking ? '/api/v1/like-content' : '/api/v1/unlike-content';
-
-  //     final response = await http.post(
-  //       Uri.parse('$baseUrl$endpoint'),
-  //       headers: {
-  //         'Content-Type': 'application/json',
-  //         'Accept': 'application/json',
-  //       },
-  //       body: json.encode({
-  //         'contentId': contentId,
-  //       }),
-  //     );
-
-  //     return response.statusCode == 200;
-  //   } catch (e) {
-  //     return false;
-  //   }
-  // }
-
-  // Add a comment to a post
-  static Future<bool> addComment(String contentId, String comment) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/v1/add-comment'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: json.encode({'contentId': contentId, 'comment': comment}),
-      );
-
-      return response.statusCode == 200;
-    } catch (e) {
-      return false;
-    }
-  }
 }
 
-// Extensions for better code organization
 extension DateTimeExtension on DateTime {
   String timeAgo() {
     final difference = DateTime.now().difference(this);
@@ -1029,3 +1407,4 @@ extension DateTimeExtension on DateTime {
     }
   }
 }
+// Create a new file: lib/services/app_data.dart

@@ -48,16 +48,57 @@ class UserProfile {
       dob: json['dob'] != null ? DateTime.parse(json['dob']) : DateTime.now(),
       role: json['role'] ?? '',
       level: json['level'] ?? '',
-      createdAt:
-          json['createdAt'] != null
-              ? DateTime.parse(json['createdAt'])
-              : DateTime.now(),
-      updatedAt:
-          json['updatedAt'] != null
-              ? DateTime.parse(json['updatedAt'])
-              : DateTime.now(),
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'])
+          : DateTime.now(),
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.parse(json['updatedAt'])
+          : DateTime.now(),
       picture: json['picture'],
     );
+  }
+}
+
+class FollowerFollowing {
+  final String id;
+  final String name;
+  final String email;
+  final String? picture;
+
+  FollowerFollowing({
+    required this.id,
+    required this.name,
+    required this.email,
+    this.picture,
+  });
+
+  factory FollowerFollowing.fromJson(Map<String, dynamic> json) {
+    // Handle nested follower/following structure
+    if (json.containsKey('follower')) {
+      final follower = json['follower'];
+      return FollowerFollowing(
+        id: follower['_id'] ?? '',
+        name: follower['name'] ?? '',
+        email: follower['email'] ?? '',
+        picture: follower['picture'],
+      );
+    } else if (json.containsKey('following')) {
+      final following = json['following'];
+      return FollowerFollowing(
+        id: following['_id'] ?? '',
+        name: following['name'] ?? '',
+        email: following['email'] ?? '',
+        picture: following['picture'],
+      );
+    } else {
+      // Fallback for direct user data
+      return FollowerFollowing(
+        id: json['_id'] ?? '',
+        name: json['name'] ?? '',
+        email: json['email'] ?? '',
+        picture: json['picture'],
+      );
+    }
   }
 }
 
@@ -77,7 +118,6 @@ class UserProfileService {
 
   // Fetch user profile using the stored token
   static Future<UserProfile> getUserProfile() async {
-    // Get token from AppData
     final token = AppData().authToken;
 
     log(
@@ -106,14 +146,12 @@ class UserProfileService {
         final data = json.decode(response.body);
         log('User profile data: $data');
 
-        // Handle both cases: data directly or nested under 'data' field
         if (data['data'] != null) {
           return UserProfile.fromJson(data['data']);
         } else {
           return UserProfile.fromJson(data);
         }
       } else if (response.statusCode == 401) {
-        // Clear invalid token
         await AppData().clearAuthToken();
         throw AuthException('Authentication token expired or invalid');
       } else {
@@ -121,6 +159,90 @@ class UserProfileService {
       }
     } catch (e) {
       log('Error fetching profile: $e');
+      if (e is AuthException) {
+        rethrow;
+      }
+      throw Exception('Network error: $e');
+    }
+  }
+
+  // Fetch followers list
+  static Future<List<FollowerFollowing>> getFollowers(int page) async {
+    final token = AppData().authToken;
+    if (token == null || token.isEmpty) {
+      throw AuthException('No authentication token found');
+    }
+
+    final url = Uri.parse('$baseUrl/list-followers/$page');
+    try {
+      final response = await http.get(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'authorization': 'Bearer $token',
+        },
+      );
+
+      log('Followers API response: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['data'] != null && data['data'] is List) {
+          return (data['data'] as List)
+              .map((item) => FollowerFollowing.fromJson(item))
+              .toList();
+        }
+        return [];
+      } else if (response.statusCode == 401) {
+        await AppData().clearAuthToken();
+        throw AuthException('Authentication token expired or invalid');
+      } else {
+        throw Exception('Failed to load followers: ${response.statusCode}');
+      }
+    } catch (e) {
+      log('Error fetching followers: $e');
+      if (e is AuthException) {
+        rethrow;
+      }
+      throw Exception('Network error: $e');
+    }
+  }
+
+  // Fetch following list
+  static Future<List<FollowerFollowing>> getFollowing(int page) async {
+    final token = AppData().authToken;
+    if (token == null || token.isEmpty) {
+      throw AuthException('No authentication token found');
+    }
+
+    final url = Uri.parse('$baseUrl/list-followings/$page');
+    try {
+      final response = await http.get(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'authorization': 'Bearer $token',
+        },
+      );
+
+      log('Following API response: ${response.body}');
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['data'] != null && data['data'] is List) {
+          return (data['data'] as List)
+              .map((item) => FollowerFollowing.fromJson(item))
+              .toList();
+        }
+        return [];
+      } else if (response.statusCode == 401) {
+        await AppData().clearAuthToken();
+        throw AuthException('Authentication token expired or invalid');
+      } else {
+        throw Exception('Failed to load following: ${response.statusCode}');
+      }
+    } catch (e) {
+      log('Error fetching following: $e');
       if (e is AuthException) {
         rethrow;
       }
@@ -140,17 +262,12 @@ class UserProfileService {
     final url = Uri.parse('$baseUrl/set-avatar?filename=avatar.png');
 
     try {
-      // Create multipart request
       var request = http.MultipartRequest('POST', url);
-
-      // Add authorization header
       request.headers['authorization'] = 'Bearer $token';
 
-      // Add file to the request
       var fileStream = http.ByteStream(imageFile.openRead());
       var fileLength = await imageFile.length();
 
-      // Determine the mime type
       String mimeType = 'image/jpeg';
       if (filename.endsWith('.png')) {
         mimeType = 'image/png';
@@ -159,7 +276,7 @@ class UserProfileService {
       }
 
       var multipartFile = http.MultipartFile(
-        'avatar', // field name
+        'avatar',
         fileStream,
         fileLength,
         filename: filename,
@@ -168,7 +285,6 @@ class UserProfileService {
 
       request.files.add(multipartFile);
 
-      // Send the request
       var streamedResponse = await request.send();
       var response = await http.Response.fromStream(streamedResponse);
 
@@ -198,14 +314,20 @@ class UserProfileScreen extends StatefulWidget {
   _UserProfileScreenState createState() => _UserProfileScreenState();
 }
 
-class _UserProfileScreenState extends State<UserProfileScreen> {
+class _UserProfileScreenState extends State<UserProfileScreen>
+    with SingleTickerProviderStateMixin {
   late Future<UserProfile> _profileFuture;
   bool _isUploading = false;
   String? _errorMessage;
+  late TabController _tabController;
+  int _currentPageFollowers = 1;
+  int _currentPageFollowing = 1;
+  final int _itemsPerPage = 10;
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     _loadProfile();
   }
 
@@ -213,7 +335,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     _profileFuture = UserProfileService.getUserProfile();
   }
 
-  // Format date to a readable string
   String formatDate(DateTime date) {
     return "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
   }
@@ -238,7 +359,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       final File imageFile = File(image.path);
       await UserProfileService.uploadProfilePicture(imageFile);
 
-      // Reload profile to get updated picture
       setState(() {
         _profileFuture = UserProfileService.getUserProfile();
         _isUploading = false;
@@ -248,10 +368,189 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         _isUploading = false;
         _errorMessage = 'Failed to upload image: $e';
       });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to upload image: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to upload image: $e')));
     }
+  }
+
+  void _showFollowersFollowingDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          insetPadding: EdgeInsets.all(16),
+          child: Container(
+            padding: EdgeInsets.all(16),
+            constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.7),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TabBar(
+                  controller: _tabController,
+                  labelColor: Color.fromRGBO(235, 111, 70, 1),
+                  unselectedLabelColor: Colors.grey,
+                  tabs: [
+                    Tab(text: 'Followers'),
+                    Tab(text: 'Following'),
+                  ],
+                ),
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildFollowersList(),
+                      _buildFollowingList(),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildFollowersList() {
+    return FutureBuilder<List<FollowerFollowing>>(
+      future: UserProfileService.getFollowers(_currentPageFollowers),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator());
+        } else if (snapshot.hasError) {
+          return Center(child: Text('Error loading followers: ${snapshot.error}'));
+        } else if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+          final followers = snapshot.data!;
+          return Column(
+            children: [
+              Expanded(
+                child: ListView.builder(
+                  itemCount: followers.length,
+                  itemBuilder: (context, index) {
+                    final follower = followers[index];
+                    return ListTile(
+                      leading: CircleAvatar(
+                        radius: 24,
+                        backgroundColor: Color.fromRGBO(235, 111, 70, 0.2),
+                        backgroundImage: follower.picture != null
+                            ? NetworkImage(
+                                'http://182.93.94.210:3064${follower.picture}')
+                            : null,
+                        child: follower.picture == null
+                            ? Icon(Icons.person,
+                                color: Color.fromRGBO(235, 111, 70, 1))
+                            : null,
+                      ),
+                      title: Text(follower.name),
+                      subtitle: Text(follower.email),
+                    );
+                  },
+                ),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton(
+                    icon: Icon(Icons.arrow_back),
+                    onPressed: _currentPageFollowers > 1
+                        ? () {
+                            setState(() {
+                              _currentPageFollowers--;
+                            });
+                          }
+                        : null,
+                  ),
+                  Text('Page $_currentPageFollowers'),
+                  IconButton(
+                    icon: Icon(Icons.arrow_forward),
+                    onPressed: followers.length == _itemsPerPage
+                        ? () {
+                            setState(() {
+                              _currentPageFollowers++;
+                            });
+                          }
+                        : null,
+                  ),
+                ],
+              ),
+            ],
+          );
+        } else {
+          return Center(child: Text('No followers found'));
+        }
+      },
+    );
+  }
+
+  Widget _buildFollowingList() {
+    return FutureBuilder<List<FollowerFollowing>>(
+      future: UserProfileService.getFollowing(_currentPageFollowing),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator());
+        } else if (snapshot.hasError) {
+          return Center(child: Text('Error loading following: ${snapshot.error}'));
+        } else if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+          final following = snapshot.data!;
+          return Column(
+            children: [
+              Expanded(
+                child: ListView.builder(
+                  itemCount: following.length,
+                  itemBuilder: (context, index) {
+                    final follow = following[index];
+                    return ListTile(
+                      leading: CircleAvatar(
+                        radius: 24,
+                        backgroundColor: Color.fromRGBO(235, 111, 70, 0.2),
+                        backgroundImage: follow.picture != null
+                            ? NetworkImage(
+                                'http://182.93.94.210:3064${follow.picture}')
+                            : null,
+                        child: follow.picture == null
+                            ? Icon(Icons.person,
+                                color: Color.fromRGBO(235, 111, 70, 1))
+                            : null,
+                      ),
+                      title: Text(follow.name),
+                      subtitle: Text(follow.email),
+                    );
+                  },
+                ),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton(
+                    icon: Icon(Icons.arrow_back),
+                    onPressed: _currentPageFollowing > 1
+                        ? () {
+                            setState(() {
+                              _currentPageFollowing--;
+                            });
+                          }
+                        : null,
+                  ),
+                  Text('Page $_currentPageFollowing'),
+                  IconButton(
+                    icon: Icon(Icons.arrow_forward),
+                    onPressed: following.length == _itemsPerPage
+                        ? () {
+                            setState(() {
+                              _currentPageFollowing++;
+                            });
+                          }
+                        : null,
+                  ),
+                ],
+              ),
+            ],
+          );
+        } else {
+          return Center(child: Text('Not following anyone yet'));
+        }
+      },
+    );
   }
 
   @override
@@ -290,7 +589,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         ElevatedButton(
                           onPressed: () {
                             setState(() {
-                              _loadProfile(); // Reload profile
+                              _loadProfile();
                             });
                           },
                           child: Text('Try Again'),
@@ -301,8 +600,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         SizedBox(height: 12),
                         TextButton(
                           onPressed: () async {
-                            await AppData()
-                                .clearAuthToken(); // Clear token using AppData
+                            await AppData().clearAuthToken();
                             Navigator.pushReplacement(
                               context,
                               MaterialPageRoute(builder: (_) => LoginPage()),
@@ -330,71 +628,51 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                               children: [
                                 Stack(
                                   children: [
-                                    // Profile picture
                                     CircleAvatar(
                                       radius: 60,
-                                      backgroundColor: Color.fromRGBO(
-                                        235,
-                                        111,
-                                        70,
-                                        0.2,
-                                      ),
-                                      backgroundImage:
-                                          profile.picture != null
-                                              ? NetworkImage(
-                                                'http://182.93.94.210:3064${profile.picture}',
-                                              )
-                                              : null,
-                                      child:
-                                          profile.picture == null
-                                              ? Icon(
-                                                Icons.person,
-                                                size: 60,
-                                                color: Color.fromRGBO(
-                                                  235,
-                                                  111,
-                                                  70,
-                                                  1,
-                                                ),
-                                              )
-                                              : null,
+                                      backgroundColor:
+                                          Color.fromRGBO(235, 111, 70, 0.2),
+                                      backgroundImage: profile.picture != null
+                                          ? NetworkImage(
+                                              'http://182.93.94.210:3064${profile.picture}')
+                                          : null,
+                                      child: profile.picture == null
+                                          ? Icon(
+                                              Icons.person,
+                                              size: 60,
+                                              color: Color.fromRGBO(
+                                                  235, 111, 70, 1),
+                                            )
+                                          : null,
                                     ),
-                                    // Edit button overlay
                                     Positioned(
                                       right: 0,
                                       bottom: 0,
                                       child: GestureDetector(
                                         onTap:
-                                            _isUploading
-                                                ? null
-                                                : _pickAndUploadImage,
+                                            _isUploading ? null : _pickAndUploadImage,
                                         child: Container(
                                           padding: EdgeInsets.all(8),
                                           decoration: BoxDecoration(
-                                            color: Color.fromRGBO(
-                                              235,
-                                              111,
-                                              70,
-                                              1,
-                                            ),
+                                            color:
+                                                Color.fromRGBO(235, 111, 70, 1),
                                             shape: BoxShape.circle,
                                           ),
-                                          child:
-                                              _isUploading
-                                                  ? SizedBox(
-                                                    width: 16,
-                                                    height: 16,
-                                                    child:
-                                                        CircularProgressIndicator(
-                                                          color: Colors.white,
-                                                          strokeWidth: 2,
-                                                        ),
-                                                  )
-                                                  : Icon(
-                                                    Icons.edit,
+                                          child: _isUploading
+                                              ? SizedBox(
+                                                  width: 16,
+                                                  height: 16,
+                                                  child:
+                                                      CircularProgressIndicator(
                                                     color: Colors.white,
-                                                    size: 16,
+                                                    strokeWidth: 2,
                                                   ),
+                                                )
+                                              : Icon(
+                                                  Icons.edit,
+                                                  color: Colors.white,
+                                                  size: 16,
+                                                ),
                                         ),
                                       ),
                                     ),
@@ -411,21 +689,15 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                     ),
                                     ElevatedButton.icon(
                                       style: ElevatedButton.styleFrom(
-                                        backgroundColor: Color.fromRGBO(
-                                          235,
-                                          111,
-                                          70,
-                                          1,
-                                        ),
+                                        backgroundColor:
+                                            Color.fromRGBO(235, 111, 70, 1),
                                       ),
                                       onPressed: () {
                                         Navigator.of(context).pushReplacement(
-                                          // Example usage in main.dart or in a router configuration
                                           MaterialPageRoute(
-                                            builder:
-                                                (_) => AuthCheck(
-                                                  child: EditProfileScreen(),
-                                                ),
+                                            builder: (_) => AuthCheck(
+                                              child: EditProfileScreen(),
+                                            ),
                                           ),
                                         );
                                       },
@@ -445,7 +717,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                 ),
                               ],
                             ),
-
                             SizedBox(height: 12),
                             if (_errorMessage != null)
                               Padding(
@@ -458,42 +729,50 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                   ),
                                 ),
                               ),
-
                             SizedBox(height: 4),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                               children: [
-                                Container(
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 8,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Color.fromRGBO(235, 111, 70, 0.2),
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  child: Text(
-                                    'Followers',
-                                    style: TextStyle(
-                                      color: Color.fromRGBO(235, 111, 70, 1),
-                                      fontWeight: FontWeight.bold,
+                                GestureDetector(
+                                  onTap: () => _showFollowersFollowingDialog(context),
+                                  child: Container(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Color.fromRGBO(235, 111, 70, 0.2),
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: Text(
+                                      'Followers',
+                                      style: TextStyle(
+                                        color: Color.fromRGBO(235, 111, 70, 1),
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     ),
                                   ),
                                 ),
-                                Container(
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 8,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Color.fromRGBO(235, 111, 70, 0.2),
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  child: Text(
-                                    'Following',
-                                    style: TextStyle(
-                                      color: Color.fromRGBO(235, 111, 70, 1),
-                                      fontWeight: FontWeight.bold,
+                                GestureDetector(
+                                  onTap: () {
+                                    _tabController.index = 1;
+                                    _showFollowersFollowingDialog(context);
+                                  },
+                                  child: Container(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Color.fromRGBO(235, 111, 70, 0.2),
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: Text(
+                                      'Following',
+                                      style: TextStyle(
+                                        color: Color.fromRGBO(235, 111, 70, 1),
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -571,8 +850,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       Center(
                         child: ElevatedButton(
                           onPressed: () async {
-                            await AppData()
-                                .clearAuthToken(); // Clear token using AppData
+                            await AppData().clearAuthToken();
                             Navigator.pushReplacement(
                               context,
                               MaterialPageRoute(builder: (_) => LoginPage()),
@@ -588,9 +866,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           ),
                         ),
                       ),
-                      SizedBox(
-                        height: 40,
-                      ), // Add extra space at bottom for floating menu
+                      SizedBox(height: 40),
                     ],
                   ),
                 );
@@ -599,14 +875,19 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               }
             },
           ),
-          FloatingMenuWidget(), // Add your floating menu widget here
+          FloatingMenuWidget(),
         ],
       ),
     );
   }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 }
 
-// Helper widget for profile information
 class ProfileInfoCard extends StatelessWidget {
   final String title;
   final String value;

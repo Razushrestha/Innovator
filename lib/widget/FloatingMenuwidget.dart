@@ -1,5 +1,6 @@
 // floating_menu_widget.dart
 import 'package:flutter/material.dart';
+import 'package:innovator/ALert/Show_Alert.dart';
 import 'package:innovator/innovator_home.dart';
 import 'package:innovator/sample/screens/course/course.dart';
 import 'package:innovator/sample/screens/home_page.dart';
@@ -111,10 +112,9 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
         //   context: context,
         //   delegate: CustomSearchDelegate(),
         // );
-        Navigator.pushAndRemoveUntil(
+        Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => shop_page()),
-          (route) => true,
+          MaterialPageRoute(builder: (context) => AlertDialogDemo()),
         );
         break;
 
