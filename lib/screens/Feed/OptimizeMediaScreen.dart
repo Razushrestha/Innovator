@@ -1,5 +1,4 @@
 import 'dart:io';
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
@@ -25,7 +24,7 @@ class OptimizedMediaGalleryScreen extends StatefulWidget {
 }
 
 class _OptimizedMediaGalleryScreenState extends State<OptimizedMediaGalleryScreen> {
-   late PageController _pageController;
+  late PageController _pageController;
   late int _currentIndex;
   bool _isFullScreen = false;
   VideoPlayerController? _videoController;
@@ -102,7 +101,7 @@ class _OptimizedMediaGalleryScreenState extends State<OptimizedMediaGalleryScree
       
       _chewieController = ChewieController(
         videoPlayerController: _videoController!,
-        autoPlay: true,
+        autoPlay: true, // Always auto-play when a video is loaded
         looping: true,
         allowFullScreen: false,
       );

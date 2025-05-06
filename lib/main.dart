@@ -19,8 +19,6 @@ Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
 }
 
 late Size mq;
-
-
 void main() async {
 
   WidgetsFlutterBinding.ensureInitialized();

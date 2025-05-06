@@ -1,17 +1,19 @@
-// floating_menu_widget.dart
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
-import 'package:innovator/ALert/Show_Alert.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:innovator/innovator_home.dart';
-import 'package:innovator/sample/screens/course/course.dart';
-import 'package:innovator/sample/screens/home_page.dart';
 import 'package:innovator/screens/Add_Content/Create_post.dart';
-import 'package:innovator/screens/Shop/shop_page.dart';
+import 'package:innovator/screens/Course/homepage.dart';
+import 'package:innovator/screens/Profile/profile_page.dart';
+import 'package:innovator/screens/Shop/Shop_Page.dart';
+import 'package:innovator/utils/custom_drawer.dart';
 import 'package:innovator/widget/auth_check.dart';
 
-import '../screens/Profile/profile_page.dart';
-
 class FloatingMenuWidget extends StatefulWidget {
-  const FloatingMenuWidget({Key? key}) : super(key: key);
+  final GlobalKey<ScaffoldState>? scaffoldKey;
+
+  const FloatingMenuWidget({Key? key, this.scaffoldKey}) : super(key: key);
 
   @override
   _FloatingMenuWidgetState createState() => _FloatingMenuWidgetState();
@@ -22,6 +24,10 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
   bool _isExpanded = false;
   late AnimationController _animationController;
   late Animation<double> _animation;
+
+  // Track the position of the menu button
+  double _buttonX = 0;
+  double _buttonY = 0;
 
   // Features to display above the menu button with their respective actions
   final List<Map<String, dynamic>> _topIcons = [
@@ -46,12 +52,24 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
     super.initState();
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 800),
     );
     _animation = CurvedAnimation(
       parent: _animationController,
       curve: Curves.easeInOut,
     );
+
+    // Position will be set in first build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final size = MediaQuery.of(context).size;
+        setState(() {
+          // Default position at right middle
+          _buttonX = size.width - 60;
+          _buttonY = size.height * 0.5;
+        });
+      }
+    });
   }
 
   @override
@@ -75,9 +93,6 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
   void _handleIconPress(String action, BuildContext context) {
     switch (action) {
       case 'navigate_golf':
-        // ScaffoldMessenger.of(context).showSnackBar(
-        //   const SnackBar(content: Text('Opening Golf Course'))
-        // );
         Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => Homepage()),
@@ -85,20 +100,15 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
         break;
 
       case 'open_search':
-        // ScaffoldMessenger.of(context).showSnackBar(
-        //   const SnackBar(content: Text('Opening Search'))
-        // );
-
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => CoursePage()),
+          MaterialPageRoute(
+            builder: (context) => ProviderScope(child: Course_Homepage()),
+          ),
         );
         break;
 
       case 'add_photo':
-        // ScaffoldMessenger.of(
-        //   context,
-        // ).showSnackBar(const SnackBar(content: Text('Opening Photo')));
         Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => CreatePostScreen()),
@@ -106,24 +116,14 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
         break;
 
       case 'open_settings':
-        // ScaffoldMessenger.of(context).showSnackBar(
-        //   const SnackBar(content: Text('Opening Settings')),
-        // showSearch(
-        //   context: context,
-        //   delegate: CustomSearchDelegate(),
-        // );
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => AlertDialogDemo()),
+          MaterialPageRoute(builder: (context) => ShopPage()),
         );
         break;
 
       case 'view_profile':
-        // ScaffoldMessenger.of(context).showSnackBar(
-        //   const SnackBar(content: Text('Opening Profile'))
-        // );
         Navigator.of(context).pushReplacement(
-          // Example usage in main.dart or in a router configuration
           MaterialPageRoute(
             builder: (_) => AuthCheck(child: UserProfileScreen()),
           ),
@@ -131,6 +131,7 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
         break;
 
       case 'drawer':
+        _showLeftSideDrawer(context);
         break;
 
       default:
@@ -138,46 +139,152 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
           SnackBar(content: Text('Action not implemented yet: $action')),
         );
     }
-    // Keep menu expanded if needed or toggle as required
-    // If you want menu to stay open when navigating, remove this line
-    // If you want it to close after selection, keep this line
-    // if (_isExpanded) {
-    //   _toggleMenu();
-    // }
+  }
+
+  void _showLeftSideDrawer(BuildContext context) {
+  // Drawer width calculation - typically 80% of screen width but not more than 300px
+  final double drawerWidth = math.min(MediaQuery.of(context).size.width * 0.8, 300.0);
+  
+  showGeneralDialog(
+    context: context,
+    barrierDismissible: true,
+    barrierLabel: "Drawer",
+    barrierColor: Colors.black54,
+    transitionDuration: const Duration(milliseconds: 300),
+    pageBuilder: (context, animation1, animation2) {
+      return Container(); // This isn't used but required
+    },
+    transitionBuilder: (context, animation, secondaryAnimation, child) {
+      // Scale and fade animations for smooth appearance
+      final curvedAnimation = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+      );
+      
+      return Stack(
+        children: [
+          // Tap outside to dismiss
+          GestureDetector(
+            onTap: () => Navigator.pop(context),
+            child: Container(
+              color: Colors.transparent,
+              width: MediaQuery.of(context).size.width,
+              height: MediaQuery.of(context).size.height,
+            ),
+          ),
+          
+          // The drawer itself with animations
+          SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(-1, 0),
+              end: Offset.zero,
+            ).animate(curvedAnimation),
+            child: FadeTransition(
+              opacity: curvedAnimation,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  width: drawerWidth,
+                  height: MediaQuery.of(context).size.height,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.only(
+                      topRight: Radius.circular(20),
+                      bottomRight: Radius.circular(20),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black26,
+                        blurRadius: 10.0,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: const CustomDrawer(), // Use the optimized drawer
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+  // Get shape of menu button based on position
+  BorderRadius _getButtonBorderRadius() {
+    final size = MediaQuery.of(context).size;
+
+    // If near right edge, make semi-circular
+    if (_buttonX >= size.width - 70) {
+      return const BorderRadius.only(
+        topLeft: Radius.circular(30),
+        bottomLeft: Radius.circular(30),
+      );
+    }
+    // If near left edge, make semi-circular from right
+    else if (_buttonX <= 70) {
+      return const BorderRadius.only(
+        topRight: Radius.circular(30),
+        bottomRight: Radius.circular(30),
+      );
+    }
+    // Otherwise, make fully circular
+    return BorderRadius.circular(30);
   }
 
   @override
   Widget build(BuildContext context) {
-    // Use MediaQuery to get screen size
-    final Size mq = MediaQuery.of(context).size;
-
-    // Calculate the fixed center position for the menu button
-    final double menuButtonCenterY =
-        mq.height * 0.47 + 25; // 25 is half the height of the button
+    final size = MediaQuery.of(context).size;
 
     return Stack(
-      clipBehavior:
-          Clip.none, // Allow children to be positioned outside stack bounds
+      fit: StackFit.expand,
       children: [
-        // The main menu button - always at the same position
+        // Main draggable menu button
         Positioned(
-          top: menuButtonCenterY - 25, // Centered position minus half height
-          right: 0,
-          child: Container(
-            margin: const EdgeInsets.symmetric(vertical: 8),
-            child: Material(
-              elevation: 4,
-              color: Colors.orange,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(30),
-                bottomLeft: Radius.circular(30),
+          left: _buttonX,
+          top: _buttonY - 25, // Center vertically
+          child: Draggable(
+            feedback: Material(
+              color: Colors.orange.withOpacity(0.8),
+              borderRadius: _getButtonBorderRadius(),
+              child: Container(
+                width: 50,
+                height: 50,
+                alignment: Alignment.center,
+                child: Icon(Icons.menu, color: Colors.white, size: 24),
               ),
-              child: InkWell(
-                onTap: _toggleMenu,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(30),
-                  bottomLeft: Radius.circular(30),
-                ),
+            ),
+            childWhenDragging: Opacity(
+              opacity: 0.3,
+              child: Material(
+                color: Colors.orange,
+                borderRadius: _getButtonBorderRadius(),
+                child: Container(width: 50, height: 50),
+              ),
+            ),
+            onDragEnd: (details) {
+              setState(() {
+                // Update position based on where drag ended
+                _buttonX = (details.offset.dx).clamp(0.0, size.width - 50);
+                _buttonY = (details.offset.dy + 25).clamp(
+                  50.0,
+                  size.height - 50,
+                );
+
+                // Close menu when dragging ends
+                if (_isExpanded) {
+                  _isExpanded = false;
+                  _animationController.reverse();
+                }
+              });
+            },
+            child: GestureDetector(
+              onTap: _toggleMenu,
+              child: Material(
+                elevation: 4,
+                color: Colors.orange,
+                borderRadius: _getButtonBorderRadius(),
                 child: Container(
                   width: 50,
                   height: 50,
@@ -197,16 +304,16 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
         // Top features (visible only when expanded)
         if (_isExpanded)
           Positioned(
-            bottom: menuButtonCenterY + 33, // Position above the menu button
-            right: 0,
+            left: _buttonX,
+            top: _buttonY - 25 - (_topIcons.length * 52),
             child: _buildIconsContainer(_topIcons, context),
           ),
 
         // Bottom features (visible only when expanded)
         if (_isExpanded)
           Positioned(
-            top: menuButtonCenterY + 33, // Position below the menu button
-            right: 0,
+            left: _buttonX,
+            top: _buttonY + 33,
             child: _buildIconsContainer(_bottomIcons, context),
           ),
       ],
@@ -217,14 +324,29 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
     List<Map<String, dynamic>> iconItems,
     BuildContext context,
   ) {
+    final size = MediaQuery.of(context).size;
+
+    // Determine border radius based on position
+    BorderRadius borderRadius;
+    if (_buttonX >= size.width - 70) {
+      borderRadius = const BorderRadius.only(
+        topLeft: Radius.circular(25),
+        bottomLeft: Radius.circular(25),
+      );
+    } else if (_buttonX <= 70) {
+      borderRadius = const BorderRadius.only(
+        topRight: Radius.circular(25),
+        bottomRight: Radius.circular(25),
+      );
+    } else {
+      borderRadius = BorderRadius.circular(25);
+    }
+
     return Container(
       width: 50,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(25),
-          bottomLeft: Radius.circular(25),
-        ),
+        borderRadius: borderRadius,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.15),
@@ -265,7 +387,7 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
   }
 }
 
-// Custom Search Delegate for the search functionality
+// Custom Search Delegate remains unchanged
 class CustomSearchDelegate extends SearchDelegate {
   final List<String> searchExamples = [
     'Golf courses',
@@ -342,27 +464,3 @@ class CustomSearchDelegate extends SearchDelegate {
     );
   }
 }
-/*
-b asb
-snfjof  jvdj  hvfhbk fe ef
-l akbd 
-m idbfv ekf 
- sf cjbdvijbe
-  dk vkb 
-   kd fkjbfh
-   df kjdbfkjb
-   d v vdjkkf
-   d k dkjvbjkv
-   skckjdbkjdfk
-   sd c dvkn dv
-   d k kdv
-   dm cdv n d
-   dn dvfd
-nkjbdsfjbhdfs
- dsfnmkdfs
-  d ndvmnds
-  d f kdvkds
-  dvmn dvnm mnsv
-  dm ndvnmnsdf
-
-*/ 

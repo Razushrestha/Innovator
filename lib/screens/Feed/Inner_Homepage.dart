@@ -10,6 +10,7 @@ import 'package:innovator/screens/Likes/content-Like-Button.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart';
 import 'package:innovator/screens/SHow_Specific_Profile/Show_Specific_Profile.dart';
+import 'package:innovator/screens/comment/JWT_Helper.dart';
 import 'package:innovator/screens/comment/comment_section.dart';
 import 'dart:io'; // For SocketException
 
@@ -541,8 +542,9 @@ class FeedItem extends StatefulWidget {
 
 class _FeedItemState extends State<FeedItem>
     with SingleTickerProviderStateMixin {
+      
   bool _isExpanded = false;
-static const int _maxLinesCollapsed = 3; 
+  static const int _maxLinesCollapsed = 3;
 
   late AnimationController _controller;
   bool isChecked = false;
@@ -587,8 +589,27 @@ static const int _maxLinesCollapsed = 3;
     super.dispose();
   }
 
+  // Check if the post author is the current user
+  bool _isAuthorCurrentUser() {
+    // Primary check using AppData's isCurrentUser method
+    if (AppData().isCurrentUser(widget.content.author.id)) {
+      return true;
+    }
+    
+    // Secondary check using JWT token (as a fallback)
+    final String? token = AppData().authToken;
+    if (token != null && token.isNotEmpty) {
+      final String? currentUserId = JwtHelper.extractUserId(token);
+      return currentUserId == widget.content.author.id;
+    }
+    
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Check if author is current user
+    final bool isOwnContent = _isAuthorCurrentUser();
     
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 12.0),
@@ -617,8 +638,15 @@ static const int _maxLinesCollapsed = 3;
                 Expanded(
                   child: GestureDetector(
                     onTap: () {
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => SpecificUserProfilePage(userId: widget.content.author.id,)));
-                      //Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => ProfilePage()), (route) => false,);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder:
+                              (_) => SpecificUserProfilePage(
+                                userId: widget.content.author.id,
+                              ),
+                        ),
+                      );
                     },
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -641,95 +669,89 @@ static const int _maxLinesCollapsed = 3;
                     ),
                   ),
                 ),
-                FollowButton(
-                  targetUserEmail: widget.content.author.email,
-                  initialFollowStatus:
-                      widget.content.isFollowed, // Pass the initial status
-                  onFollowSuccess: () {
-                    widget.onFollowToggled(
-                      true,
-                    ); // Update parent state when follow succeeds
-                  },
-                  onUnfollowSuccess: () {
-                    widget.onFollowToggled(
-                      false,
-                    ); // Update parent state when unfollow succeeds
-                  },
-                ),
-                
+                // Only show the Follow button if it's not the current user's content
+                if (!isOwnContent)
+                  FollowButton(
+                    targetUserEmail: widget.content.author.email,
+                    initialFollowStatus: widget.content.isFollowed,
+                    onFollowSuccess: () {
+                      widget.onFollowToggled(true);
+                    },
+                    onUnfollowSuccess: () {
+                      widget.onFollowToggled(false);
+                    },
+                  ),
+
                 IconButton(
                   icon: const Icon(Icons.more_vert),
                   onPressed: () {
-                     // final bool isOwnContent = widget.content.id == AppData().curre.id;
-
                     _showQuickSuggestions(context);
-                    // Show more options
                   },
                 ),
               ],
             ),
           ),
-          
 
           // Status/description text
           if (widget.content.status.isNotEmpty)
-  Padding(
-    padding: const EdgeInsets.symmetric(
-      horizontal: 16.0,
-      vertical: 8.0,
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        LayoutBuilder(
-          builder: (context, constraints) {
-            // Create a TextSpan with the same text style as your Text widget
-            final span = TextSpan(
-              text: widget.content.status,
-              style: const TextStyle(fontSize: 15.0),
-            );
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16.0,
+                vertical: 8.0,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      // Create a TextSpan with the same text style as your Text widget
+                      final span = TextSpan(
+                        text: widget.content.status,
+                        style: const TextStyle(fontSize: 15.0),
+                      );
 
-            // Use a TextPainter to determine if the text will overflow
-            final tp = TextPainter(
-              text: span,
-              maxLines: _maxLinesCollapsed,
-              textDirection: TextDirection.ltr,
-            );
-            tp.layout(maxWidth: constraints.maxWidth);
+                      // Use a TextPainter to determine if the text will overflow
+                      final tp = TextPainter(
+                        text: span,
+                        maxLines: _maxLinesCollapsed,
+                        textDirection: TextDirection.ltr,
+                      );
+                      tp.layout(maxWidth: constraints.maxWidth);
 
-            final needsExpandCollapse = tp.didExceedMaxLines;
+                      final needsExpandCollapse = tp.didExceedMaxLines;
 
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.content.status,
-                  style: const TextStyle(fontSize: 15.0),
-                  maxLines: _isExpanded ? null : _maxLinesCollapsed,
-                  overflow: _isExpanded ? null : TextOverflow.ellipsis,
-                ),
-                if (needsExpandCollapse)
-                  GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _isExpanded = !_isExpanded;
-                      });
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.content.status,
+                            style: const TextStyle(fontSize: 15.0),
+                            maxLines: _isExpanded ? null : _maxLinesCollapsed,
+                            overflow:
+                                _isExpanded ? null : TextOverflow.ellipsis,
+                          ),
+                          if (needsExpandCollapse)
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _isExpanded = !_isExpanded;
+                                });
+                              },
+                              child: Text(
+                                _isExpanded ? 'Show Less' : 'Show More',
+                                style: TextStyle(
+                                  color: Colors.blue,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                        ],
+                      );
                     },
-                    child: Text(
-                      _isExpanded ? 'Show Less' : 'Show More',
-                      style: TextStyle(
-                        color: Colors.blue,
-                        fontSize: 14,
-                      ),
-                    ),
                   ),
-              ],
-            );
-          },
-        ),
-      ],
-    ),
-  ),
+                ],
+              ),
+            ),
           // Media content preview - only build if there are files
           if (widget.content.files.isNotEmpty) _buildMediaPreview(),
 
@@ -771,9 +793,8 @@ static const int _maxLinesCollapsed = 3;
                 IconButton(
                   icon: const Icon(Icons.share_outlined),
                   onPressed: () {
-                    //_showQuickSuggestions(context);
                     // Share content
-                  },  
+                  },
                 ),
               ],
             ),
@@ -797,287 +818,310 @@ static const int _maxLinesCollapsed = 3;
     );
   }
 
-
   void _showQuickSuggestions(BuildContext context) {
-  final RenderBox button = context.findRenderObject() as RenderBox;
-  final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-  
-  // Calculate position relative to the overlay
-  final RelativeRect position = RelativeRect.fromRect(
-    // Use the button's top-right corner as the reference point
-    Rect.fromPoints(
-      button.localToGlobal(button.size.topRight(Offset(-40, 0)), ancestor: overlay),
-      button.localToGlobal(button.size.topRight(Offset.zero), ancestor: overlay),
-    ),
-    Offset.zero & overlay.size,
-  );
+    final RenderBox button = context.findRenderObject() as RenderBox;
+    final RenderBox overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox;
 
-  showMenu<String>(
-    context: context,
-    position: position,
-    items: [
-      const PopupMenuItem<String>(
-        value: 'edit',
-        child: Text('Edit content'),
+    // Calculate position relative to the overlay
+    final RelativeRect position = RelativeRect.fromRect(
+      // Use the button's top-right corner as the reference point
+      Rect.fromPoints(
+        button.localToGlobal(
+          button.size.topRight(Offset(-40, 0)),
+          ancestor: overlay,
+        ),
+        button.localToGlobal(
+          button.size.topRight(Offset.zero),
+          ancestor: overlay,
+        ),
       ),
-      const PopupMenuItem<String>(
-        value: 'delete',
-        child: Text('Delete post'),
-      ),
-      if (widget.content.files.isNotEmpty)
+      Offset.zero & overlay.size,
+    );
+
+    showMenu<String>(
+      context: context,
+      position: position,
+      items: [
+        const PopupMenuItem<String>(value: 'edit', child: Text('Edit content')),
         const PopupMenuItem<String>(
-          value: 'delete_files',
-          child: Text('Delete files'),
+          value: 'delete',
+          child: Text('Delete post'),
         ),
-      const PopupMenuItem<String>(
-        value: 'copy',
-        child: Text('Copy content'),
-      ),
-      const PopupMenuItem<String>(
-        value: 'report',
-        child: Text('Report'),
-      ),
-    ],
-  ).then((value) {
-    if (value == null) return;
-    
-    switch (value) {
-      case 'edit':
-        _showEditContentDialog(context);
-        break;
-      case 'delete':
-        _showDeleteConfirmation(context);
-        break;
-      case 'delete_files':
-        _showDeleteFilesConfirmation(context);
-       break;
-      case 'copy':
-        _copyContentToClipboard();
-        break;
-      case 'report':
-        _showReportDialog(context);
-        break;
-    }
-  });
-}
-
-// Add these methods to handle each action:
-
-void _showEditContentDialog(BuildContext context) {
-  final TextEditingController controller = TextEditingController(text: widget.content.status);
-  
-  showDialog(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('Edit Content'),
-      content: TextField(
-        controller: controller,
-        decoration: const InputDecoration(
-          labelText: 'Status',
-          border: OutlineInputBorder(),
-        ),
-        maxLines: 5,
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        TextButton(
-          onPressed: () {
-            _updateContentStatus(controller.text);
-            Navigator.of(context).pop();
-          },
-          child: const Text('Update'),
-        ),
-      ],
-    ),
-  );
-}
-
-Future<void> _updateContentStatus(String newStatus) async {
-  try {
-    final response = await http.put(
-      Uri.parse('http://182.93.94.210:3064/api/v1/update-contents/${widget.content.id}'),
-      headers: {
-        'Content-Type': 'application/json',
-        'authorization': 'Bearer ${AppData().authToken}',
-      },
-      body: jsonEncode({
-        'status': newStatus,
-      }),
-    );
-    
-    if (response.statusCode == 200) {
-      setState(() {
-        widget.content.status= newStatus;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Content updated successfully')),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to update content: ${response.statusCode}')),
-      );
-    }
-  } catch (e) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Error: ${e.toString()}')),
-    );
-  }
-}
-
-Future<bool?> _showDeleteConfirmation(BuildContext context) {
-  return showDialog<bool>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('Delete Post'),
-      content: const Text('Are you sure you want to delete this post? This action cannot be undone.'),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
-        ),
-        TextButton(
-          onPressed: () {
-            Navigator.of(context).pop(true);
-            _deleteContent();
-          },
-          child: const Text('Delete', style: TextStyle(color: Colors.red)),
-        ),
-      ],
-    ),
-  );
-}
-
-Future<void> _deleteContent() async {
-  try {
-    final response = await http.delete(
-      Uri.parse('http://182.93.94.210:3064/api/v1/delete-content/${widget.content.id}'),
-      headers: {
-        'authorization': 'Bearer ${AppData().authToken}',
-      },
-    );
-    
-    if (response.statusCode == 200) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Post deleted successfully')),
-      );
-      // You might want to refresh the feed here or remove this item
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to delete post: ${response.statusCode}')),
-      );
-    }
-  } catch (e) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Error: ${e.toString()}')),
-    );
-  }
-}
-
-Future<bool?> _showDeleteFilesConfirmation(BuildContext context) {
-  return showDialog<bool>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('Delete Files'),
-      content: const Text('Are you sure you want to delete all files attached to this post?'),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
-        ),
-        TextButton(
-          onPressed: () {
-            Navigator.of(context).pop(true);
-            _deleteFiles();
-          },
-          child: const Text('Delete Files', style: TextStyle(color: Colors.red)),
-        ),
-      ],
-    ),
-  );
-}
-
-Future<void> _deleteFiles() async {
-  try {
-    final response = await http.post(
-      Uri.parse('http://182.93.94.210:3064/api/v1/delete-files'),
-      headers: {
-        'Content-Type': 'application/json',
-        'authorization': 'Bearer ${AppData().authToken}',
-      },
-      body: jsonEncode(widget.content.files),
-    );
-    
-    if (response.statusCode == 200) {
-      setState(() {
-        // Clear files in the local content object
-        (widget.content as dynamic).files = <String>[];
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Files deleted successfully')),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to delete files: ${response.statusCode}')),
-      );
-    }
-  } catch (e) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Error: ${e.toString()}')),
-    );
-  }
-}
-
-void _copyContentToClipboard() {
-  Clipboard.setData(ClipboardData(text: widget.content.status));
-  ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(content: Text('Content copied to clipboard')),
-  );
-}
-
-void _showReportDialog(BuildContext context) {
-  final TextEditingController controller = TextEditingController();
-  
-  showDialog(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('Report Content'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text('Please tell us why you are reporting this content:'),
-          const SizedBox(height: 16),
-          TextField(
-            controller: controller,
-            decoration: const InputDecoration(
-              labelText: 'Reason',
-              border: OutlineInputBorder(),
-            ),
-            maxLines: 3,
+        if (widget.content.files.isNotEmpty)
+          const PopupMenuItem<String>(
+            value: 'delete_files',
+            child: Text('Delete files'),
           ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        TextButton(
-          onPressed: () {
-            // Here you would add the code to send the report
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Your report has been submitted')),
-            );
-            Navigator.of(context).pop();
-          },
-          child: const Text('Submit'),
-        ),
+        const PopupMenuItem<String>(value: 'copy', child: Text('Copy content')),
+        const PopupMenuItem<String>(value: 'report', child: Text('Report')),
       ],
-    ),
-  );
-}
+    ).then((value) {
+      if (value == null) return;
+
+      switch (value) {
+        case 'edit':
+          _showEditContentDialog(context);
+          break;
+        case 'delete':
+          _showDeleteConfirmation(context);
+          break;
+        case 'delete_files':
+          _showDeleteFilesConfirmation(context);
+          break;
+        case 'copy':
+          _copyContentToClipboard();
+          break;
+        case 'report':
+          _showReportDialog(context);
+          break;
+      }
+    });
+  }
+
+  // Add these methods to handle each action:
+
+  void _showEditContentDialog(BuildContext context) {
+    final TextEditingController controller = TextEditingController(
+      text: widget.content.status,
+    );
+
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Edit Content'),
+            content: TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                labelText: 'Status',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 5,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () {
+                  _updateContentStatus(controller.text);
+                  Navigator.of(context).pop();
+                },
+                child: const Text('Update'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  Future<void> _updateContentStatus(String newStatus) async {
+    try {
+      final response = await http.put(
+        Uri.parse(
+          'http://182.93.94.210:3064/api/v1/update-contents/${widget.content.id}',
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'authorization': 'Bearer ${AppData().authToken}',
+        },
+        body: jsonEncode({'status': newStatus}),
+      );
+
+      if (response.statusCode == 200) {
+        setState(() {
+          widget.content.status = newStatus;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Content updated successfully')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to update content: ${response.statusCode}'),
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+    }
+  }
+
+  Future<bool?> _showDeleteConfirmation(BuildContext context) {
+    return showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Delete Post'),
+            content: const Text(
+              'Are you sure you want to delete this post? This action cannot be undone.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop(true);
+                  _deleteContent();
+                },
+                child: const Text(
+                  'Delete',
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            ],
+          ),
+    );
+  }
+
+  Future<void> _deleteContent() async {
+    try {
+      final response = await http.delete(
+        Uri.parse(
+          'http://182.93.94.210:3064/api/v1/delete-content/${widget.content.id}',
+        ),
+        headers: {'authorization': 'Bearer ${AppData().authToken}'},
+      );
+
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Post deleted successfully')),
+        );
+        // You might want to refresh the feed here or remove this item
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete post: ${response.statusCode}'),
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+    }
+  }
+
+  Future<bool?> _showDeleteFilesConfirmation(BuildContext context) {
+    return showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Delete Files'),
+            content: const Text(
+              'Are you sure you want to delete all files attached to this post?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop(true);
+                  _deleteFiles();
+                },
+                child: const Text(
+                  'Delete Files',
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            ],
+          ),
+    );
+  }
+
+  Future<void> _deleteFiles() async {
+    try {
+      final response = await http.post(
+        Uri.parse('http://182.93.94.210:3064/api/v1/delete-files'),
+        headers: {
+          'Content-Type': 'application/json',
+          'authorization': 'Bearer ${AppData().authToken}',
+        },
+        body: jsonEncode(widget.content.files),
+      );
+
+      if (response.statusCode == 200) {
+        setState(() {
+          // Clear files in the local content object
+          (widget.content as dynamic).files = <String>[];
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Files deleted successfully')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete files: ${response.statusCode}'),
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+    }
+  }
+
+  void _copyContentToClipboard() {
+    Clipboard.setData(ClipboardData(text: widget.content.status));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Content copied to clipboard')),
+    );
+  }
+
+  void _showReportDialog(BuildContext context) {
+    final TextEditingController controller = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Report Content'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Please tell us why you are reporting this content:',
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: controller,
+                  decoration: const InputDecoration(
+                    labelText: 'Reason',
+                    border: OutlineInputBorder(),
+                  ),
+                  maxLines: 3,
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () {
+                  // Here you would add the code to send the report
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Your report has been submitted'),
+                    ),
+                  );
+                  Navigator.of(context).pop();
+                },
+                child: const Text('Submit'),
+              ),
+            ],
+          ),
+    );
+  }
 
   Widget _buildAuthorAvatar() {
     if (widget.content.author.picture.isEmpty) {
@@ -1407,4 +1451,5 @@ extension DateTimeExtension on DateTime {
     }
   }
 }
+
 // Create a new file: lib/services/app_data.dart
