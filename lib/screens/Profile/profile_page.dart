@@ -8,7 +8,10 @@ import 'package:image_picker/image_picker.dart';
 import 'package:innovator/App_DATA/App_data.dart';
 import 'package:innovator/Authorization/Login.dart';
 import 'package:innovator/main.dart';
+import 'package:innovator/screens/Feed/Inner_Homepage.dart';
+import 'package:innovator/screens/Follow/follow_Button.dart';
 import 'package:innovator/screens/Profile/Edit_Profile.dart';
+import 'package:innovator/screens/SHow_Specific_Profile/Show_Specific_Profile.dart';
 import 'package:innovator/widget/FloatingMenuwidget.dart';
 import 'package:innovator/widget/auth_check.dart';
 import 'package:path/path.dart' as path;
@@ -316,6 +319,8 @@ class UserProfileScreen extends StatefulWidget {
 
 class _UserProfileScreenState extends State<UserProfileScreen>
     with SingleTickerProviderStateMixin {
+        final List<FeedContent> _contents = [];
+
   late Future<UserProfile> _profileFuture;
   bool _isUploading = false;
   String? _errorMessage;
@@ -411,77 +416,6 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     );
   }
 
-  Widget _buildFollowersList() {
-    return FutureBuilder<List<FollowerFollowing>>(
-      future: UserProfileService.getFollowers(_currentPageFollowers),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return Center(child: CircularProgressIndicator());
-        } else if (snapshot.hasError) {
-          return Center(child: Text('Error loading followers: ${snapshot.error}'));
-        } else if (snapshot.hasData && snapshot.data!.isNotEmpty) {
-          final followers = snapshot.data!;
-          return Column(
-            children: [
-              Expanded(
-                child: ListView.builder(
-                  itemCount: followers.length,
-                  itemBuilder: (context, index) {
-                    final follower = followers[index];
-                    return ListTile(
-                      leading: CircleAvatar(
-                        radius: 24,
-                        backgroundColor: Color.fromRGBO(235, 111, 70, 0.2),
-                        backgroundImage: follower.picture != null
-                            ? NetworkImage(
-                                'http://182.93.94.210:3064${follower.picture}')
-                            : null,
-                        child: follower.picture == null
-                            ? Icon(Icons.person,
-                                color: Color.fromRGBO(235, 111, 70, 1))
-                            : null,
-                      ),
-                      title: Text(follower.name),
-                      subtitle: Text(follower.email),
-                    );
-                  },
-                ),
-              ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  IconButton(
-                    icon: Icon(Icons.arrow_back),
-                    onPressed: _currentPageFollowers > 1
-                        ? () {
-                            setState(() {
-                              _currentPageFollowers--;
-                            });
-                          }
-                        : null,
-                  ),
-                  Text('Page $_currentPageFollowers'),
-                  IconButton(
-                    icon: Icon(Icons.arrow_forward),
-                    onPressed: followers.length == _itemsPerPage
-                        ? () {
-                            setState(() {
-                              _currentPageFollowers++;
-                            });
-                          }
-                        : null,
-                  ),
-                ],
-              ),
-            ],
-          );
-        } else {
-          return Center(child: Text('No followers found'));
-        }
-      },
-    );
-  }
-
   Widget _buildFollowingList() {
     return FutureBuilder<List<FollowerFollowing>>(
       future: UserProfileService.getFollowing(_currentPageFollowing),
@@ -512,8 +446,35 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                                 color: Color.fromRGBO(235, 111, 70, 1))
                             : null,
                       ),
-                      title: Text(follow.name),
+                      title: GestureDetector(
+                        child: Text(follow.name), 
+                        onTap: () {
+                          Navigator.push(
+                            context, 
+                            MaterialPageRoute(
+                              builder: (_) => SpecificUserProfilePage(userId: follow.id)
+                            )
+                          );
+                        },
+                      ),
                       subtitle: Text(follow.email),
+                      trailing: FollowButton(
+                        targetUserEmail: follow.email,
+                        initialFollowStatus: true, // Already following
+                        onFollowSuccess: () {
+                          // Refresh the list after status changes
+                          setState(() {
+                            _profileFuture = UserProfileService.getUserProfile();
+                          });
+                        },
+                        onUnfollowSuccess: () {
+                          // Refresh the list after status changes
+                          setState(() {
+                            _profileFuture = UserProfileService.getUserProfile();
+                          });
+                        },
+                        size: 36, // Smaller size to fit in ListTile
+                      ),
                     );
                   },
                 ),
@@ -548,6 +509,106 @@ class _UserProfileScreenState extends State<UserProfileScreen>
           );
         } else {
           return Center(child: Text('Not following anyone yet'));
+        }
+      },
+    );
+  }
+
+  Widget _buildFollowersList() {
+    return FutureBuilder<List<FollowerFollowing>>(
+      future: UserProfileService.getFollowers(_currentPageFollowers),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator());
+        } else if (snapshot.hasError) {
+          return Center(child: Text('Error loading followers: ${snapshot.error}'));
+        } else if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+          final followers = snapshot.data!;
+          return Column(
+            children: [
+              Expanded(
+                child: ListView.builder(
+                  itemCount: followers.length,
+                  itemBuilder: (context, index) {
+                    final follower = followers[index];
+                    return ListTile(
+                      leading: CircleAvatar(
+                        radius: 24,
+                        backgroundColor: Color.fromRGBO(235, 111, 70, 0.2),
+                        backgroundImage: follower.picture != null
+                            ? NetworkImage(
+                                'http://182.93.94.210:3064${follower.picture}')
+                            : null,
+                        child: follower.picture == null
+                            ? Icon(Icons.person,
+                                color: Color.fromRGBO(235, 111, 70, 1))
+                            : null,
+                      ),
+                      title: GestureDetector(
+                        child: Text(follower.name), 
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => SpecificUserProfilePage(userId: follower.id),
+                            ),
+                          );
+                        },
+                      ),
+                      subtitle: Text(follower.email),
+                      trailing: FollowButton(
+                        targetUserEmail: follower.email,
+                        // We need to check if we're following this person 
+                        // Assuming false for followers by default, could be improved with actual status check
+                        initialFollowStatus: false, 
+                        onFollowSuccess: () {
+                          // Refresh after follow
+                          setState(() {
+                            _profileFuture = UserProfileService.getUserProfile();
+                          });
+                        },
+                        onUnfollowSuccess: () {
+                          // Refresh after unfollow
+                          setState(() {
+                            _profileFuture = UserProfileService.getUserProfile();
+                          });
+                        },
+                        size: 36, // Smaller size to fit in ListTile
+                      ),
+                    );
+                  },
+                ),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton(
+                    icon: Icon(Icons.arrow_back),
+                    onPressed: _currentPageFollowers > 1
+                        ? () {
+                            setState(() {
+                              _currentPageFollowers--;
+                            });
+                          }
+                        : null,
+                  ),
+                  Text('Page $_currentPageFollowers'),
+                  IconButton(
+                    icon: Icon(Icons.arrow_forward),
+                    onPressed: followers.length == _itemsPerPage
+                        ? () {
+                            setState(() {
+                              _currentPageFollowers++;
+                            });
+                          }
+                        : null,
+                  ),
+                ],
+              ),
+            ],
+          );
+        } else {
+          return Center(child: Text('No followers found'));
         }
       },
     );

@@ -15,9 +15,10 @@ class EditProfileScreen extends StatefulWidget {
   State<EditProfileScreen> createState() => _EditProfileScreenState();
 }
 
-class _EditProfileScreenState extends State<EditProfileScreen> {
+class _EditProfileScreenState extends State<EditProfileScreen> with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   // Controllers for form fields
   final TextEditingController _nameController = TextEditingController();
@@ -185,9 +186,13 @@ log('FULL REQUEST: ${jsonEncode(debugRequest)}');
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      
+            key: _scaffoldKey, // Add the scaffold key here
+
       body: Stack(
         children: [
+          // SizedBox(
+          //   height: 50
+          // ),
           _isLoading
               ? const Center(
                 child: CircularProgressIndicator(
@@ -201,7 +206,16 @@ log('FULL REQUEST: ${jsonEncode(debugRequest)}');
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 40),
+                      CircleAvatar(
+                        radius: 80,
+                        backgroundImage: NetworkImage(
+                          'https://via.placeholder.com/150',
+                        ),
+                      ),
+                      SizedBox(
+                        height: 20,
+                      ),
                       TextFormField(
                         controller: _nameController,
                         decoration: const InputDecoration(
@@ -261,25 +275,7 @@ log('FULL REQUEST: ${jsonEncode(debugRequest)}');
                         ),
                       ),
                       const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _bioController,
-                        decoration: const InputDecoration(
-                          labelText: 'Bio',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.edit),
-                          focusedBorder: OutlineInputBorder(
-                            borderSide: BorderSide(
-                              color: Color.fromRGBO(235, 111, 70, 1),
-                            ),
-                          ),
-                          labelStyle: TextStyle(
-                            color: Color.fromRGBO(235, 111, 70, 1),
-                          ),
-                          hintText: 'Optional',
-                        ),
-                        maxLines: 3,
-                      ),
-                      const SizedBox(height: 16),
+                      
                       GestureDetector(
                         onTap: () => _selectDate(context),
                         child: AbsorbPointer(
@@ -309,8 +305,29 @@ log('FULL REQUEST: ${jsonEncode(debugRequest)}');
                               return null;
                             },
                           ),
+                          
                         ),
                       ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _bioController,
+                        decoration: const InputDecoration(
+                          labelText: 'Bio',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.edit),
+                          focusedBorder: OutlineInputBorder(
+                            borderSide: BorderSide(
+                              color: Color.fromRGBO(235, 111, 70, 1),
+                            ),
+                          ),
+                          labelStyle: TextStyle(
+                            color: Color.fromRGBO(235, 111, 70, 1),
+                          ),
+                          hintText: 'Optional',
+                        ),
+                        maxLines: 3,
+                      ),
+                      
                       const SizedBox(height: 32),
                       ElevatedButton(
                         onPressed: _updateProfile,

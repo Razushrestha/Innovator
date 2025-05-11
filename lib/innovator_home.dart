@@ -19,7 +19,7 @@ class _HomepageState extends State<Homepage> {
     // Initialize mq for global use
 
     return Scaffold(
-            drawer: const CustomDrawer(),
+          //  drawer: const CustomDrawer(),
 
       body: Stack(
         children: [

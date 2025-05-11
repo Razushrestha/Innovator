@@ -2,9 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:innovator/Authorization/OTP_Verification.dart';
-import 'package:lottie/lottie.dart';
-import 'package:innovator/chatroom/helper.dart';
-import '../main.dart';
+import 'package:innovator/helper/dialogs.dart';
 
 class Forgot_PWD extends StatefulWidget {
   const Forgot_PWD({super.key});
@@ -79,7 +77,6 @@ class _Forgot_PWDState extends State<Forgot_PWD> {
 
   @override
   Widget build(BuildContext context) {
-    final mq = MediaQuery.of(context).size;
     
     return Scaffold(
       body: Stack(

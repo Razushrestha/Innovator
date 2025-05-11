@@ -36,7 +36,7 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
       'name': 'Golf Course',
       'action': 'navigate_golf',
     },
-    {'icon': Icons.shop, 'name': 'Search', 'action': 'open_search'},
+    {'icon': Icons.school, 'name': 'Search', 'action': 'open_search'},
     {'icon': Icons.add_a_photo, 'name': 'Search', 'action': 'add_photo'},
   ];
 
@@ -95,7 +95,8 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
       case 'navigate_golf':
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => Homepage()),
+          MaterialPageRoute(builder: (_) => Homepage()),
+          
         );
         break;
 
@@ -103,30 +104,35 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => ProviderScope(child: Course_Homepage()),
+            builder: (_) => ProviderScope(child: Course_Homepage()),
           ),
+
         );
         break;
 
       case 'add_photo':
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => CreatePostScreen()),
+          MaterialPageRoute(builder: (_) => CreatePostScreen()),
+          
         );
         break;
 
       case 'open_settings':
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => ShopPage()),
+          MaterialPageRoute(builder: (_) => ShopPage()),
+          
         );
         break;
 
       case 'view_profile':
-        Navigator.of(context).pushReplacement(
+        Navigator.push(
+          context,
           MaterialPageRoute(
             builder: (_) => AuthCheck(child: UserProfileScreen()),
           ),
+          
         );
         break;
 
@@ -142,74 +148,77 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
   }
 
   void _showLeftSideDrawer(BuildContext context) {
-  // Drawer width calculation - typically 80% of screen width but not more than 300px
-  final double drawerWidth = math.min(MediaQuery.of(context).size.width * 0.8, 300.0);
-  
-  showGeneralDialog(
-    context: context,
-    barrierDismissible: true,
-    barrierLabel: "Drawer",
-    barrierColor: Colors.black54,
-    transitionDuration: const Duration(milliseconds: 300),
-    pageBuilder: (context, animation1, animation2) {
-      return Container(); // This isn't used but required
-    },
-    transitionBuilder: (context, animation, secondaryAnimation, child) {
-      // Scale and fade animations for smooth appearance
-      final curvedAnimation = CurvedAnimation(
-        parent: animation,
-        curve: Curves.easeOutCubic,
-      );
-      
-      return Stack(
-        children: [
-          // Tap outside to dismiss
-          GestureDetector(
-            onTap: () => Navigator.pop(context),
-            child: Container(
-              color: Colors.transparent,
-              width: MediaQuery.of(context).size.width,
-              height: MediaQuery.of(context).size.height,
+    // Drawer width calculation - typically 80% of screen width but not more than 300px
+    final double drawerWidth = math.min(
+      MediaQuery.of(context).size.width * 0.8,
+      300.0,
+    );
+
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: "Drawer",
+      barrierColor: Colors.black54,
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (context, animation1, animation2) {
+        return Container(); // This isn't used but required
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        // Scale and fade animations for smooth appearance
+        final curvedAnimation = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+        );
+
+        return Stack(
+          children: [
+            // Tap outside to dismiss
+            GestureDetector(
+              onTap: () => Navigator.pop(context),
+              child: Container(
+                color: Colors.transparent,
+                width: MediaQuery.of(context).size.width,
+                height: MediaQuery.of(context).size.height,
+              ),
             ),
-          ),
-          
-          // The drawer itself with animations
-          SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(-1, 0),
-              end: Offset.zero,
-            ).animate(curvedAnimation),
-            child: FadeTransition(
-              opacity: curvedAnimation,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Container(
-                  width: drawerWidth,
-                  height: MediaQuery.of(context).size.height,
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.only(
-                      topRight: Radius.circular(20),
-                      bottomRight: Radius.circular(20),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black26,
-                        blurRadius: 10.0,
-                        offset: Offset(0, 2),
+
+            // The drawer itself with animations
+            SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(-1, 0),
+                end: Offset.zero,
+              ).animate(curvedAnimation),
+              child: FadeTransition(
+                opacity: curvedAnimation,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Container(
+                    width: drawerWidth,
+                    height: MediaQuery.of(context).size.height,
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.only(
+                        topRight: Radius.circular(20),
+                        bottomRight: Radius.circular(20),
                       ),
-                    ],
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black26,
+                          blurRadius: 10.0,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: const CustomDrawer(), // Use the optimized drawer
                   ),
-                  child: const CustomDrawer(), // Use the optimized drawer
                 ),
               ),
             ),
-          ),
-        ],
-      );
-    },
-  );
-}
+          ],
+        );
+      },
+    );
+  }
 
   // Get shape of menu button based on position
   BorderRadius _getButtonBorderRadius() {

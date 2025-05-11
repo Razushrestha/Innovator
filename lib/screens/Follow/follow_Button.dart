@@ -123,7 +123,7 @@ class _FollowButtonState extends State<FollowButton> with SingleTickerProviderSt
 
     switch (_state) {
       case 0:
-        return Icon(Icons.add, color: Colors.white, size: size * 0.6);
+        return Icon(Icons.person_add, color: Colors.white, size: size * 0.6);
       case 1:
         return Text(
           'Requested',
@@ -135,7 +135,7 @@ class _FollowButtonState extends State<FollowButton> with SingleTickerProviderSt
       case 2:
         return Icon(Icons.check, color: Colors.white, size: size * 0.6);
       default:
-        return Icon(Icons.add, color: Colors.white, size: size * 0.6);
+        return Icon(Icons.person_add, color: Colors.white, size: size * 0.6);
     }
   }
 

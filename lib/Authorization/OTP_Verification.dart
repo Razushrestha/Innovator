@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-import 'package:innovator/chatroom/helper.dart';
+import 'package:innovator/helper/dialogs.dart';
 import 'package:lottie/lottie.dart';
 
 // OTP Verification Screen

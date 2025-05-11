@@ -1,23 +1,18 @@
 import 'dart:convert';
 import 'dart:developer';
 import 'dart:io';
-import 'dart:math' as Math;
+import 'package:flutter/services.dart';
 import 'package:innovator/App_DATA/App_data.dart';
 import 'package:innovator/Authorization/Forget_PWD.dart';
 import 'package:innovator/Authorization/signup.dart';
-import 'package:innovator/chatroom/helper.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get/get.dart';
+import 'package:innovator/helper/dialogs.dart';
 import 'package:innovator/innovator_home.dart';
-import 'package:innovator/screens/Feed/Inner_Homepage.dart';
-import 'package:innovator/screens/Profile/profile_page.dart';
 import 'package:lottie/lottie.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
-
-import '../chatroom/api/api.dart';
 import '../main.dart';
 
 class LoginPage extends StatefulWidget {
@@ -130,139 +125,151 @@ class _LoginPageState extends State<LoginPage> {
   }
 }
 
-  _handlegooglebtnclick() {
-    Dialogs.showProgressBar(context);
-    _signInWithGoogle().then((user) async {
-      Navigator.pop(context);
-      if (user != null) {
-        log('\nUser: ${user.user}');
-        log('\nUserAddtionalInfo: ${user.additionalUserInfo}');
+//   _handleGoogleBtnClick() {
+//   Dialogs.showProgressBar(context);
+//   _signInWithGoogle().then((user) async {
+//     Navigator.pop(context);
+//     if (user != null) {
+//       log('\nUser: ${user.user}');
+//       log('\nUserAdditionalInfo: ${user.additionalUserInfo}');
 
-        if ((await APIs.userExists())) {
-          // Get token after Google sign-in (if your API provides one)
-          final token = await _getTokenAfterGoogleSignIn(user);
-          
-          if (token != null && token.isNotEmpty) {
-            // Save token using AppData
-            await AppData().setAuthToken(token);
-            
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (_) => UserProfileScreen())
-            );
-          } else {
-            // Fallback to Homepage if no token
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (_) => Homepage())
-            );
-          }
-        } else {
-          await APIs.createUser().then((value) async {
-            // Get token after user creation
-            final token = await _getTokenAfterGoogleSignIn(user);
-            
-            if (token != null && token.isNotEmpty) {
-              // Save token using AppData
-              await AppData().setAuthToken(token);
-              
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (_) => UserProfileScreen())
-              );
-            } else {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (_) => Homepage())
-              );
-            }
-          });
-        }
-      }
-    });
-  }
+//       // Generate and save token to AppData
+//       final String token = await _generateLocalToken(user);
+//       await AppData().setAuthToken(token);
+      
+//       // Save user data to AppData
+//       final userData = {
+//         'id': user.user?.uid,
+//         'email': user.user?.email,
+//         'name': user.user?.displayName,
+//         'photoUrl': user.user?.photoURL,
+//         'createdAt': DateTime.now().millisecondsSinceEpoch.toString(),
+//       };
+//       await AppData().setCurrentUser(userData);
 
-  // Method to get token after Google sign-in
-  Future<String?> _getTokenAfterGoogleSignIn(UserCredential user) async {
-    try {
-      // Get ID token from Firebase user
-      final idToken = await user.user?.getIdToken();
-      
-      // Send ID token to your backend to exchange for your app token
-      final response = await http.post(
-        Uri.parse('http://182.93.94.210:3064/api/v1/google-auth'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'idToken': idToken,
-          'email': user.user?.email,
-          'name': user.user?.displayName,
-          // Add any other fields needed by your API
-        }),
-      );
-      
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        log('Google auth response: ${response.body}');
+//       if ((await APIs.userExists())) {
+//         // User exists, navigate directly to the Inner homepage
+//         Navigator.pushReplacement(
+//           context,
+//           MaterialPageRoute(builder: (_) => Homepage())
+//         );
+//       } else {
+//         // Create new user and then navigate
+//         await APIs.createUser().then((value) {
+//           Navigator.pushReplacement(
+//             context,
+//             MaterialPageRoute(builder: (_) => Homepage())
+//           );
+//         });
+//       }
+//     }
+//   });
+// }
+
+// // Modified Google Sign-In method with improved error handling
+// Future<UserCredential?> _signInWithGoogle() async {
+//   try {
+//     // Check internet connection
+//     await InternetAddress.lookup('google.com');
+    
+//     // Initialize GoogleSignIn with web client ID
+//     final GoogleSignIn googleSignIn = GoogleSignIn(
+//       scopes: ['email', 'profile'],
+//     );
+
+//     // Sign out first to ensure account picker appears
+//     await googleSignIn.signOut();
+    
+//     // Try silent sign-in first for bette r user experience
+//     GoogleSignInAccount? googleUser;
+//     try {
+//       googleUser = await googleSignIn.signInSilently();
+//     } catch (e) {
+//       log('Silent sign-in failed, proceeding with interactive sign-in: ${e.toString()}');
+//     }
+    
+//     // If silent sign-in failed, try interactive sign-in
+//     if (googleUser == null) {
+//       try {
+//         googleUser = await googleSignIn.signIn();
+//       } catch (e) {
+//         log('Interactive sign-in failed: ${e.toString()}');
         
-        // Extract token - check in different possible locations based on your API
-        String? token;
+//         // Detailed error logging for debugging
+//         if (e is PlatformException) {
+//           log('Error code: ${e.code}');
+//           log('Error message: ${e.message}');
+//           log('Error details: ${e.details}');
+//         }
         
-        if (data['token'] != null) {
-          token = data['token'];
-        } else if (data['access_token'] != null) {
-          token = data['access_token'];
-        } else if (data['data'] != null && data['data']['token'] != null) {
-          token = data['data']['token'];
-        }
-        
-        return token;
-      }
-      return null;
-    } catch (e) {
-      log('Error getting token after Google sign-in: $e');
-      return null;
-    }
-  }
+//         throw e; // Re-throw for general error handling
+//       }
+//     }
+    
+//     if (googleUser == null) {
+//       log('Sign-in canceled by user');
+//       return null; // User canceled the sign-in
+//     }
 
-  Future<UserCredential?> _signInWithGoogle() async {
-    try {
-      // Check internet connection
-      await InternetAddress.lookup('google.com');
-      
-      // Initialize GoogleSignIn
-      final GoogleSignIn googleSignIn = GoogleSignIn(
-        scopes: ['email', 'profile'],
-        signInOption: SignInOption.standard,
-      );
+//     // Obtain the auth details from the request
+//     final GoogleSignInAuthentication googleAuth = 
+//         await googleUser.authentication;
 
-      // Sign out first to ensure account picker appears
-      await googleSignIn.signOut();
-      
-      // Trigger the authentication flow
-      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
-      
-      if (googleUser == null) {
-        return null; // User canceled the sign-in
-      }
+//     // Create a new credential
+//     final credential = GoogleAuthProvider.credential(
+//       accessToken: googleAuth.accessToken,
+//       idToken: googleAuth.idToken,
+//     );
 
-      // Obtain the auth details from the request
-      final GoogleSignInAuthentication googleAuth = 
-          await googleUser.authentication;
+//     // Once signed in, return the UserCredential
+//     return await FirebaseAuth.instance.signInWithCredential(credential);
+//   } catch (e) {
+//     log('\n_signInWithGoogle error: $e');
+    
+//     // Show more specific error message based on common error codes
+//     if (e.toString().contains('10:')) {
+//       Dialogs.showSnackbar(context, 'Google Sign-In failed. Check your Google Services configuration.');
+//     } else if (e.toString().contains('network_error')) {
+//       Dialogs.showSnackbar(context, 'Network error. Please check your internet connection.');
+//     } else {
+//       Dialogs.showSnackbar(context, 'Sign-In failed. Please try again later.');
+//     }
+//     return null;
+//   }
+// }
 
-      // Create a new credential
-      final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-
-      // Once signed in, return the UserCredential
-      return await FirebaseAuth.instance.signInWithCredential(credential);
-    } catch (e) {
-      log('\n_signInWithGoogle: $e');
-      Dialogs.showSnackbar(context, 'Something Went Wrong (Check Internet!)');
-      return null;
-    }
-  }
+// // Generate a local token based on user credentials
+// Future<String> _generateLocalToken(UserCredential user) async {
+//   try {
+//     // Get Firebase ID token as base for our local token
+//     final idToken = await user.user?.getIdToken();
+    
+//     // Create simplified token structure with important user data
+//     final tokenData = {
+//       'userId': user.user?.uid,
+//       'email': user.user?.email,
+//       'name': user.user?.displayName,
+//       'issuedAt': DateTime.now().millisecondsSinceEpoch,
+//       'expiresAt': DateTime.now().add(Duration(days: 30)).millisecondsSinceEpoch,
+//     };
+    
+//     // Encode as base64 - this is a simple token implementation
+//     final jsonData = jsonEncode(tokenData);
+//     final bytes = utf8.encode(jsonData);
+//     final token = base64Encode(bytes);
+    
+//     log('Generated local token for user: ${user.user?.email}');
+//     return token;
+//   } catch (e) {
+//     log('Error generating local token: $e');
+//     // Return a simple fallback token with limited data
+//     return base64Encode(utf8.encode(jsonEncode({
+//       'userId': user.user?.uid,
+//       'fallback': true,
+//       'issuedAt': DateTime.now().millisecondsSinceEpoch
+//     })));
+//   }
+// }
 
   @override
   Widget build(BuildContext context) {
@@ -397,7 +404,7 @@ class _LoginPageState extends State<LoginPage> {
                               shape: StadiumBorder(),
                               elevation: 1),
                           onPressed: () {
-                            _handlegooglebtnclick();
+                            //_handleGoogleBtnClick();
                           },
                           icon: Lottie.asset(
                             'animation/Googlesignup.json',

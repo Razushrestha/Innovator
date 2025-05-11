@@ -7,7 +7,6 @@ import 'package:innovator/App_DATA/App_data.dart';
 import 'package:innovator/Authorization/Forget_PWD.dart';
 import 'package:innovator/Authorization/Login.dart';
 import 'package:innovator/Authorization/signup.dart';
-import 'package:innovator/chatroom/API/api.dart';
 import 'package:innovator/firebase_options.dart';
 import 'package:innovator/innovator_home.dart';
 import 'package:innovator/screens/Splash_Screen/splash_screen.dart';
@@ -22,13 +21,16 @@ late Size mq;
 void main() async {
 
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]).then((value) async {
       await AppData().initialize();
-    await _initializeFirebase();
+   // await _initializeFirebase();
     runApp(const InnovatorHomePage());
   });
 }
@@ -54,6 +56,9 @@ class _InnovatorHomePageState extends State<InnovatorHomePage> {
     return GetMaterialApp(
       title: 'Inovator',
       theme: ThemeData(
+      fontFamily: 'Segoe UI',
+      
+      
         primarySwatch: Colors.green,
         appBarTheme: const AppBarTheme(
           elevation: 1,

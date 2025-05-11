@@ -9,6 +9,7 @@ import 'package:innovator/screens/Shop/Cart_List/cart_screen.dart';
 import 'package:innovator/screens/Shop/Product_detail_Page.dart';
 import 'dart:convert';
 
+import 'package:innovator/widget/FloatingMenuwidget.dart';
 
 class ShopPage extends StatefulWidget {
   const ShopPage({Key? key}) : super(key: key);
@@ -17,7 +18,10 @@ class ShopPage extends StatefulWidget {
   _ShopPageState createState() => _ShopPageState();
 }
 
-class _ShopPageState extends State<ShopPage> {
+class _ShopPageState extends State<ShopPage>
+    with SingleTickerProviderStateMixin {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
   final AppData _appData = AppData();
   List<dynamic> _products = [];
   int _currentPage = 0;
@@ -124,85 +128,87 @@ class _ShopPageState extends State<ShopPage> {
 
   // Add to cart function
   Future<void> _addToCart(
-  String productId,
-  double price, {
-  int quantity = 1,
-}) async {
-  // Validate authentication
-  if (_appData.authToken == null) {
-    _showErrorSnackbar('Please log in to add items to your cart');
-    return;
-  }
-
-  // Get product details from local cache
-  final product = _products.firstWhere(
-    (p) => p['_id'] == productId,
-    orElse: () => {'name': 'Unknown Product'},
-  );
-  final String productName = product['name'] ?? 'Unknown Product';
-
-  // Set loading state for this product
-  setState(() {
-    _addingToCart[productId] = true;
-  });
-
-  try {
-    final headers = {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ${_appData.authToken}',
-    };
-
-    developer.log('Adding product $productId ($productName) to cart');
-
-    final response = await http
-        .post(
-          Uri.parse('$_baseUrl/api/v1/add-to-cart'),
-          headers: headers,
-          body: json.encode({
-            'product': productId,
-            'productName': productName,  // Include product name
-            'quantity': quantity,
-            'price': price,
-          }),
-        )
-        .timeout(
-          const Duration(seconds: 10),
-          onTimeout: () {
-            throw Exception(
-              'Connection timeout. Please check your internet connection.',
-            );
-          },
-        );
-
-    if (response.statusCode == 200 || response.statusCode == 201) {
-      final data = json.decode(response.body);
-
-      if (data['success'] == true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$productName added to cart'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      } else {
-        _showErrorSnackbar(data['message'] ?? 'Failed to add $productName to cart');
-      }
-    } else {
-      _showErrorSnackbar(
-        'Failed to add $productName to cart: ${response.statusCode}',
-      );
+    String productId,
+    double price, {
+    int quantity = 1,
+  }) async {
+    // Validate authentication
+    if (_appData.authToken == null) {
+      _showErrorSnackbar('Please log in to add items to your cart');
+      return;
     }
-  } catch (e) {
-    developer.log('Error adding $productName to cart: $e');
-    _showErrorSnackbar('Error adding $productName: ${e.toString()}');
-  } finally {
-    // Clear loading state
+
+    // Get product details from local cache
+    final product = _products.firstWhere(
+      (p) => p['_id'] == productId,
+      orElse: () => {'name': 'Unknown Product'},
+    );
+    final String productName = product['name'] ?? 'Unknown Product';
+
+    // Set loading state for this product
     setState(() {
-      _addingToCart.remove(productId);
+      _addingToCart[productId] = true;
     });
+
+    try {
+      final headers = {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ${_appData.authToken}',
+      };
+
+      developer.log('Adding product $productId ($productName) to cart');
+
+      final response = await http
+          .post(
+            Uri.parse('$_baseUrl/api/v1/add-to-cart'),
+            headers: headers,
+            body: json.encode({
+              'product': productId,
+              'productName': productName, // Include product name
+              'quantity': quantity,
+              'price': price,
+            }),
+          )
+          .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () {
+              throw Exception(
+                'Connection timeout. Please check your internet connection.',
+              );
+            },
+          );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = json.decode(response.body);
+
+        if (data['success'] == true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('$productName added to cart'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        } else {
+          _showErrorSnackbar(
+            data['message'] ?? 'Failed to add $productName to cart',
+          );
+        }
+      } else {
+        _showErrorSnackbar(
+          'Failed to add $productName to cart: ${response.statusCode}',
+        );
+      }
+    } catch (e) {
+      developer.log('Error adding $productName to cart: $e');
+      _showErrorSnackbar('Error adding $productName: ${e.toString()}');
+    } finally {
+      // Clear loading state
+      setState(() {
+        _addingToCart.remove(productId);
+      });
+    }
   }
-}
 
   void _scrollListener() {
     // Load more when user gets close to the bottom
@@ -245,15 +251,40 @@ class _ShopPageState extends State<ShopPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Shop'),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _refreshProducts,
-          ),
-          ShoppingCartBadge(
+      
+      key: _scaffoldKey, // Add the scaffold key here
+
+      body: Stack(
+        children: [
+          
+          _buildBody(),
+          FloatingMenuWidget(scaffoldKey: _scaffoldKey),
+          // Inside the Stack in your build method, replace the current Positioned widget with this:
+Positioned(
+    top: MediaQuery.of(context).size.height * 0.01, // Adjusts to different status bar heights
+  right: MediaQuery.of(context).size.width * 0.05, // 5% from right edge
+  child: ShoppingCartBadge(
+    onPressed: () {
+
+      Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => CartScreen()), (route) => false).then((_) {
+        setState(() {});
+      });
+     
+    },
+    // You can also make the badge size responsive
+    badgeColor: Colors.red,
+    iconColor: Colors.black,
+    // Optional: make icon size responsive based on screen width
+    // iconSize: MediaQuery.of(context).size.width * 0.07, // Add this parameter to your ShoppingCartBadge
+  ),
+),
+        ],
+      ),
+    );
+  }
+
+  /*
+  ShoppingCartBadge(
       onPressed: () {
         Navigator.push(
           context,
@@ -268,19 +299,16 @@ class _ShopPageState extends State<ShopPage> {
       badgeColor: Colors.red, // Optional: customize badge color
       iconColor: Colors.black , // Optional: customize icon color
     ),
- 
-        ],
-      ),
-      body: _buildBody(),
-    );
-  }
+  */
 
   Widget _buildBody() {
+
     if (_isError && _products.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            
             const Icon(Icons.error_outline, color: Colors.red, size: 48),
             const SizedBox(height: 16),
             Text(_errorMessage ?? 'Failed to load products'),
@@ -321,6 +349,7 @@ class _ShopPageState extends State<ShopPage> {
       onRefresh: _refreshProducts,
       child: Column(
         children: [
+          SizedBox(height: 50),
           Expanded(
             child: GridView.builder(
               controller: _scrollController,
@@ -461,7 +490,7 @@ class _ShopPageState extends State<ShopPage> {
                         child: Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: stock > 0 ? Colors.blue : Colors.grey,
+                            color: stock > 0 ? Colors.orange : Colors.grey,
                             shape: BoxShape.circle,
                           ),
                           child:

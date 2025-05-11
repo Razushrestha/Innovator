@@ -1,14 +1,8 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:innovator/Authorization/Login.dart';
-import 'package:innovator/chatroom/helper.dart';
-import 'package:innovator/innovator_home.dart';
-import 'package:innovator/chatroom/API/api.dart';
+import 'package:innovator/helper/dialogs.dart';
 import 'package:innovator/main.dart';
-import 'package:innovator/models/Chat_Message/chat_user.dart';
-import 'package:innovator/screens/Profile/profile_page.dart';
-import 'package:lottie/lottie.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -36,11 +30,11 @@ class _SignupState extends State<Signup> {
   void initState() {
     super.initState();
     // Pre-filling the form with the provided data for testing
-    nameController.text = "Ronit Shrivastav";
-    emailController.text = "ronit.shrivastav02@gmail.com";
-    passwordController.text = "ronit@123";
-    completePhoneNumber = "+9779812236482";
-    dobController.text = "2001-10-25";
+    nameController.text = "";
+    emailController.text = "";
+    passwordController.text = "";
+    completePhoneNumber = "";
+    dobController.text = "";
     // Parse the date from the string format YYYY-MM-DD
     final dateParts = "2005-08-08".split('-');
     if (dateParts.length == 3) {
@@ -244,6 +238,7 @@ class _SignupState extends State<Signup> {
                         TextField(
                           controller: nameController,
                           decoration: const InputDecoration(
+
                             labelText: 'Enter Name',
                             prefixIcon: Icon(Icons.person),
                           ),

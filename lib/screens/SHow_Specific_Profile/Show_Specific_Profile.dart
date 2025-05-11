@@ -6,7 +6,9 @@ import 'package:http/http.dart' as http;
 import 'package:innovator/App_data/App_data.dart';
 import 'package:innovator/screens/Follow/follow_Button.dart';
 import 'package:flutter/services.dart';
+import 'package:innovator/screens/Profile/profile_page.dart';
 import 'package:innovator/screens/SHow_Specific_Profile/User_Image_Gallery.dart';
+import 'package:innovator/widget/FloatingMenuwidget.dart';
 
 class SpecificUserProfilePage extends StatefulWidget {
   final String userId;
@@ -17,16 +19,23 @@ class SpecificUserProfilePage extends StatefulWidget {
   _SpecificUserProfilePageState createState() => _SpecificUserProfilePageState();
 }
 
-class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> {
+class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with SingleTickerProviderStateMixin {
   late Future<Map<String, dynamic>> _profileFuture;
   final AppData _appData = AppData();
   bool _isRefreshing = false;
+  late TabController _tabController;
+  int _currentPageFollowers = 1;
+  int _currentPageFollowing = 1;
+  final int _itemsPerPage = 10;
 
   @override
   void initState() {
     super.initState();
+        _tabController = TabController(length: 2, vsync: this);
     _profileFuture = _fetchUserProfile();
   }
+
+  
 
   Future<Map<String, dynamic>> _fetchUserProfile() async {
     try {
@@ -151,6 +160,7 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> {
             final profileData = snapshot.data!;
             return CustomScrollView(
               slivers: [
+                
                 SliverToBoxAdapter(
                   child: _buildProfileHeader(profileData, context),
                 ),
@@ -201,6 +211,7 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> {
       ),
       child: Stack(
         children: [
+          
           // Background decorations
           Positioned(
             top: -50,
@@ -251,7 +262,7 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> {
                     tag: 'profile_picture_${profileData['_id']}',
                     child: CircleAvatar(
                       radius: 65,
-                      backgroundColor: isDarkMode ? Colors.grey[800] : Colors.white,
+                      backgroundColor: isDarkMode ? const Color.fromARGB(255, 184, 31, 31) : Colors.white,
                       backgroundImage: profileData['picture'] != null && profileData['picture'].isNotEmpty
                           ? CachedNetworkImageProvider(
                               'http://182.93.94.210:3064${profileData['picture']}',
@@ -335,11 +346,11 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
       decoration: BoxDecoration(
-        color: isDarkMode ? Colors.grey[900] : Colors.white,
+        color: isDarkMode ? const Color.fromARGB(255, 141, 12, 12) : Colors.white,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: const Color.fromARGB(255, 141, 1, 1).withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, -5),
           ),
@@ -449,6 +460,194 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> {
     );
   }
 
+
+  //  void _showFollowersFollowingDialog(BuildContext context) {
+  //   showDialog(
+  //     context: context,
+  //     builder: (context) {
+  //       return Dialog(
+  //         insetPadding: EdgeInsets.all(16),
+  //         child: Container(
+  //           padding: EdgeInsets.all(16),
+  //           constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.7),
+  //           child: Column(
+  //             mainAxisSize: MainAxisSize.min,
+  //             children: [
+  //               TabBar(
+  //                 controller: _tabController,
+  //                 labelColor: Color.fromRGBO(235, 111, 70, 1),
+  //                 unselectedLabelColor: Colors.grey,
+  //                 tabs: [
+  //                   Tab(text: 'Followers'),
+  //                   Tab(text: 'Following'),
+  //                 ],
+  //               ),
+  //               Expanded(
+  //                 child: TabBarView(
+  //                   controller: _tabController,
+  //                   children: [
+  //                     _buildFollowersList(),
+  //                     _buildFollowingList(),
+  //                   ],
+  //                 ),
+  //               ),
+  //             ],
+  //           ),
+  //         ),
+  //       );
+  //     },
+  //   );
+  // }
+
+  // Widget _buildFollowersList() {
+  //   return FutureBuilder<List<FollowerFollowing>>(
+  //     future: UserProfileService.getFollowers(_currentPageFollowers),
+  //     builder: (context, snapshot) {
+  //       if (snapshot.connectionState == ConnectionState.waiting) {
+  //         return Center(child: CircularProgressIndicator());
+  //       } else if (snapshot.hasError) {
+  //         return Center(child: Text('Error loading followers: ${snapshot.error}'));
+  //       } else if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+  //         final followers = snapshot.data!;
+  //         return Column(
+  //           children: [
+  //             Expanded(
+  //               child: ListView.builder(
+  //                 itemCount: followers.length,
+  //                 itemBuilder: (context, index) {
+  //                   final follower = followers[index];
+  //                   return ListTile(
+  //                     leading: CircleAvatar(
+  //                       radius: 24,
+  //                       backgroundColor: Color.fromRGBO(235, 111, 70, 0.2),
+  //                       backgroundImage: follower.picture != null
+  //                           ? NetworkImage(
+  //                               'http://182.93.94.210:3064${follower.picture}')
+  //                           : null,
+  //                       child: follower.picture == null
+  //                           ? Icon(Icons.person,
+  //                               color: Color.fromRGBO(235, 111, 70, 1))
+  //                           : null,
+  //                     ),
+  //                     title: GestureDetector(child: Text(follower.name), onTap: (){
+  //                       Navigator.push(
+  //                         context,
+  //                         MaterialPageRoute(
+  //                           builder: (context) => SpecificUserProfilePage(userId: follower.id,),
+  //                         ),
+  //                       );
+  //                     },),
+  //                     subtitle: Text(follower.email),
+  //                   );
+  //                 },
+  //               ),
+  //             ),
+  //             Row(
+  //               mainAxisAlignment: MainAxisAlignment.center,
+  //               children: [
+  //                 IconButton(
+  //                   icon: Icon(Icons.arrow_back),
+  //                   onPressed: _currentPageFollowers > 1
+  //                       ? () {
+  //                           setState(() {
+  //                             _currentPageFollowers--;
+  //                           });
+  //                         }
+  //                       : null,
+  //                 ),
+  //                 Text('Page $_currentPageFollowers'),
+  //                 IconButton(
+  //                   icon: Icon(Icons.arrow_forward),
+  //                   onPressed: followers.length == _itemsPerPage
+  //                       ? () {
+  //                           setState(() {
+  //                             _currentPageFollowers++;
+  //                           });
+  //                         }
+  //                       : null,
+  //                 ),
+  //               ],
+  //             ),
+  //           ],
+  //         );
+  //       } else {
+  //         return Center(child: Text('No followers found'));
+  //       }
+  //     },
+  //   );
+  // }
+
+  // Widget _buildFollowingList() {
+  //   return FutureBuilder<List<FollowerFollowing>>(
+  //     future: UserProfileService.getFollowing(_currentPageFollowing),
+  //     builder: (context, snapshot) {
+  //       if (snapshot.connectionState == ConnectionState.waiting) {
+  //         return Center(child: CircularProgressIndicator());
+  //       } else if (snapshot.hasError) {
+  //         return Center(child: Text('Error loading following: ${snapshot.error}'));
+  //       } else if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+  //         final following = snapshot.data!;
+  //         return Column(
+  //           children: [
+  //             Expanded(
+  //               child: ListView.builder(
+  //                 itemCount: following.length,
+  //                 itemBuilder: (context, index) {
+  //                   final follow = following[index];
+  //                   return ListTile(
+  //                     leading: CircleAvatar(
+  //                       radius: 24,
+  //                       backgroundColor: Color.fromRGBO(235, 111, 70, 0.2),
+  //                       backgroundImage: follow.picture != null
+  //                           ? NetworkImage(
+  //                               'http://182.93.94.210:3064${follow.picture}')
+  //                           : null,
+  //                       child: follow.picture == null
+  //                           ? Icon(Icons.person,
+  //                               color: Color.fromRGBO(235, 111, 70, 1))
+  //                           : null,
+  //                     ),
+  //                     title: GestureDetector(child: Text(follow.name), onTap: (){Navigator.push(context, MaterialPageRoute(builder: (_) => SpecificUserProfilePage(userId: follow.id)));},),
+  //                     subtitle: Text(follow.email),
+  //                   );
+  //                 },
+  //               ),
+  //             ),
+  //             Row(
+  //               mainAxisAlignment: MainAxisAlignment.center,
+  //               children: [
+  //                 IconButton(
+  //                   icon: Icon(Icons.arrow_back),
+  //                   onPressed: _currentPageFollowing > 1
+  //                       ? () {
+  //                           setState(() {
+  //                             _currentPageFollowing--;
+  //                           });
+  //                         }
+  //                       : null,
+  //                 ),
+  //                 Text('Page $_currentPageFollowing'),
+  //                 IconButton(
+  //                   icon: Icon(Icons.arrow_forward),
+  //                   onPressed: following.length == _itemsPerPage
+  //                       ? () {
+  //                           setState(() {
+  //                             _currentPageFollowing++;
+  //                           });
+  //                         }
+  //                       : null,
+  //                 ),
+  //               ],
+  //             ),
+  //           ],
+  //         );
+  //       } else {
+  //         return Center(child: Text('Not following anyone yet'));
+  //       }
+  //     },
+  //   );
+  // }
+
   Widget _buildStatItem(String value, String label, IconData icon, BuildContext context, {bool special = false}) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final primaryColor = Theme.of(context).primaryColor;
@@ -457,10 +656,16 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> {
       child: GestureDetector(
         onTap: () {
           // Navigate to followers/following list or show friends
-          if (label == 'Followers' || label == 'Following') {
+          if (label == 'Followers') {
+          //_tabController.index = 1;
+
             // You can implement navigation to followers/following list here
+           //_showFollowersFollowingDialog(context);
+          }
+          else if (label == 'Following') {
+            // Show friends list
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('View $label list')),
+              SnackBar(content: Text('Hello Ronit')),
             );
           }
         },

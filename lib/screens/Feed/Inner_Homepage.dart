@@ -420,8 +420,20 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
             if (_hasError) SliverFillRemaining(child: _buildErrorView()),
             if (_contents.isEmpty && !_isLoading && !_hasError)
               SliverFillRemaining(child: _buildEmptyView()),
+              //FloatingActionButton(onPressed: (){},   child: Image.asset('assets/message.gif'),)
           ],
         ),
+      ),
+floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          
+          // Add your action here
+          debugPrint('FloatingActionButton pressed!');
+          // You could show a dialog, navigate to a new screen, etc.
+        },
+        child: Image.asset(
+          'assets/images/message.gif', fit: BoxFit.fitHeight,),
+        tooltip: 'Message',
       ),
     );
   }
@@ -725,7 +737,7 @@ class _FeedItemState extends State<FeedItem>
                         children: [
                           Text(
                             widget.content.status,
-                            style: const TextStyle(fontSize: 15.0),
+                            style:  TextStyle(fontSize: 16.0, fontFamily: 'Segoe UI', letterSpacing: 0.5),
                             maxLines: _isExpanded ? null : _maxLinesCollapsed,
                             overflow:
                                 _isExpanded ? null : TextOverflow.ellipsis,

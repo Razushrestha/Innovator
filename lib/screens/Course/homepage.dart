@@ -1,97 +1,410 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
-import 'package:innovator/screens/Course/bookscreen.dart';
-import 'package:innovator/screens/Course/favourite_screen.dart';
-import 'package:innovator/screens/Course/profile_screen.dart';
-import 'package:innovator/screens/Course/tabbar.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
+import 'package:innovator/App_data/App_data.dart';
+import 'package:innovator/screens/Course/digitalmarketing.dart';
+import 'package:innovator/screens/Course/illustration_screen.dart';
+import 'package:innovator/screens/Course/uiux.dart';
+import 'package:innovator/screens/Course/web_development.dart';
+import 'package:innovator/screens/Profile/profile_page.dart';
+import 'package:innovator/widget/FloatingMenuwidget.dart';
 
 
-class Course_Homepage extends StatefulWidget {
+class Course_Homepage extends ConsumerStatefulWidget {
   const Course_Homepage({super.key});
 
   @override
-  State<Course_Homepage> createState() => _Course_HomepageState();
+  ConsumerState<ConsumerStatefulWidget> createState() => _NewHomeScreenState();
 }
 
-class _Course_HomepageState extends State<Course_Homepage> {
-  int currentIndex = 0;
-  final List<Widget> screens = [
-    TabBarScreen(),
-    FavouriteScreen(),
-    Bookscreen(),
-    ProfileScreen(),
-  ];
+class _NewHomeScreenState extends ConsumerState<Course_Homepage>
+    with SingleTickerProviderStateMixin {
+      bool _isLoading = true;
+  Map<String, dynamic>? _userData;
+  String? _errorMessage;
+  late TabController _tabController;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 4, vsync: this);
+    _fetchUserProfile();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _fetchUserProfile() async {
+    try {
+      // Use AuthToken from AppData singleton
+      final String? authToken = AppData().authToken;
+      
+      if (authToken == null || authToken.isEmpty) {
+        setState(() {
+          _errorMessage = 'Authentication token not found';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      final response = await http.get(
+        Uri.parse('http://182.93.94.210:3064/api/v1/user-profile'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $authToken',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> responseData = json.decode(response.body);
+        if (responseData['status'] == 200 && responseData['data'] != null) {
+          setState(() {
+            _userData = responseData['data'];
+            _isLoading = false;
+            
+            // Optionally update the current user data in AppData if needed
+            AppData().setCurrentUser(_userData!);
+          });
+        } else {
+          setState(() {
+            _errorMessage = responseData['message'] ?? 'Unknown error';
+            _isLoading = false;
+          });
+        }
+      } else {
+        setState(() {
+          _errorMessage = 'Failed to load profile. Status: ${response.statusCode}';
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Network error: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Scaffold(
-        body: screens[currentIndex],
-        bottomNavigationBar: Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withAlpha(10),
-                blurRadius: 10,
-                offset: Offset(0, -5),
+    final screenSize = MediaQuery.of(context).size;
+    final screenWidth = screenSize.width;
+    final screenHeight = screenSize.height;
+
+    // Height categories
+    final smallPhoneheight = screenHeight <= 640;
+
+    // Width categories
+    final smallPhoneWidth = screenWidth <= 360;
+
+    final isMediumDevice = screenWidth >= 1400 &&
+        screenWidth < 1800 &&
+        screenHeight >= 700 &&
+        screenHeight <= 800;
+    return Scaffold(
+            key: _scaffoldKey, // Add the scaffold key here
+
+      resizeToAvoidBottomInset: false,
+      backgroundColor: const Color(0xffEDF4FE),
+      body: Stack(
+        children: [
+        Column(
+          children: [
+            Stack(children: [
+              _buildHeader(smallPhoneheight, smallPhoneWidth),
+              // Search bar overlay
+              Positioned(
+                // top: isSmallPhone ? height * 0.14 : height * 0.16,
+                top: smallPhoneheight ? 150 : 210,
+                left: screenWidth * 0.04,
+                right: screenWidth * 0.04,
+                child: _buildSearchBar(smallPhoneheight, screenWidth),
               ),
-            ],
-          ),
-          child: Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildNavItem(0, Icons.home, Icons.home_outlined, 'Home'),
-                _buildNavItem(
-                    1, Icons.star, Icons.star_border_rounded, 'Favourite'),
-                _buildNavItem(
-                    2, Icons.menu_book, Icons.menu_book_outlined, 'Course'),
-                _buildNavItem(
-                    3, Icons.person, Icons.person_outline_rounded, 'Profile'),
-              ],
+            ]),
+        
+            //  padding: EdgeInsets.symmetric(
+            // horizontal: screenWidth * 0.04,
+            // vertical:
+            //     smallPhoneheight ? screenHeight * 0.01 : screenHeight * 0.03,
+        
+            Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: screenWidth * 0.04,
+                vertical:
+                    smallPhoneheight ? screenHeight * 0.01 : screenHeight * 0.03,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // Course text
+                  Text(
+                    'Course',
+                    style: TextStyle(
+                      fontSize: smallPhoneheight ? 22 : 25,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+        
+                  // Options button
+                  IconButton(
+                    onPressed: () {},
+                    icon: Icon(
+                      Icons.more_horiz,
+                      size: smallPhoneheight ? 30 : 35,
+                    ),
+                    // padding: EdgeInsets.zero,
+                  ),
+                ],
+              ),
             ),
-          ),
+            // TabBar with aligned left padding to match "Course" text
+            Padding(
+              padding: EdgeInsets.only(
+                left: screenWidth * 0.04, // Same as "Course" text padding
+              ),
+              child: Container(
+                clipBehavior: Clip.antiAlias,
+                // height: smallPhoneheight ? 50 : 80,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(25),
+                ),
+                alignment: Alignment.centerLeft,
+        
+                child: TabBar(
+                  controller: _tabController,
+                  isScrollable: true,
+                  tabAlignment: TabAlignment.start,
+                  dividerColor: Colors.transparent,
+                  indicatorSize: TabBarIndicatorSize.tab,
+                  labelColor: Colors.white,
+                  labelStyle: TextStyle(
+                    fontWeight: FontWeight.w500,
+                  ),
+                  unselectedLabelColor: Colors.black,
+                  indicator: BoxDecoration(
+                    borderRadius: BorderRadius.circular(25),
+                    color: Color(0xff10B868),
+                  ),
+                  tabs: [
+                    _buildTab(
+                      Icons.design_services,
+                      'UI/UX Design',
+                      smallPhoneheight,
+                      null,
+                    ),
+                    _buildTab(
+                      Icons.campaign_outlined,
+                      'Digital Marketing',
+                      smallPhoneheight,
+                      Colors.purpleAccent,
+                    ),
+                    _buildTab(
+                      Icons.web,
+                      'Web Development',
+                      smallPhoneheight,
+                      Colors.lightBlue,
+                    ),
+                    _buildTab(
+                      Icons.brush,
+                      'Illustration',
+                      smallPhoneheight,
+                      Colors.orangeAccent,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SizedBox(
+                height:
+                    smallPhoneheight ? screenHeight * 0.02 : screenHeight * 0.03),
+        
+            // Tab content
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(bottom: smallPhoneheight ? 20 : 40),
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    UIUXDesignScreen(),
+                    DigitalMarketingScreen(),
+                    WebDevelopmentScreen(),
+                    IllustrationScreen(),
+                  ],
+                ),
+              ),
+            ),
+        
+            // SizedBox(
+            //   height: smallPhoneheight ? 250 : 350,
+            //   child: TabBarView(
+            //     controller: _tabController,
+            //     children: [
+            //       UIUXDesignScreen(),
+            //       DigitalMarketingScreen(),
+            //       WebDevelopmentScreen(),
+            //       IllustrationScreen(),
+            //     ],
+            //   ),
+            // ),
+          ],
         ),
+        FloatingMenuWidget(scaffoldKey: _scaffoldKey,)
+        ]
       ),
     );
   }
 
-  Widget _buildNavItem(
-      int index, IconData activeIcon, IconData inactiveIcon, String label) {
-    final isSelected = currentIndex == index;
-
-    return GestureDetector(
-      onTap: () => setState(() => currentIndex = index),
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: isSelected
-            ? BoxDecoration(
-                color: Color(0xff5F73F3),
-                borderRadius: BorderRadius.circular(20),
-              )
-            : null,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              isSelected ? activeIcon : inactiveIcon,
-              color: isSelected ? Colors.white : Color(0xff5F73F3),
-            ),
-            if (isSelected)
+  Widget _buildHeader(bool isSmallPhone, bool isSmallWidth) {
+    return Container(
+        height: isSmallWidth ? 230 : 280,
+        decoration: BoxDecoration(
+          color: Color.fromRGBO(	244, 135, 6, 1),
+          borderRadius: BorderRadius.only(
+            bottomLeft: Radius.circular(25),
+            bottomRight: Radius.circular(25),
+          ),
+        ),
+        child: Padding(
+          padding: EdgeInsets.only(top: isSmallPhone ? 30 : 50),
+          child: Row(
+            mainAxisSize: MainAxisSize.max,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // Greeting text
               Padding(
-                padding: const EdgeInsets.only(left: 8.0),
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
+                padding: EdgeInsets.only(
+                  left: isSmallWidth ? 10 : 20,
+                  top: isSmallPhone ? 20 : 60,
+                ), 
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Good Morning',
+                      style: TextStyle( 
+                        color: Colors.white,
+                        fontSize: isSmallPhone ? 18 : 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      _userData != null
+                          ? '${_userData!['name']}'
+                          : 'Welcome, User',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: isSmallPhone ? 14 : 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-          ],
+
+              // Notification icon
+              Padding(
+                padding: EdgeInsets.only(
+                  bottom: isSmallPhone ? 60 : 90,
+                  right: isSmallWidth ? 10 : 20,
+                ),
+                child: _buildNotificationButton(),
+              ),
+            ],
+          ),
+        ));
+  }
+
+  // Notification button with badge
+  Widget _buildNotificationButton() {
+    return Stack(
+      children: [
+        ClipOval(
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white.withAlpha(20),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: IconButton(
+              onPressed: () {},
+              icon: Icon(Icons.notifications),
+              color: Colors.white,
+            ),
+          ),
         ),
+        Positioned(
+          top: 14,
+          right: 14,
+          child: Container(
+            height: 8,
+            width: 8,
+            decoration: BoxDecoration(
+              color: Colors.red,
+              shape: BoxShape.circle,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Search bar widget
+  Widget _buildSearchBar(bool isSmallPhone, double width) {
+    return SearchBar(
+      backgroundColor: WidgetStateProperty.all(Colors.white),
+      elevation: WidgetStateProperty.all(2),
+      shape: WidgetStateProperty.all(
+        RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(30),
+        ),
+      ),
+      hintText: 'Search Course',
+      hintStyle: WidgetStateProperty.all(
+        TextStyle(
+          color: Colors.grey,
+          fontSize: isSmallPhone ? 14 : 16,
+        ),
+      ),
+      leading: IconButton(
+        onPressed: () {},
+        icon: Icon(
+          Icons.search,
+          color: Colors.grey,
+          size: isSmallPhone ? 20 : 24,
+        ),
+        padding: EdgeInsets.zero,
+        visualDensity: VisualDensity.compact,
+      ),
+    );
+  }
+
+  // Individual tab with icon and text
+  Widget _buildTab(
+      IconData icon, String text, bool isSmallPhone, Color? iconColor) {
+    return Tab(
+      height: isSmallPhone ? 32 : 40,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: isSmallPhone ? 16 : 18,
+            color: iconColor,
+          ),
+          SizedBox(width: isSmallPhone ? 4 : 8),
+          Text(
+            text,
+            style: TextStyle(
+              fontSize: isSmallPhone ? 14 : 16,
+            ),
+          ),
+        ],
       ),
     );
   }
