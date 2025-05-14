@@ -8,7 +8,6 @@ import 'package:innovator/screens/Course/digitalmarketing.dart';
 import 'package:innovator/screens/Course/illustration_screen.dart';
 import 'package:innovator/screens/Course/uiux.dart';
 import 'package:innovator/screens/Course/web_development.dart';
-import 'package:innovator/screens/Profile/profile_page.dart';
 import 'package:innovator/widget/FloatingMenuwidget.dart';
 
 

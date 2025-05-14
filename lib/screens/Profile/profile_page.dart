@@ -569,6 +569,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                         },
                         onUnfollowSuccess: () {
                           // Refresh after unfollow
+                          
                           setState(() {
                             _profileFuture = UserProfileService.getUserProfile();
                           });

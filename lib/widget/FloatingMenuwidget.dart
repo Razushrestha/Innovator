@@ -1,5 +1,4 @@
 import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:innovator/innovator_home.dart';
@@ -93,9 +92,9 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
   void _handleIconPress(String action, BuildContext context) {
     switch (action) {
       case 'navigate_golf':
-        Navigator.push(
+        Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => Homepage()),
+          MaterialPageRoute(builder: (context) => Homepage()),
           
         );
         break;
@@ -111,7 +110,7 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
         break;
 
       case 'add_photo':
-        Navigator.push(
+        Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => CreatePostScreen()),
           

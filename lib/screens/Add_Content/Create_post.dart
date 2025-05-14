@@ -34,9 +34,9 @@ class _CreatePostScreenState extends State<CreatePostScreen>
   late Animation<double> _animation;
 
   // Post type selection
-  String _selectedPostType = 'innovation';
+  String _selectedPostType = 'Innovation';
   final List<Map<String, dynamic>> _postTypes = [
-    {'id': 'innovation', 'name': 'Innovation', 'icon': Icons.lightbulb_outline},
+    {'id': 'Innovation', 'name': 'Innovation', 'icon': Icons.lightbulb_outline},
     {'id': 'idea', 'name': 'Idea', 'icon': Icons.tips_and_updates},
     {'id': 'project', 'name': 'Project', 'icon': Icons.rocket_launch},
     {'id': 'question', 'name': 'Question', 'icon': Icons.help_outline},
@@ -73,7 +73,7 @@ class _CreatePostScreenState extends State<CreatePostScreen>
     // Start animation when description changes or files are uploaded
     _descriptionController.addListener(_updateButtonState);
   }
-
+  // Listen to changes in the description field and update button state
   // Update button state whenever description or uploaded files change
   void _updateButtonState() {
     if (_isPostButtonEnabled) {
@@ -216,7 +216,7 @@ class _CreatePostScreenState extends State<CreatePostScreen>
         Uri.parse('http://182.93.94.210:3064/api/v1/user-profile'),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer $authToken',
+          'authorization': 'Bearer $authToken',
         },
       );
 
@@ -272,7 +272,10 @@ class _CreatePostScreenState extends State<CreatePostScreen>
 
       // Create post body with selected type
       final body = {
-        'type': _selectedPostType,
+        'type': _postTypes.firstWhere(
+          (type) => type['id'] == _selectedPostType,
+          orElse: () => _postTypes[0],
+        )['id'],
         'status': _descriptionController.text,
         'description': _descriptionController.text,
         'files': _uploadedFiles.isEmpty ? [] : _uploadedFiles,
@@ -425,14 +428,12 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         CircleAvatar(
-                          radius: 40,
-                          backgroundColor: Colors.grey[200],
-                          backgroundImage:
-                              picturePath != null
-                                  ? NetworkImage('$baseUrl$picturePath')
-                                  : const Icon(Icons.person, size: 40)
-                                      as ImageProvider,
-                        ),
+  radius: 40,
+  backgroundColor: Colors.grey[200],
+  backgroundImage: picturePath != null
+      ? NetworkImage('$baseUrl$picturePath')
+      : AssetImage('assets/images/person.png')
+),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(

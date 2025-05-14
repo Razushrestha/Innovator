@@ -63,57 +63,102 @@ class _LoginPageState extends State<LoginPage> {
     log('API Response: ${response.statusCode} - ${response.body}');
 
     if (response.statusCode == 200) {
-      final responseData = jsonDecode(response.body);
-      
-      // More detailed token extraction logic
+      // Parse response with proper error handling
+      Map<String, dynamic>? responseData;
+      try {
+        responseData = jsonDecode(response.body) as Map<String, dynamic>?;
+      } catch (e) {
+        log('Error parsing response: $e');
+        Dialogs.showSnackbar(context, 'Invalid response from server');
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
+
+      if (responseData == null) {
+        Dialogs.showSnackbar(context, 'Empty response from server');
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // Extract and validate token
       String? token;
       
       // Check various possible locations for the token
-      if (responseData['token'] != null) {
+      if (responseData['token'] is String) {
         token = responseData['token'];
-      } else if (responseData['access_token'] != null) {
+      } else if (responseData['access_token'] is String) {
         token = responseData['access_token'];
-      } else if (responseData['data'] != null && responseData['data']['token'] != null) {
+      } else if (responseData['data'] is Map && responseData['data']?['token'] is String) {
         token = responseData['data']['token'];
-      } else if (responseData['authToken'] != null) {
+      } else if (responseData['authToken'] is String) {
         token = responseData['authToken'];
-      } else if (responseData['accessToken'] != null) {
+      } else if (responseData['accessToken'] is String) {
         token = responseData['accessToken'];
       }
 
       log('Extracted token: $token');
       
+      // Extract user data with null safety
+      Map<String, dynamic>? userData;
+      if (responseData['user'] is Map) {
+        userData = Map<String, dynamic>.from(responseData['user']);
+      } else if (responseData['data']?['user'] is Map) {
+        userData = Map<String, dynamic>.from(responseData['data']['user']);
+      }
+      
+      // Save token if available
       if (token != null && token.isNotEmpty) {
-        await AppData().setAuthToken(token);
-        
-        // Verify token was saved
-        final savedToken = await AppData().authToken;
-        log('Token saved verification: ${savedToken != null ? "Success" : "Failed"}');
-        
+        try {
+          await AppData().setAuthToken(token);
+          
+          // Verify token was saved
+          final savedToken = await AppData().authToken;
+          log('Token saved verification: ${savedToken != null ? "Success" : "Failed"}');
+        } catch (e) {
+          log('Error saving token: $e');
+          // Continue anyway - we might still want to save user data
+        }
+      } else {
+        log('Token not found in response. Full response: ${response.body}');
+      }
+      
+      // Save user data if available
+      if (userData != null) {
+        try {
+          await AppData().setCurrentUser(userData);
+          log('User data saved successfully');
+        } catch (e) {
+          log('Error saving user data: $e');
+          // If this is critical, we might want to show a dialog here
+        }
+      }
+      
+      // Navigate to home page if we have either token or user data
+      if ((token != null && token.isNotEmpty) || userData != null) {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => Homepage()),
         );
       } else {
-        log('Token not found in response. Full response: ${response.body}');
-        Dialogs.showSnackbar(context, 'Login successful but no token received');
-        
-        // As a fallback, check if there's user data that might indicate success
-        if (responseData['user'] != null || responseData['data'] != null) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => LoginPage()),
-          );
-        } else {
-          Dialogs.showSnackbar(context, 'Login failed - no token or user data received');
-        }
+        Dialogs.showSnackbar(context, 'Login response missing required data');
       }
     } else {
-      final responseData = jsonDecode(response.body);
-      final message = responseData['message'] ?? 
-                     responseData['error'] ?? 
-                     'Login failed with status ${response.statusCode}';
-      Dialogs.showSnackbar(context, message);
+      // Handle error response
+      Map<String, dynamic>? responseData;
+      try {
+        responseData = jsonDecode(response.body) as Map<String, dynamic>?;
+      } catch (e) {
+        log('Error parsing error response: $e');
+      }
+      
+      final message = responseData?['message'] ?? 
+                      responseData?['error'] ?? 
+                      'Login failed with status ${response.statusCode}';
+      Dialogs.showSnackbar(context, message.toString());
     }
   } catch (e) {
     log('Login error: $e');

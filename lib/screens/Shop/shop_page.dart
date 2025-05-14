@@ -37,6 +37,9 @@ class _ShopPageState extends State<ShopPage>
   final int _pageSize = 10;
   // Track products being added to cart
   Map<String, bool> _addingToCart = {};
+  
+  // Add flag to check if widget is mounted
+  bool _isMounted = true;
 
   @override
   void initState() {
@@ -53,6 +56,8 @@ class _ShopPageState extends State<ShopPage>
   Future<void> _loadProducts() async {
     if (_isLoading || !_hasMore) return;
 
+    if (!_isMounted) return;
+    
     setState(() {
       _isLoading = true;
       _isError = false;
@@ -63,7 +68,7 @@ class _ShopPageState extends State<ShopPage>
       final headers = {
         'Content-Type': 'application/json',
         if (_appData.authToken != null)
-          'Authorization': 'Bearer ${_appData.authToken}',
+          'authorization': 'Bearer ${_appData.authToken}',
       };
 
       developer.log(
@@ -86,6 +91,8 @@ class _ShopPageState extends State<ShopPage>
             },
           );
 
+      if (!_isMounted) return;
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
 
@@ -93,6 +100,8 @@ class _ShopPageState extends State<ShopPage>
           final newProducts = data['data'] as List;
           developer.log('Received ${newProducts.length} products');
 
+          if (!_isMounted) return;
+          
           setState(() {
             _products.addAll(newProducts);
             _currentPage++;
@@ -101,11 +110,15 @@ class _ShopPageState extends State<ShopPage>
                 _pageSize; // If we got fewer items than requested, we've reached the end
           });
         } else {
+          if (!_isMounted) return;
+          
           setState(() {
             _hasMore = false;
           });
         }
       } else {
+        if (!_isMounted) return;
+        
         setState(() {
           _isError = true;
           _errorMessage = 'Server error: ${response.statusCode}';
@@ -113,6 +126,8 @@ class _ShopPageState extends State<ShopPage>
         _showErrorSnackbar('Failed to load products: ${response.statusCode}');
       }
     } catch (e) {
+      if (!_isMounted) return;
+      
       setState(() {
         _isError = true;
         _errorMessage = e.toString();
@@ -120,18 +135,23 @@ class _ShopPageState extends State<ShopPage>
       developer.log('Error loading products: $e');
       _showErrorSnackbar('Error: ${e.toString()}');
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (_isMounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
-  // Add to cart function
+  // Add to cart function - Fixed to handle deactivated widget issue
   Future<void> _addToCart(
     String productId,
     double price, {
     int quantity = 1,
   }) async {
+    // Store context reference locally before async operations
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    
     // Validate authentication
     if (_appData.authToken == null) {
       _showErrorSnackbar('Please log in to add items to your cart');
@@ -146,6 +166,8 @@ class _ShopPageState extends State<ShopPage>
     final String productName = product['name'] ?? 'Unknown Product';
 
     // Set loading state for this product
+    if (!_isMounted) return;
+    
     setState(() {
       _addingToCart[productId] = true;
     });
@@ -153,7 +175,7 @@ class _ShopPageState extends State<ShopPage>
     try {
       final headers = {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer ${_appData.authToken}',
+        'authorization': 'Bearer ${_appData.authToken}',
       };
 
       developer.log('Adding product $productId ($productName) to cart');
@@ -178,35 +200,49 @@ class _ShopPageState extends State<ShopPage>
             },
           );
 
+      // Check if widget is still mounted before updating UI
+      if (!_isMounted) return;
+
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = json.decode(response.body);
 
         if (data['success'] == true) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('$productName added to cart'),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 2),
-            ),
-          );
+          // Use safely stored context reference
+          if (_isMounted) {
+            scaffoldMessenger.showSnackBar(
+              SnackBar(
+                content: Text('$productName added to cart'),
+                backgroundColor: Colors.green,
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
         } else {
-          _showErrorSnackbar(
-            data['message'] ?? 'Failed to add $productName to cart',
-          );
+          if (_isMounted) {
+            _showErrorSnackbar(
+              data['message'] ?? 'Failed to add $productName to cart',
+            );
+          }
         }
       } else {
-        _showErrorSnackbar(
-          'Failed to add $productName to cart: ${response.statusCode}',
-        );
+        if (_isMounted) {
+          _showErrorSnackbar(
+            'Failed to add $productName to cart: ${response.statusCode}',
+          );
+        }
       }
     } catch (e) {
       developer.log('Error adding $productName to cart: $e');
-      _showErrorSnackbar('Error adding $productName: ${e.toString()}');
+      if (_isMounted) {
+        _showErrorSnackbar('Error adding $productName: ${e.toString()}');
+      }
     } finally {
-      // Clear loading state
-      setState(() {
-        _addingToCart.remove(productId);
-      });
+      // Clear loading state if widget is still mounted
+      if (_isMounted) {
+        setState(() {
+          _addingToCart.remove(productId);
+        });
+      }
     }
   }
 
@@ -219,9 +255,11 @@ class _ShopPageState extends State<ShopPage>
   }
 
   void _showErrorSnackbar(String message) {
+    if (!_isMounted) return;
+    
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message),
+        content: Text(message), 
         backgroundColor: Colors.red,
         duration: const Duration(seconds: 4),
         action: SnackBarAction(
@@ -234,6 +272,8 @@ class _ShopPageState extends State<ShopPage>
   }
 
   Future<void> _refreshProducts() async {
+    if (!_isMounted) return;
+    
     setState(() {
       _products.clear();
       _currentPage = 0;
@@ -244,6 +284,7 @@ class _ShopPageState extends State<ShopPage>
 
   @override
   void dispose() {
+    _isMounted = false;
     _scrollController.dispose();
     super.dispose();
   }
@@ -251,64 +292,40 @@ class _ShopPageState extends State<ShopPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      
-      key: _scaffoldKey, // Add the scaffold key here
-
+      key: _scaffoldKey,
       body: Stack(
         children: [
-          
           _buildBody(),
           FloatingMenuWidget(scaffoldKey: _scaffoldKey),
-          // Inside the Stack in your build method, replace the current Positioned widget with this:
-Positioned(
-    top: MediaQuery.of(context).size.height * 0.01, // Adjusts to different status bar heights
-  right: MediaQuery.of(context).size.width * 0.05, // 5% from right edge
-  child: ShoppingCartBadge(
-    onPressed: () {
-
-      Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => CartScreen()), (route) => false).then((_) {
-        setState(() {});
-      });
-     
-    },
-    // You can also make the badge size responsive
-    badgeColor: Colors.red,
-    iconColor: Colors.black,
-    // Optional: make icon size responsive based on screen width
-    // iconSize: MediaQuery.of(context).size.width * 0.07, // Add this parameter to your ShoppingCartBadge
-  ),
-),
+          Positioned(
+            top: MediaQuery.of(context).size.height * 0.01,
+            right: MediaQuery.of(context).size.width * 0.05,
+            child: ShoppingCartBadge(
+              onPressed: () {
+                Navigator.push(
+                  context, 
+                  MaterialPageRoute(builder: (_) => CartScreen())
+                ).then((_) {
+                  if (_isMounted) {
+                    setState(() {});
+                  }
+                });
+              },
+              badgeColor: Colors.red,
+              iconColor: Colors.black,
+            ),
+          ),
         ],
       ),
     );
   }
 
-  /*
-  ShoppingCartBadge(
-      onPressed: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const CartScreen()),
-        ).then((_) {
-          // Refresh the badge count when returning from cart screen
-          setState(() {
-            // This will trigger a rebuild of the widget
-          });
-        });
-      },
-      badgeColor: Colors.red, // Optional: customize badge color
-      iconColor: Colors.black , // Optional: customize icon color
-    ),
-  */
-
   Widget _buildBody() {
-
     if (_isError && _products.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            
             const Icon(Icons.error_outline, color: Colors.red, size: 48),
             const SizedBox(height: 16),
             Text(_errorMessage ?? 'Failed to load products'),

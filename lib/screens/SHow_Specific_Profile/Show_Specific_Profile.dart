@@ -1,46 +1,44 @@
 import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:http/http.dart' as http;
 import 'package:innovator/App_data/App_data.dart';
 import 'package:innovator/screens/Follow/follow_Button.dart';
 import 'package:flutter/services.dart';
-import 'package:innovator/screens/Profile/profile_page.dart';
-import 'package:innovator/screens/SHow_Specific_Profile/User_Image_Gallery.dart';
-import 'package:innovator/widget/FloatingMenuwidget.dart';
+import 'package:innovator/screens/show_Specific_Profile/User_Image_Gallery.dart';
+import 'package:innovator/screens/show_Specific_Profile/show_Specific_followers.dart';
 
 class SpecificUserProfilePage extends StatefulWidget {
   final String userId;
 
-  const SpecificUserProfilePage({Key? key, required this.userId}) : super(key: key);
+  const SpecificUserProfilePage({Key? key, required this.userId})
+    : super(key: key);
 
   @override
-  _SpecificUserProfilePageState createState() => _SpecificUserProfilePageState();
+  _SpecificUserProfilePageState createState() =>
+      _SpecificUserProfilePageState();
 }
 
-class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with SingleTickerProviderStateMixin {
+class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
+    with SingleTickerProviderStateMixin {
   late Future<Map<String, dynamic>> _profileFuture;
   final AppData _appData = AppData();
   bool _isRefreshing = false;
   late TabController _tabController;
-  int _currentPageFollowers = 1;
-  int _currentPageFollowing = 1;
-  final int _itemsPerPage = 10;
 
   @override
   void initState() {
     super.initState();
-        _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 2, vsync: this);
     _profileFuture = _fetchUserProfile();
   }
-
-  
 
   Future<Map<String, dynamic>> _fetchUserProfile() async {
     try {
       final response = await http.get(
-        Uri.parse('http://182.93.94.210:3064/api/v1/stalk-profile/${widget.userId}'),
+        Uri.parse(
+          'http://182.93.94.210:3064/api/v1/stalk-profile/${widget.userId}',
+        ),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -62,7 +60,7 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
     setState(() {
       _isRefreshing = true;
     });
-    
+
     try {
       _profileFuture = _fetchUserProfile();
       await _profileFuture;
@@ -90,7 +88,7 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDarkMode = theme.brightness == Brightness.dark;
-    
+
     return Scaffold(
       backgroundColor: isDarkMode ? Colors.black : Colors.grey[50],
       extendBodyBehindAppBar: true,
@@ -99,13 +97,17 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
         elevation: 0,
         systemOverlayStyle: SystemUiOverlayStyle(
           statusBarColor: Colors.transparent,
-          statusBarIconBrightness: isDarkMode ? Brightness.light : Brightness.dark,
+          statusBarIconBrightness:
+              isDarkMode ? Brightness.light : Brightness.dark,
         ),
         leading: IconButton(
           icon: Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: isDarkMode ? Colors.grey[800]!.withOpacity(0.7) : Colors.white.withOpacity(0.7),
+              color:
+                  isDarkMode
+                      ? Colors.grey[800]!.withOpacity(0.7)
+                      : Colors.white.withOpacity(0.7),
               shape: BoxShape.circle,
             ),
             child: Icon(
@@ -120,7 +122,10 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
             icon: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: isDarkMode ? Colors.grey[800]!.withOpacity(0.7) : Colors.white.withOpacity(0.7),
+                color:
+                    isDarkMode
+                        ? Colors.grey[800]!.withOpacity(0.7)
+                        : Colors.white.withOpacity(0.7),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -147,10 +152,9 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
         child: FutureBuilder<Map<String, dynamic>>(
           future: _profileFuture,
           builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting && !_isRefreshing) {
-              return const Center(
-                child: CircularProgressIndicator(),
-              );
+            if (snapshot.connectionState == ConnectionState.waiting &&
+                !_isRefreshing) {
+              return const Center(child: CircularProgressIndicator());
             } else if (snapshot.hasError) {
               return _buildErrorView(snapshot.error.toString());
             } else if (!snapshot.hasData) {
@@ -160,7 +164,6 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
             final profileData = snapshot.data!;
             return CustomScrollView(
               slivers: [
-                
                 SliverToBoxAdapter(
                   child: _buildProfileHeader(profileData, context),
                 ),
@@ -173,17 +176,13 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
                 SliverToBoxAdapter(
                   child: _buildAdditionalInfo(profileData, context),
                 ),
-                const SliverToBoxAdapter(
-                  child: SizedBox(height: 30),
-                ),
-                 SliverToBoxAdapter(
+                const SliverToBoxAdapter(child: SizedBox(height: 30)),
+                SliverToBoxAdapter(
                   child: UserImageGallery(
                     userEmail: profileData['email'] ?? widget.userId,
                   ),
                 ),
-                const SliverToBoxAdapter(
-                  child: SizedBox(height: 30),
-                ),
+                const SliverToBoxAdapter(child: SizedBox(height: 30)),
               ],
             );
           },
@@ -192,11 +191,14 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
     );
   }
 
-  Widget _buildProfileHeader(Map<String, dynamic> profileData, BuildContext context) {
+  Widget _buildProfileHeader(
+    Map<String, dynamic> profileData,
+    BuildContext context,
+  ) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final primaryColor = Theme.of(context).primaryColor;
     final headerHeight = MediaQuery.of(context).size.height * 0.35;
-    
+
     return Container(
       height: headerHeight,
       decoration: BoxDecoration(
@@ -211,7 +213,6 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
       ),
       child: Stack(
         children: [
-          
           // Background decorations
           Positioned(
             top: -50,
@@ -237,7 +238,7 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
               ),
             ),
           ),
-          
+
           // Profile content
           Align(
             alignment: Alignment.center,
@@ -245,7 +246,7 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const SizedBox(height: 20),
-                
+
                 // Profile picture
                 Container(
                   decoration: BoxDecoration(
@@ -262,24 +263,31 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
                     tag: 'profile_picture_${profileData['_id']}',
                     child: CircleAvatar(
                       radius: 65,
-                      backgroundColor: isDarkMode ? const Color.fromARGB(255, 184, 31, 31) : Colors.white,
-                      backgroundImage: profileData['picture'] != null && profileData['picture'].isNotEmpty
-                          ? CachedNetworkImageProvider(
-                              'http://182.93.94.210:3064${profileData['picture']}',
-                            )
-                          : null,
-                      child: profileData['picture'] == null || profileData['picture'].isEmpty
-                          ? Text(
-                              profileData['name']?[0] ?? '?',
-                              style: const TextStyle(fontSize: 40),
-                            )
-                          : null,
+                      backgroundColor:
+                          isDarkMode
+                              ? const Color.fromARGB(255, 184, 31, 31)
+                              : Colors.white,
+                      backgroundImage:
+                          profileData['picture'] != null &&
+                                  profileData['picture'].isNotEmpty
+                              ? CachedNetworkImageProvider(
+                                'http://182.93.94.210:3064${profileData['picture']}',
+                              )
+                              : null,
+                      child:
+                          profileData['picture'] == null ||
+                                  profileData['picture'].isEmpty
+                              ? Text(
+                                profileData['name']?[0] ?? '?',
+                                style: const TextStyle(fontSize: 40),
+                              )
+                              : null,
                     ),
                   ),
                 ),
-                
+
                 const SizedBox(height: 15),
-                
+
                 // Name
                 Text(
                   profileData['name'] ?? 'No name',
@@ -296,14 +304,19 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
                     ],
                   ),
                 ),
-                
+
                 const SizedBox(height: 10),
-                
+
                 // Level badge
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
-                    color: _getLevelColor(profileData['level']).withOpacity(0.9),
+                    color: _getLevelColor(
+                      profileData['level'],
+                    ).withOpacity(0.9),
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
@@ -323,7 +336,8 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        profileData['level']?.toString().toUpperCase() ?? 'NO LEVEL',
+                        profileData['level']?.toString().toUpperCase() ??
+                            'NO LEVEL',
                         style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
@@ -340,13 +354,17 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
     );
   }
 
-  Widget _buildProfileInfo(Map<String, dynamic> profileData, BuildContext context) {
+  Widget _buildProfileInfo(
+    Map<String, dynamic> profileData,
+    BuildContext context,
+  ) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color.fromARGB(255, 141, 12, 12) : Colors.white,
+        color:
+            isDarkMode ? const Color.fromARGB(255, 141, 12, 12) : Colors.white,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
         boxShadow: [
           BoxShadow(
@@ -403,9 +421,9 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
                 ],
               ),
             ),
-            
+
           const SizedBox(height: 30),
-          
+
           // Stats row
           Container(
             padding: const EdgeInsets.symmetric(vertical: 15),
@@ -441,7 +459,7 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
                     VerticalDivider(
                       color: isDarkMode ? Colors.grey[700] : Colors.grey[300],
                       thickness: 1,
-                      width: 1, 
+                      width: 1,
                     ),
                     _buildStatItem(
                       'Friends',
@@ -459,231 +477,41 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
       ),
     );
   }
-
-
-  //  void _showFollowersFollowingDialog(BuildContext context) {
-  //   showDialog(
-  //     context: context,
-  //     builder: (context) {
-  //       return Dialog(
-  //         insetPadding: EdgeInsets.all(16),
-  //         child: Container(
-  //           padding: EdgeInsets.all(16),
-  //           constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.7),
-  //           child: Column(
-  //             mainAxisSize: MainAxisSize.min,
-  //             children: [
-  //               TabBar(
-  //                 controller: _tabController,
-  //                 labelColor: Color.fromRGBO(235, 111, 70, 1),
-  //                 unselectedLabelColor: Colors.grey,
-  //                 tabs: [
-  //                   Tab(text: 'Followers'),
-  //                   Tab(text: 'Following'),
-  //                 ],
-  //               ),
-  //               Expanded(
-  //                 child: TabBarView(
-  //                   controller: _tabController,
-  //                   children: [
-  //                     _buildFollowersList(),
-  //                     _buildFollowingList(),
-  //                   ],
-  //                 ),
-  //               ),
-  //             ],
-  //           ),
-  //         ),
-  //       );
-  //     },
-  //   );
-  // }
-
-  // Widget _buildFollowersList() {
-  //   return FutureBuilder<List<FollowerFollowing>>(
-  //     future: UserProfileService.getFollowers(_currentPageFollowers),
-  //     builder: (context, snapshot) {
-  //       if (snapshot.connectionState == ConnectionState.waiting) {
-  //         return Center(child: CircularProgressIndicator());
-  //       } else if (snapshot.hasError) {
-  //         return Center(child: Text('Error loading followers: ${snapshot.error}'));
-  //       } else if (snapshot.hasData && snapshot.data!.isNotEmpty) {
-  //         final followers = snapshot.data!;
-  //         return Column(
-  //           children: [
-  //             Expanded(
-  //               child: ListView.builder(
-  //                 itemCount: followers.length,
-  //                 itemBuilder: (context, index) {
-  //                   final follower = followers[index];
-  //                   return ListTile(
-  //                     leading: CircleAvatar(
-  //                       radius: 24,
-  //                       backgroundColor: Color.fromRGBO(235, 111, 70, 0.2),
-  //                       backgroundImage: follower.picture != null
-  //                           ? NetworkImage(
-  //                               'http://182.93.94.210:3064${follower.picture}')
-  //                           : null,
-  //                       child: follower.picture == null
-  //                           ? Icon(Icons.person,
-  //                               color: Color.fromRGBO(235, 111, 70, 1))
-  //                           : null,
-  //                     ),
-  //                     title: GestureDetector(child: Text(follower.name), onTap: (){
-  //                       Navigator.push(
-  //                         context,
-  //                         MaterialPageRoute(
-  //                           builder: (context) => SpecificUserProfilePage(userId: follower.id,),
-  //                         ),
-  //                       );
-  //                     },),
-  //                     subtitle: Text(follower.email),
-  //                   );
-  //                 },
-  //               ),
-  //             ),
-  //             Row(
-  //               mainAxisAlignment: MainAxisAlignment.center,
-  //               children: [
-  //                 IconButton(
-  //                   icon: Icon(Icons.arrow_back),
-  //                   onPressed: _currentPageFollowers > 1
-  //                       ? () {
-  //                           setState(() {
-  //                             _currentPageFollowers--;
-  //                           });
-  //                         }
-  //                       : null,
-  //                 ),
-  //                 Text('Page $_currentPageFollowers'),
-  //                 IconButton(
-  //                   icon: Icon(Icons.arrow_forward),
-  //                   onPressed: followers.length == _itemsPerPage
-  //                       ? () {
-  //                           setState(() {
-  //                             _currentPageFollowers++;
-  //                           });
-  //                         }
-  //                       : null,
-  //                 ),
-  //               ],
-  //             ),
-  //           ],
-  //         );
-  //       } else {
-  //         return Center(child: Text('No followers found'));
-  //       }
-  //     },
-  //   );
-  // }
-
-  // Widget _buildFollowingList() {
-  //   return FutureBuilder<List<FollowerFollowing>>(
-  //     future: UserProfileService.getFollowing(_currentPageFollowing),
-  //     builder: (context, snapshot) {
-  //       if (snapshot.connectionState == ConnectionState.waiting) {
-  //         return Center(child: CircularProgressIndicator());
-  //       } else if (snapshot.hasError) {
-  //         return Center(child: Text('Error loading following: ${snapshot.error}'));
-  //       } else if (snapshot.hasData && snapshot.data!.isNotEmpty) {
-  //         final following = snapshot.data!;
-  //         return Column(
-  //           children: [
-  //             Expanded(
-  //               child: ListView.builder(
-  //                 itemCount: following.length,
-  //                 itemBuilder: (context, index) {
-  //                   final follow = following[index];
-  //                   return ListTile(
-  //                     leading: CircleAvatar(
-  //                       radius: 24,
-  //                       backgroundColor: Color.fromRGBO(235, 111, 70, 0.2),
-  //                       backgroundImage: follow.picture != null
-  //                           ? NetworkImage(
-  //                               'http://182.93.94.210:3064${follow.picture}')
-  //                           : null,
-  //                       child: follow.picture == null
-  //                           ? Icon(Icons.person,
-  //                               color: Color.fromRGBO(235, 111, 70, 1))
-  //                           : null,
-  //                     ),
-  //                     title: GestureDetector(child: Text(follow.name), onTap: (){Navigator.push(context, MaterialPageRoute(builder: (_) => SpecificUserProfilePage(userId: follow.id)));},),
-  //                     subtitle: Text(follow.email),
-  //                   );
-  //                 },
-  //               ),
-  //             ),
-  //             Row(
-  //               mainAxisAlignment: MainAxisAlignment.center,
-  //               children: [
-  //                 IconButton(
-  //                   icon: Icon(Icons.arrow_back),
-  //                   onPressed: _currentPageFollowing > 1
-  //                       ? () {
-  //                           setState(() {
-  //                             _currentPageFollowing--;
-  //                           });
-  //                         }
-  //                       : null,
-  //                 ),
-  //                 Text('Page $_currentPageFollowing'),
-  //                 IconButton(
-  //                   icon: Icon(Icons.arrow_forward),
-  //                   onPressed: following.length == _itemsPerPage
-  //                       ? () {
-  //                           setState(() {
-  //                             _currentPageFollowing++;
-  //                           });
-  //                         }
-  //                       : null,
-  //                 ),
-  //               ],
-  //             ),
-  //           ],
-  //         );
-  //       } else {
-  //         return Center(child: Text('Not following anyone yet'));
-  //       }
-  //     },
-  //   );
-  // }
-
-  Widget _buildStatItem(String value, String label, IconData icon, BuildContext context, {bool special = false}) {
+  Widget _buildStatItem(
+    String value,
+    String label,
+    IconData icon,
+    BuildContext context, {
+    bool special = false,
+  }) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final primaryColor = Theme.of(context).primaryColor;
-    
+
     return Expanded(
       child: GestureDetector(
         onTap: () {
           // Navigate to followers/following list or show friends
           if (label == 'Followers') {
-          //_tabController.index = 1;
-
-            // You can implement navigation to followers/following list here
-           //_showFollowersFollowingDialog(context);
-          }
-          else if (label == 'Following') {
+            showFollowersFollowingDialog(context, widget.userId);
+          } else if (label == 'Following') {
             // Show friends list
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Hello Ronit')),
-            );
+            showFollowersFollowingDialog(context, widget.userId);
           }
         },
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              icon,
-              color: special ? Colors.green : primaryColor,
-              size: 20,
-            ),
+            Icon(icon, color: special ? Colors.green : primaryColor, size: 20),
             const SizedBox(height: 8),
             Text(
               special ? value : value,
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: special ? Colors.green : (isDarkMode ? Colors.white : Colors.black),
+                color:
+                    special
+                        ? Colors.green
+                        : (isDarkMode ? Colors.white : Colors.black),
               ),
             ),
             Text(
@@ -699,9 +527,12 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
     );
   }
 
-  Widget _buildActionButtons(Map<String, dynamic> profileData, BuildContext context) {
+  Widget _buildActionButtons(
+    Map<String, dynamic> profileData,
+    BuildContext context,
+  ) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
       color: isDarkMode ? Colors.grey[900] : Colors.white,
@@ -718,9 +549,9 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
               onUnfollowSuccess: () => _refreshProfile(),
             ),
           ),
-          
+
           const SizedBox(height: 16),
-          
+
           // Message Button
           SizedBox(
             width: double.infinity,
@@ -748,9 +579,12 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
     );
   }
 
-  Widget _buildAdditionalInfo(Map<String, dynamic> profileData, BuildContext context) {
+  Widget _buildAdditionalInfo(
+    Map<String, dynamic> profileData,
+    BuildContext context,
+  ) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       color: isDarkMode ? Colors.grey[900] : Colors.white,
@@ -768,7 +602,7 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
               ),
             ),
           ),
-          
+
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -788,14 +622,19 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
                   context,
                   onTap: () {
                     // Copy email to clipboard
-                    Clipboard.setData(ClipboardData(text: profileData['email']));
+                    Clipboard.setData(
+                      ClipboardData(text: profileData['email']),
+                    );
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Email copied to clipboard')),
+                      const SnackBar(
+                        content: Text('Email copied to clipboard'),
+                      ),
                     );
                   },
                 ),
-                
-                if (profileData['phone'] != null && profileData['phone'].isNotEmpty)
+
+                if (profileData['phone'] != null &&
+                    profileData['phone'].isNotEmpty)
                   _buildInfoTile(
                     Icons.phone,
                     'Phone',
@@ -803,21 +642,26 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
                     context,
                     onTap: () {
                       // Copy phone to clipboard
-                      Clipboard.setData(ClipboardData(text: profileData['phone']));
+                      Clipboard.setData(
+                        ClipboardData(text: profileData['phone']),
+                      );
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Phone number copied to clipboard')),
+                        const SnackBar(
+                          content: Text('Phone number copied to clipboard'),
+                        ),
                       );
                     },
                   ),
-                
-                if (profileData['location'] != null && profileData['location'].isNotEmpty)
+
+                if (profileData['location'] != null &&
+                    profileData['location'].isNotEmpty)
                   _buildInfoTile(
                     Icons.location_on,
                     'Location',
                     profileData['location'],
                     context,
                   ),
-                
+
                 if (profileData['dob'] != null)
                   _buildInfoTile(
                     Icons.cake,
@@ -825,14 +669,14 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
                     _formatDate(profileData['dob']),
                     context,
                   ),
-                
+
                 _buildInfoTile(
                   Icons.update,
                   'Last Updated',
                   _formatDateTime(profileData['updatedAt']),
                   context,
                 ),
-                
+
                 _buildInfoTile(
                   Icons.fingerprint,
                   'User ID',
@@ -842,7 +686,9 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
                     // Copy ID to clipboard
                     Clipboard.setData(ClipboardData(text: profileData['_id']));
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('User ID copied to clipboard')),
+                      const SnackBar(
+                        content: Text('User ID copied to clipboard'),
+                      ),
                     );
                   },
                 ),
@@ -854,9 +700,15 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
     );
   }
 
-  Widget _buildInfoTile(IconData icon, String label, String value, BuildContext context, {VoidCallback? onTap}) {
+  Widget _buildInfoTile(
+    IconData icon,
+    String label,
+    String value,
+    BuildContext context, {
+    VoidCallback? onTap,
+  }) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
@@ -915,7 +767,7 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
   Widget _buildOptionsSheet() {
     final theme = Theme.of(context);
     final isDarkMode = theme.brightness == Brightness.dark;
-    
+
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 20),
       decoration: BoxDecoration(
@@ -934,7 +786,7 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
             ),
           ),
           const SizedBox(height: 20),
-          
+
           _buildOptionTile(
             icon: Icons.share,
             label: 'Share Profile',
@@ -966,10 +818,14 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
     );
   }
 
-  Widget _buildOptionTile({required IconData icon, required String label, required VoidCallback onTap}) {
+  Widget _buildOptionTile({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
     final theme = Theme.of(context);
     final isDarkMode = theme.brightness == Brightness.dark;
-    
+
     return ListTile(
       leading: Container(
         padding: const EdgeInsets.all(8),
@@ -979,9 +835,10 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
         ),
         child: Icon(
           icon,
-          color: label == 'Report User' || label == 'Block User' 
-              ? Colors.red 
-              : theme.primaryColor,
+          color:
+              label == 'Report User' || label == 'Block User'
+                  ? Colors.red
+                  : theme.primaryColor,
         ),
       ),
       title: Text(label),
@@ -992,46 +849,50 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
   void _showBlockConfirmationDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Block User'),
-        content: const Text('Are you sure you want to block this user? You will no longer see their content.'),
-        actions: [ 
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('CANCEL'),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Block User'),
+            content: const Text(
+              'Are you sure you want to block this user? You will no longer see their content.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('CANCEL'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(const SnackBar(content: Text('User blocked')));
+                },
+                child: const Text('BLOCK', style: TextStyle(color: Colors.red)),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('User blocked')),
-              );
-            },
-            child: const Text('BLOCK', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
     );
   }
 
   void _showReportDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Report User'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Please select a reason for reporting:'),
-            const SizedBox(height: 16),
-            _buildReportOption('Inappropriate content'),
-            _buildReportOption('Harassment or bullying'),
-            _buildReportOption('Spam or misleading'),
-            _buildReportOption('Other'),
-          ],
-        ),
-      ),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Report User'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Please select a reason for reporting:'),
+                const SizedBox(height: 16),
+                _buildReportOption('Inappropriate content'),
+                _buildReportOption('Harassment or bullying'),
+                _buildReportOption('Spam or misleading'),
+                _buildReportOption('Other'),
+              ],
+            ),
+          ),
     );
   }
 
@@ -1039,9 +900,9 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
     return InkWell(
       onTap: () {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Reported user for: $reason')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Reported user for: $reason')));
       },
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
@@ -1061,11 +922,7 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(
-            Icons.error_outline,
-            size: 80,
-            color: Colors.red,
-          ),
+          const Icon(Icons.error_outline, size: 80, color: Colors.red),
           const SizedBox(height: 16),
           Text(
             'Something went wrong',
@@ -1129,7 +986,7 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage> with 
       return dateString;
     }
   }
-  
+
   String _formatDateTime(String dateTimeString) {
     try {
       final dateTime = DateTime.parse(dateTimeString);

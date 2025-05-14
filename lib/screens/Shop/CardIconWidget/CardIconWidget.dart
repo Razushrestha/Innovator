@@ -10,7 +10,7 @@ class ShoppingCartBadge extends StatefulWidget {
   const ShoppingCartBadge({
     Key? key,
     required this.onPressed,
-    this.badgeColor = Colors.red,
+    this.badgeColor = Colors.green,
     this.iconColor,
   }) : super(key: key);
 

@@ -16,7 +16,7 @@ class ApiService {
       url,
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer ${appData.authToken}',
+        'authorization': 'Bearer ${appData.authToken}',
       },
     );
 

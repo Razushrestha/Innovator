@@ -20,18 +20,22 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Future<void> _initializeApp() async {
     // Initialize app data
-    await AppData().initialize();
+    final appData = AppData();
+    await appData.initialize();
     
     // Add a small delay to show the splash screen
-    await Future.delayed(const Duration(milliseconds: 5000));
+    await Future.delayed(const Duration(milliseconds: 2000));
     
     // Check if user exists (is authenticated)
-    if (AppData().isAuthenticated) {
+    if (appData.isAuthenticated) {
+      // Initialize socket connection if authenticated
+      //await _initializeSocketConnection(appData);
       _navigateToHome();
     } else {
       _navigateToLogin();
     }
   }
+
 
   void _navigateToHome() {
     Navigator.of(context).pushReplacement(
@@ -70,7 +74,7 @@ class _SplashScreenState extends State<SplashScreen> {
             children: [
               // Your app logo
               Image.asset(
-                'animation/splash_csreen.gif', // Replace with your logo path
+                'animation/splash_csreen.gif',
                 width: 400,
                 height: 400,
               ),

@@ -149,7 +149,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     try {
       final headers = {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer ${widget.authToken}',
+        'authorization': 'Bearer ${widget.authToken}',
       };
 
       developer.log('Adding product $productId to cart, quantity: $_quantity');
@@ -194,7 +194,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError ? Colors.red : Colors.green,
+        backgroundColor: isError ? Colors.green : Colors.red,
         duration: const Duration(seconds: 3),
       ),
     );

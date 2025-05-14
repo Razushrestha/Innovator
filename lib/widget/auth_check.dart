@@ -11,7 +11,7 @@ class AuthCheck extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Check if token exists
+    // Check if t oken exists
     if (AppData().isAuthenticated) {
       return child;
     } else {

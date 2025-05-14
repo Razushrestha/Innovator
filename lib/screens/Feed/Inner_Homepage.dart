@@ -10,9 +10,13 @@ import 'package:innovator/screens/Likes/content-Like-Button.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart';
 import 'package:innovator/screens/SHow_Specific_Profile/Show_Specific_Profile.dart';
+import 'package:innovator/screens/chatrrom/screen/chat_list_screen.dart';
+import 'package:innovator/screens/chatrrom/socket_service.dart';
 import 'package:innovator/screens/comment/JWT_Helper.dart';
 import 'package:innovator/screens/comment/comment_section.dart';
-import 'dart:io'; // For SocketException
+import 'dart:io';
+import 'package:provider/provider.dart';
+import 'package:lottie/lottie.dart'; // For SocketException
 
 // Enhanced Author model
 class Author {
@@ -216,7 +220,9 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
     super.initState();
     _initializeData();
     _scrollController.addListener(_scrollListener);
+
   }
+
 
   Future<void> _initializeData() async {
     // Wait for AppData to initialize if needed
@@ -289,8 +295,8 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
   }
 
   void _handleSuccessfulResponse(Map<String, dynamic> data) {
-    if (data.containsKey('data') && data['data'] is List) {
-      final List<dynamic> contentList = data['data'];
+    if (data.containsKey('data') && data['data'] ['contents'] is List) {
+      final List<dynamic> contentList = data['data'] ['contents'] as List;
       final List<FeedContent> newContents =
           contentList.map((item) => FeedContent.fromJson(item)).toList();
 
@@ -397,6 +403,8 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
 
   @override
   void dispose() {
+    final socketService = Provider.of<SocketService>(context, listen: false);
+    socketService.disconnect();
     _scrollController.dispose();
     super.dispose();
   }
@@ -425,16 +433,18 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
         ),
       ),
 floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          
-          // Add your action here
-          debugPrint('FloatingActionButton pressed!');
-          // You could show a dialog, navigate to a new screen, etc.
-        },
-        child: Image.asset(
-          'assets/images/message.gif', fit: BoxFit.fitHeight,),
-        tooltip: 'Message',
-      ),
+  onPressed: () {
+   Navigator.push(context, MaterialPageRoute(builder: (_) => ChatListScreen()));
+    debugPrint('FloatingActionButton pressed!');
+    // Add your action here
+  },
+  child:  Container(
+    height: 200,
+    width: 200,
+    child: Lottie.asset('animation/chaticon.json', )),
+  backgroundColor: Colors.transparent,
+  elevation: 100.0,
+    ),
     );
   }
 
@@ -697,7 +707,13 @@ class _FeedItemState extends State<FeedItem>
                 IconButton(
                   icon: const Icon(Icons.more_vert),
                   onPressed: () {
-                    _showQuickSuggestions(context);
+                    if(_isAuthorCurrentUser ()) {
+                      _showQuickSuggestions(context);
+                    } else {
+                      _showQuickspecificSuggestions(context);
+                     // _showQuickSuggestions(context);
+                    }
+                    
                   },
                 ),
               ],
@@ -830,6 +846,50 @@ class _FeedItemState extends State<FeedItem>
     );
   }
 
+  void _showQuickspecificSuggestions(BuildContext context) {
+    final RenderBox button = context.findRenderObject() as RenderBox;
+    final RenderBox overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox;
+
+    // Calculate position relative to the overlay
+    final RelativeRect position = RelativeRect.fromRect(
+      // Use the button's top-right corner as the reference point
+      Rect.fromPoints(
+        button.localToGlobal(
+          button.size.topRight(Offset(-40, 0)),
+          ancestor: overlay,
+        ),
+        button.localToGlobal(
+          button.size.topRight(Offset.zero),
+          ancestor: overlay,
+        ),
+      ),
+      Offset.zero & overlay.size,
+    );
+
+    showMenu<String>(
+      context: context,
+      position: position,
+      items: [
+        
+        const PopupMenuItem<String>(value: 'copy', child: Text('Copy content')),
+        const PopupMenuItem<String>(value: 'report', child: Text('Report')),
+      ],
+    ).then((value) {
+      if (value == null ) return;
+
+      switch (value) {
+       
+        case 'copy':
+          _copyContentToClipboard();
+          break;
+        case 'report':
+          _showReportDialog(context);
+          break;
+      }
+    });
+  }
+
   void _showQuickSuggestions(BuildContext context) {
     final RenderBox button = context.findRenderObject() as RenderBox;
     final RenderBox overlay =
@@ -869,7 +929,7 @@ class _FeedItemState extends State<FeedItem>
         const PopupMenuItem<String>(value: 'report', child: Text('Report')),
       ],
     ).then((value) {
-      if (value == null) return;
+      if (value == null ) return;
 
       switch (value) {
         case 'edit':
@@ -1417,7 +1477,7 @@ class FeedApiService {
       };
 
       if (authToken != null && authToken.isNotEmpty) {
-        headers['Authorization'] = 'Bearer $authToken';
+        headers['authorization'] = 'Bearer $authToken';
       }
 
       final response = await http.get(
@@ -1428,8 +1488,8 @@ class FeedApiService {
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
 
-        if (data.containsKey('data') && data['data'] is List) {
-          final List<dynamic> contentList = data['data'];
+        if (data.containsKey('data') && data['data'] ['contents'] is List) {
+          final List<dynamic> contentList = data['data']['contents'] as List;
           return contentList.map((item) => FeedContent.fromJson(item)).toList();
         }
       } else if (response.statusCode == 401) {
@@ -1463,5 +1523,3 @@ extension DateTimeExtension on DateTime {
     }
   }
 }
-
-// Create a new file: lib/services/app_data.dart
