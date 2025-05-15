@@ -1,20 +1,55 @@
+// First, let's debug the Courses class to identify the issue
+
+import 'dart:developer' as developer;
+
 class Courses {
   final String? error;
   final String message;
   final List<Data> data;
   final int status;
-  Courses(
-      {required this.error,
-      required this.message,
-      required this.data,
-      required this.status});
+  
+  Courses({
+    required this.error,
+    required this.message,
+    required this.data,
+    required this.status
+  });
+  
   factory Courses.fromJson(Map<String, dynamic> json) {
-    return Courses(
+    developer.log('Parsing Courses JSON: ${json.keys.join(', ')}');
+    
+    // Check if data exists and is a List
+    if (json['data'] == null) {
+      developer.log('Warning: data is null in the API response');
+      return Courses(
         error: json['error'],
-        message: json['message'],
-        data: List<Data>.from(json['data'].map((e) => Data.fromJson(e))),
-        status: json['status']);
+        message: json['message'] ?? '',
+        data: [],
+        status: json['status'] ?? 0
+      );
+    }
+    
+    // Safely handle data array conversion
+    List<Data> dataList = [];
+    try {
+      final dataJson = json['data'];
+      if (dataJson is List) {
+        dataList = dataJson.map((item) => Data.fromJson(item)).toList();
+      } else {
+        developer.log('Warning: data is not a List in the API response, it is a ${dataJson.runtimeType}');
+      }
+    } catch (e) {
+      developer.log('Error parsing data list: $e');
+    }
+    
+    return Courses(
+      error: json['error'],
+      message: json['message'] ?? '',
+      data: dataList,
+      status: json['status'] ?? 0
+    );
   }
+  
   Map<String, dynamic> toJson() {
     return {
       'error': error,
@@ -24,6 +59,8 @@ class Courses {
     };
   }
 }
+
+// No changes needed to the Data class or other models
 
 class Data {
   final String id;

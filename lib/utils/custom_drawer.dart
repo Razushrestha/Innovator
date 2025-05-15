@@ -5,6 +5,8 @@ import 'package:http/http.dart' as http;
 import 'package:innovator/App_data/App_data.dart';
 import 'package:innovator/Authorization/Login.dart';
 import 'package:innovator/screens/Course/homepage.dart';
+import 'package:innovator/screens/F&Q/F&Qscreen.dart';
+import 'package:innovator/screens/Privacy_Policy/privacy_screen.dart';
 import 'package:innovator/screens/Profile/profile_page.dart';
 
 class CustomDrawer extends StatefulWidget {
@@ -124,8 +126,8 @@ class _CustomDrawerState extends State<CustomDrawer> {
           _buildDrawerTile(Icons.star, 'Messages', () {}),
           _buildDrawerTile(Icons.message, 'Profile', () {Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => ProviderScope(child: UserProfileScreen())), (route) => false);}),
           _buildDrawerTile(Icons.settings, 'Settings', () {}),
-          _buildDrawerTile(Icons.privacy_tip_rounded, 'Privacy&Policy', () {}),
-          _buildDrawerTile(Icons.question_answer_rounded, 'F&Q', () {}),
+          _buildDrawerTile(Icons.privacy_tip_rounded, 'Privacy&Policy', () {Navigator.push(context, MaterialPageRoute(builder: (_) => ProviderScope(child: PrivacyPolicy())));}),
+          _buildDrawerTile(Icons.question_answer_rounded, 'F&Q', () {Navigator.push(context, MaterialPageRoute(builder: (_) => FAQScreen()));}),
           const Divider(thickness: 1, indent: 20, endIndent: 20),
           _buildDrawerTile(
             Icons.logout, 

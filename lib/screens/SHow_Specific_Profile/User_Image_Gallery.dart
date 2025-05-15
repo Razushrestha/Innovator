@@ -1,8 +1,11 @@
-import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'package:innovator/App_data/App_data.dart';
+import 'dart:async';
 
 class UserImageGallery extends StatefulWidget {
   final String userEmail;
@@ -21,9 +24,13 @@ class _UserImageGalleryState extends State<UserImageGallery> {
   List<String> _images = [];
   bool _isLoading = true;
   String? _error;
-  int _page = 0;
+  String? _lastId; // Track last content ID for pagination
   bool _hasMoreImages = true;
   final ScrollController _scrollController = ScrollController();
+  Timer? _debounce; // For debouncing scroll listener
+  int _retryCount = 0; // For retry mechanism
+  static const int _maxRetries = 3;
+  static const double _loadTriggerThreshold = 500.0;
 
   @override
   void initState() {
@@ -34,23 +41,30 @@ class _UserImageGalleryState extends State<UserImageGallery> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
 
   void _scrollListener() {
-    if (_scrollController.position.pixels == 
-        _scrollController.position.maxScrollExtent) {
-      _loadImages();
-    }
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+    _debounce = Timer(Duration(milliseconds: 200), () {
+      if (!_isLoading &&
+          _hasMoreImages &&
+          _scrollController.position.pixels >=
+              _scrollController.position.maxScrollExtent - _loadTriggerThreshold) {
+        _loadImages();
+      }
+    });
   }
 
   Future<void> _loadImages({bool refresh = false}) async {
     if (refresh) {
       setState(() {
-        _page = 0;
-        _images = [];
+        _lastId = null;
+        _images.clear();
         _hasMoreImages = true;
+        _retryCount = 0;
       });
     }
 
@@ -62,41 +76,42 @@ class _UserImageGalleryState extends State<UserImageGallery> {
     });
 
     try {
-      final response = await http.get(
-        Uri.parse('http://182.93.94.210:3064/api/v1/list-contents/$_page?email=${widget.userEmail}'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'authorization': 'Bearer ${_appData.authToken}',
-        },
-      );
+      final response = await _makeApiRequest();
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        
-        if (data['status'] == 200) {
-          final List<dynamic> posts = data['data'] ?? [];
+
+        if (data['status'] == 200 && data['data'] != null) {
+          final List<dynamic> posts = data['data']['contents'] ?? [];
           final List<String> newImages = [];
-          
-          // Extract image URLs only from posts by this specific user
+          String? newLastId;
+
+          // Extract image URLs from posts by this user
           for (var post in posts) {
-            if (post['author'] != null && 
-                post['author']['email'] == widget.userEmail && 
-                post['files'] != null && 
+            if (post['author'] != null &&
+                post['author']['email'] == widget.userEmail &&
+                post['files'] != null &&
                 post['files'] is List) {
               for (var file in post['files']) {
-                if (file is String && file.isNotEmpty) {
+                if (file is String &&
+                    file.isNotEmpty &&
+                    _isImageFile(file)) {
                   newImages.add('http://182.93.94.210:3064$file');
                 }
               }
+              newLastId = post['_id']; // Update lastId to the last post's ID
             }
           }
-          
+
           setState(() {
             _images.addAll(newImages);
             _isLoading = false;
-            _page++;
-            _hasMoreImages = newImages.isNotEmpty;
+            _lastId = newLastId ?? _lastId;
+            _hasMoreImages = data['data']['hasMore'] ?? newImages.isNotEmpty;
+            _retryCount = 0; // Reset retry count on success
+            if (_images.isEmpty && !_hasMoreImages) {
+              _error = 'No images available for this user.';
+            }
           });
         } else {
           setState(() {
@@ -104,9 +119,38 @@ class _UserImageGalleryState extends State<UserImageGallery> {
             _isLoading = false;
           });
         }
+      } else if (response.statusCode == 401) {
+        setState(() {
+          _error = 'Authentication required. Please login.';
+          _isLoading = false;
+        });
       } else {
         setState(() {
           _error = 'Failed to load images: ${response.statusCode}';
+          _isLoading = false;
+        });
+      }
+    } on SocketException {
+      if (_retryCount < _maxRetries) {
+        _retryCount++;
+        debugPrint('Retrying request ($_retryCount/$_maxRetries)...');
+        await Future.delayed(Duration(seconds: 2));
+        await _loadImages(refresh: refresh); // Retry the request
+      } else {
+        setState(() {
+          _error = 'Network error. Please check your connection.';
+          _isLoading = false;
+        });
+      }
+    } on TimeoutException {
+      if (_retryCount < _maxRetries) {
+        _retryCount++;
+        debugPrint('Retrying request ($_retryCount/$_maxRetries)...');
+        await Future.delayed(Duration(seconds: 2));
+        await _loadImages(refresh: refresh); // Retry the request
+      } else {
+        setState(() {
+          _error = 'Request timed out.';
           _isLoading = false;
         });
       }
@@ -118,10 +162,36 @@ class _UserImageGalleryState extends State<UserImageGallery> {
     }
   }
 
+  bool _isImageFile(String file) {
+    final lowerFile = file.toLowerCase();
+    return lowerFile.endsWith('.jpg') ||
+        lowerFile.endsWith('.jpeg') ||
+        lowerFile.endsWith('.png') ||
+        lowerFile.endsWith('.gif');
+  }
+
+  Future<http.Response> _makeApiRequest() async {
+    final url = _lastId == null
+        ? 'http://182.93.94.210:3064/api/v1/list-contents?email=${widget.userEmail}'
+        : 'http://182.93.94.210:3064/api/v1/list-contents?lastId=$_lastId&email=${widget.userEmail}';
+
+    debugPrint('Request URL: $url');
+    final response = await http.get(
+      Uri.parse(url),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'authorization': 'Bearer ${_appData.authToken}',
+      },
+    ).timeout(Duration(seconds: 30));
+    debugPrint('Response: ${response.body}');
+    return response;
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
+
     if (_error != null) {
       return _buildErrorView();
     }
@@ -169,13 +239,11 @@ class _UserImageGalleryState extends State<UserImageGallery> {
           _buildEmptyGallery(isDarkMode)
         else
           _buildImageGrid(isDarkMode),
-        
         if (_isLoading)
           const Padding(
             padding: EdgeInsets.all(16.0),
             child: Center(child: CircularProgressIndicator()),
           ),
-          
         if (_hasMoreImages && _images.isNotEmpty && !_isLoading)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 16.0),
@@ -187,13 +255,11 @@ class _UserImageGalleryState extends State<UserImageGallery> {
                   side: BorderSide(color: Theme.of(context).primaryColor),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(20),
+                  ),
                 ),
+                child: const Text('Load More'),
               ),
-                                          child: const Text('Load More'),
-
             ),
-
-          ),
           ),
       ],
     );
@@ -215,7 +281,7 @@ class _UserImageGalleryState extends State<UserImageGallery> {
         itemCount: _images.length > 9 ? 9 : _images.length,
         itemBuilder: (context, index) {
           final imageUrl = _images[index];
-          
+
           return GestureDetector(
             onTap: () {
               _showFullScreenImage(imageUrl);
@@ -368,7 +434,6 @@ class _UserImageGalleryState extends State<UserImageGallery> {
                 ),
               ),
             ),
-            
             Positioned(
               top: 40,
               right: 20,

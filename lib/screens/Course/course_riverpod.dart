@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:innovator/screens/Course/course_service.dart';
-import 'package:innovator/screens/Course/courses_model.dart';
+import 'package:innovator/screens/Course/Services/course_service.dart';
+import 'package:innovator/screens/Course/model/courses_model.dart';
 
 
 final courseServiceProvider = Provider<CourseService>((ref) {

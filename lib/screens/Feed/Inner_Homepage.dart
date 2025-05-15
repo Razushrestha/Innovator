@@ -16,7 +16,9 @@ import 'package:innovator/screens/comment/JWT_Helper.dart';
 import 'package:innovator/screens/comment/comment_section.dart';
 import 'dart:io';
 import 'package:provider/provider.dart';
-import 'package:lottie/lottie.dart'; // For SocketException
+import 'package:lottie/lottie.dart';
+import 'package:video_thumbnail/video_thumbnail.dart';
+import 'dart:typed_data';
 
 // Enhanced Author model
 class Author {
@@ -54,7 +56,7 @@ class FeedContent {
   int likes;
   int comments;
   bool isLiked;
-  bool isFollowed; // Added followed property
+  bool isFollowed;
 
   late final List<String> _mediaUrls;
   late final bool _hasImages;
@@ -73,14 +75,13 @@ class FeedContent {
     this.likes = 0,
     this.comments = 0,
     this.isLiked = false,
-    this.isFollowed = false, // Initialize followed property
+    this.isFollowed = false,
   }) {
     try {
-      _mediaUrls =
-          files.map((file) {
-            if (file.startsWith('http')) return file;
-            return 'http://182.93.94.210:3064${file.startsWith('/') ? file : '/$file'}';
-          }).toList();
+      _mediaUrls = files.map((file) {
+        if (file.startsWith('http')) return file;
+        return 'http://182.93.94.210:3064${file.startsWith('/') ? file : '/$file'}';
+      }).toList();
 
       _hasImages = files.any((file) {
         final lowerFile = file.toLowerCase();
@@ -103,7 +104,6 @@ class FeedContent {
         return lowerFile.endsWith('.doc') || lowerFile.endsWith('.docx');
       });
     } catch (e) {
-      // Fallback values if parsing fails
       _mediaUrls = [];
       _hasImages = false;
       _hasVideos = false;
@@ -120,21 +120,18 @@ class FeedContent {
         type: json['type'] ?? '',
         files: List<String>.from(json['files'] ?? []),
         author: Author.fromJson(json['author'] ?? {}),
-        createdAt:
-            json['createdAt'] != null
-                ? DateTime.parse(json['createdAt'])
-                : DateTime.now(),
-        updatedAt:
-            json['updatedAt'] != null
-                ? DateTime.parse(json['updatedAt'])
-                : DateTime.now(),
+        createdAt: json['createdAt'] != null
+            ? DateTime.parse(json['createdAt'])
+            : DateTime.now(),
+        updatedAt: json['updatedAt'] != null
+            ? DateTime.parse(json['updatedAt'])
+            : DateTime.now(),
         likes: json['likes'] ?? 0,
         comments: json['comments'] ?? 0,
         isLiked: json['liked'] ?? false,
-        isFollowed: json['followed'] ?? false, // Parse followed property
+        isFollowed: json['followed'] ?? false,
       );
     } catch (e) {
-      // Return empty content if parsing fails
       return FeedContent(
         id: '',
         status: '',
@@ -207,7 +204,7 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
   final List<FeedContent> _contents = [];
   final ScrollController _scrollController = ScrollController();
   bool _isLoading = false;
-  int _currentPage = 0;
+  String? _lastId; // Track the last content ID
   bool _hasError = false;
   String _errorMessage = '';
   bool _hasMoreData = true;
@@ -220,12 +217,9 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
     super.initState();
     _initializeData();
     _scrollController.addListener(_scrollListener);
-
   }
 
-
   Future<void> _initializeData() async {
-    // Wait for AppData to initialize if needed
     await _appData.initialize();
     _loadMoreContent();
   }
@@ -234,8 +228,7 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
     if (!_isLoading &&
         _hasMoreData &&
         _scrollController.position.pixels >=
-            _scrollController.position.maxScrollExtent -
-                _loadTriggerThreshold) {
+            _scrollController.position.maxScrollExtent - _loadTriggerThreshold) {
       _loadMoreContent();
     }
   }
@@ -249,7 +242,6 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
     });
 
     try {
-      // Verify token exists and is valid
       if (!await _verifyToken()) {
         return;
       }
@@ -268,13 +260,16 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
       _handleNetworkError();
     } catch (e) {
       _handleGenericError(e);
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 
   Future<bool> _verifyToken() async {
     if (_appData.authToken == null || _appData.authToken!.isEmpty) {
       setState(() {
-        _isLoading = false;
         _hasError = true;
         _errorMessage = 'Authentication required. Please login.';
       });
@@ -284,31 +279,36 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
   }
 
   Future<http.Response> _makeApiRequest() async {
-    return await http.get(
-      Uri.parse('http://182.93.94.210:3064/api/v1/list-contents/$_currentPage'),
+    final url = _lastId == null
+        ? 'http://182.93.94.210:3064/api/v1/list-contents'
+        : 'http://182.93.94.210:3064/api/v1/list-contents?lastId=$_lastId';
+    
+    debugPrint('Request URL: $url'); // Log request URL for debugging
+    final response = await http.get(
+      Uri.parse(url),
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         'authorization': 'Bearer ${_appData.authToken}',
       },
-    );
+    ).timeout(Duration(seconds: 30)); // Add timeout
+    debugPrint('Response: ${response.body}'); // Log response for debugging
+    return response;
   }
 
   void _handleSuccessfulResponse(Map<String, dynamic> data) {
-    if (data.containsKey('data') && data['data'] ['contents'] is List) {
-      final List<dynamic> contentList = data['data'] ['contents'] as List;
+    if (data.containsKey('data') && data['data']['contents'] is List) {
+      final List<dynamic> contentList = data['data']['contents'] as List;
       final List<FeedContent> newContents =
           contentList.map((item) => FeedContent.fromJson(item)).toList();
 
       setState(() {
         _contents.addAll(newContents);
-        _currentPage++;
-        _isLoading = false;
-        _hasMoreData = newContents.isNotEmpty && newContents.length >= 10;
+        _lastId = newContents.isNotEmpty ? newContents.last.id : _lastId;
+        _hasMoreData = data['data']['hasMore'] ?? false;
       });
     } else {
       setState(() {
-        _isLoading = false;
         _hasError = true;
         _errorMessage = 'Invalid data format received from server';
       });
@@ -316,7 +316,6 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
   }
 
   Future<void> _handleUnauthorizedError() async {
-    // Try to refresh token first
     if (!_isRefreshingToken) {
       _isRefreshingToken = true;
       final success = await _refreshToken();
@@ -328,25 +327,21 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
       }
     }
 
-    // If token refresh fails or not attempted
     await _appData.clearAuthToken();
     setState(() {
-      _isLoading = false;
       _hasError = true;
       _errorMessage = 'Session expired. Please login again.';
     });
   }
 
   Future<bool> _refreshToken() async {
-    // Implement your token refresh logic here
-    // This is a placeholder - replace with your actual refresh endpoint
     try {
-      final refreshToken =
-          await _getRefreshToken(); // You need to implement this
+      final refreshToken = await _getRefreshToken();
       if (refreshToken == null) return false;
 
       final response = await http.post(
         Uri.parse('http://182.93.94.210:3064/api/v1/refresh-token'),
+        headers: {'Content-Type': 'application/json'},
         body: json.encode({'refreshToken': refreshToken}),
       );
 
@@ -363,13 +358,11 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
 
   Future<String?> _getRefreshToken() async {
     // Implement your refresh token retrieval logic
-    // This typically comes from secure storage
     return null;
   }
 
   void _handleApiError(int statusCode) {
     setState(() {
-      _isLoading = false;
       _hasError = true;
       _errorMessage = 'Server error: $statusCode';
     });
@@ -377,7 +370,6 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
 
   void _handleNetworkError() {
     setState(() {
-      _isLoading = false;
       _hasError = true;
       _errorMessage = 'Network error. Please check your connection.';
     });
@@ -385,7 +377,6 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
 
   void _handleGenericError(dynamic e) {
     setState(() {
-      _isLoading = false;
       _hasError = true;
       _errorMessage = 'Error: ${e.toString()}';
     });
@@ -394,7 +385,7 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
   Future<void> _refresh() async {
     setState(() {
       _contents.clear();
-      _currentPage = 0;
+      _lastId = null;
       _hasError = false;
       _hasMoreData = true;
     });
@@ -428,23 +419,22 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
             if (_hasError) SliverFillRemaining(child: _buildErrorView()),
             if (_contents.isEmpty && !_isLoading && !_hasError)
               SliverFillRemaining(child: _buildEmptyView()),
-              //FloatingActionButton(onPressed: (){},   child: Image.asset('assets/message.gif'),)
           ],
         ),
       ),
-floatingActionButton: FloatingActionButton(
-  onPressed: () {
-   Navigator.push(context, MaterialPageRoute(builder: (_) => ChatListScreen()));
-    debugPrint('FloatingActionButton pressed!');
-    // Add your action here
-  },
-  child:  Container(
-    height: 200,
-    width: 200,
-    child: Lottie.asset('animation/chaticon.json', )),
-  backgroundColor: Colors.transparent,
-  elevation: 100.0,
-    ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(context, MaterialPageRoute(builder: (_) => ChatListScreen()));
+          debugPrint('FloatingActionButton pressed!');
+        },
+        child: Container(
+          height: 200,
+          width: 200,
+          child: Lottie.asset('animation/chaticon.json'),
+        ),
+        backgroundColor: Colors.transparent,
+        elevation: 100.0,
+      ),
     );
   }
 
@@ -472,9 +462,9 @@ floatingActionButton: FloatingActionButton(
   Widget _buildLoadingIndicator() {
     return _isLoading
         ? const Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Center(child: CircularProgressIndicator()),
-        )
+            padding: EdgeInsets.all(16.0),
+            child: Center(child: CircularProgressIndicator()),
+          )
         : const SizedBox.shrink();
   }
 
@@ -491,22 +481,20 @@ floatingActionButton: FloatingActionButton(
                   ? Icons.warning_amber
                   : Icons.error_outline,
               size: 48,
-              color:
-                  _errorMessage.contains('expired') ||
-                          _errorMessage.contains('Authentication')
-                      ? Colors.orange
-                      : Colors.red,
+              color: _errorMessage.contains('expired') ||
+                      _errorMessage.contains('Authentication')
+                  ? Colors.orange
+                  : Colors.red,
             ),
             const SizedBox(height: 16),
             Text(
               _errorMessage,
               textAlign: TextAlign.center,
               style: TextStyle(
-                color:
-                    _errorMessage.contains('expired') ||
-                            _errorMessage.contains('Authentication')
-                        ? Colors.orange
-                        : Colors.red,
+                color: _errorMessage.contains('expired') ||
+                        _errorMessage.contains('Authentication')
+                    ? Colors.orange
+                    : Colors.red,
               ),
             ),
             const SizedBox(height: 16),
@@ -537,7 +525,6 @@ floatingActionButton: FloatingActionButton(
           const Icon(Icons.inbox, size: 48, color: Colors.grey),
           const SizedBox(height: 16),
           const Text('No content available'),
-
           const SizedBox(height: 16),
           ElevatedButton(onPressed: _refresh, child: const Text('Refresh')),
         ],
@@ -562,9 +549,7 @@ class FeedItem extends StatefulWidget {
   State<FeedItem> createState() => _FeedItemState();
 }
 
-class _FeedItemState extends State<FeedItem>
-    with SingleTickerProviderStateMixin {
-      
+class _FeedItemState extends State<FeedItem> with SingleTickerProviderStateMixin {
   bool _isExpanded = false;
   static const int _maxLinesCollapsed = 3;
 
@@ -611,28 +596,24 @@ class _FeedItemState extends State<FeedItem>
     super.dispose();
   }
 
-  // Check if the post author is the current user
   bool _isAuthorCurrentUser() {
-    // Primary check using AppData's isCurrentUser method
     if (AppData().isCurrentUser(widget.content.author.id)) {
       return true;
     }
-    
-    // Secondary check using JWT token (as a fallback)
+
     final String? token = AppData().authToken;
     if (token != null && token.isNotEmpty) {
       final String? currentUserId = JwtHelper.extractUserId(token);
       return currentUserId == widget.content.author.id;
     }
-    
+
     return false;
   }
 
   @override
   Widget build(BuildContext context) {
-    // Check if author is current user
     final bool isOwnContent = _isAuthorCurrentUser();
-    
+
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 12.0),
       decoration: BoxDecoration(
@@ -649,8 +630,7 @@ class _FeedItemState extends State<FeedItem>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(height: 8.0), // Add some space at the top
-          // Author section
+          SizedBox(height: 8.0),
           Padding(
             padding: const EdgeInsets.all(12.0),
             child: Row(
@@ -663,10 +643,9 @@ class _FeedItemState extends State<FeedItem>
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder:
-                              (_) => SpecificUserProfilePage(
-                                userId: widget.content.author.id,
-                              ),
+                          builder: (_) => SpecificUserProfilePage(
+                            userId: widget.content.author.id,
+                          ),
                         ),
                       );
                     },
@@ -691,7 +670,6 @@ class _FeedItemState extends State<FeedItem>
                     ),
                   ),
                 ),
-                // Only show the Follow button if it's not the current user's content
                 if (!isOwnContent)
                   FollowButton(
                     targetUserEmail: widget.content.author.email,
@@ -703,49 +681,37 @@ class _FeedItemState extends State<FeedItem>
                       widget.onFollowToggled(false);
                     },
                   ),
-
                 IconButton(
                   icon: const Icon(Icons.more_vert),
                   onPressed: () {
-                    if(_isAuthorCurrentUser ()) {
+                    if (_isAuthorCurrentUser()) {
                       _showQuickSuggestions(context);
                     } else {
                       _showQuickspecificSuggestions(context);
-                     // _showQuickSuggestions(context);
                     }
-                    
                   },
                 ),
               ],
             ),
           ),
-
-          // Status/description text
           if (widget.content.status.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16.0,
-                vertical: 8.0,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   LayoutBuilder(
                     builder: (context, constraints) {
-                      // Create a TextSpan with the same text style as your Text widget
                       final span = TextSpan(
                         text: widget.content.status,
                         style: const TextStyle(fontSize: 15.0),
                       );
-
-                      // Use a TextPainter to determine if the text will overflow
                       final tp = TextPainter(
                         text: span,
                         maxLines: _maxLinesCollapsed,
                         textDirection: TextDirection.ltr,
                       );
                       tp.layout(maxWidth: constraints.maxWidth);
-
                       final needsExpandCollapse = tp.didExceedMaxLines;
 
                       return Column(
@@ -753,10 +719,9 @@ class _FeedItemState extends State<FeedItem>
                         children: [
                           Text(
                             widget.content.status,
-                            style:  TextStyle(fontSize: 16.0, fontFamily: 'Segoe UI', letterSpacing: 0.5),
+                            style: TextStyle(fontSize: 16.0, fontFamily: 'Segoe UI', letterSpacing: 0.5),
                             maxLines: _isExpanded ? null : _maxLinesCollapsed,
-                            overflow:
-                                _isExpanded ? null : TextOverflow.ellipsis,
+                            overflow: _isExpanded ? null : TextOverflow.ellipsis,
                           ),
                           if (needsExpandCollapse)
                             GestureDetector(
@@ -767,10 +732,7 @@ class _FeedItemState extends State<FeedItem>
                               },
                               child: Text(
                                 _isExpanded ? 'Show Less' : 'Show More',
-                                style: TextStyle(
-                                  color: Colors.blue,
-                                  fontSize: 14,
-                                ),
+                                style: TextStyle(color: Colors.blue, fontSize: 14),
                               ),
                             ),
                         ],
@@ -780,10 +742,7 @@ class _FeedItemState extends State<FeedItem>
                 ],
               ),
             ),
-          // Media content preview - only build if there are files
           if (widget.content.files.isNotEmpty) _buildMediaPreview(),
-
-          // Interaction buttons
           Padding(
             padding: const EdgeInsets.all(12.0),
             child: Row(
@@ -820,15 +779,11 @@ class _FeedItemState extends State<FeedItem>
                 ),
                 IconButton(
                   icon: const Icon(Icons.share_outlined),
-                  onPressed: () {
-                    // Share content
-                  },
+                  onPressed: () {},
                 ),
               ],
             ),
           ),
-
-          // Add the CommentSection outside the Row but inside the parent Column
           if (_showComments)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12.0),
@@ -848,21 +803,12 @@ class _FeedItemState extends State<FeedItem>
 
   void _showQuickspecificSuggestions(BuildContext context) {
     final RenderBox button = context.findRenderObject() as RenderBox;
-    final RenderBox overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
 
-    // Calculate position relative to the overlay
     final RelativeRect position = RelativeRect.fromRect(
-      // Use the button's top-right corner as the reference point
       Rect.fromPoints(
-        button.localToGlobal(
-          button.size.topRight(Offset(-40, 0)),
-          ancestor: overlay,
-        ),
-        button.localToGlobal(
-          button.size.topRight(Offset.zero),
-          ancestor: overlay,
-        ),
+        button.localToGlobal(button.size.topRight(Offset(-40, 0)), ancestor: overlay),
+        button.localToGlobal(button.size.topRight(Offset.zero), ancestor: overlay),
       ),
       Offset.zero & overlay.size,
     );
@@ -871,20 +817,17 @@ class _FeedItemState extends State<FeedItem>
       context: context,
       position: position,
       items: [
-        
         const PopupMenuItem<String>(value: 'copy', child: Text('Copy content')),
         const PopupMenuItem<String>(value: 'report', child: Text('Report')),
       ],
     ).then((value) {
-      if (value == null ) return;
-
+      if (value == null) return;
       switch (value) {
-       
         case 'copy':
           _copyContentToClipboard();
           break;
         case 'report':
-          _showReportDialog(context);
+          _showReportLinkButton(context);
           break;
       }
     });
@@ -892,21 +835,12 @@ class _FeedItemState extends State<FeedItem>
 
   void _showQuickSuggestions(BuildContext context) {
     final RenderBox button = context.findRenderObject() as RenderBox;
-    final RenderBox overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
 
-    // Calculate position relative to the overlay
     final RelativeRect position = RelativeRect.fromRect(
-      // Use the button's top-right corner as the reference point
       Rect.fromPoints(
-        button.localToGlobal(
-          button.size.topRight(Offset(-40, 0)),
-          ancestor: overlay,
-        ),
-        button.localToGlobal(
-          button.size.topRight(Offset.zero),
-          ancestor: overlay,
-        ),
+        button.localToGlobal(button.size.topRight(Offset(-40, 0)), ancestor: overlay),
+        button.localToGlobal(button.size.topRight(Offset.zero), ancestor: overlay),
       ),
       Offset.zero & overlay.size,
     );
@@ -916,21 +850,14 @@ class _FeedItemState extends State<FeedItem>
       position: position,
       items: [
         const PopupMenuItem<String>(value: 'edit', child: Text('Edit content')),
-        const PopupMenuItem<String>(
-          value: 'delete',
-          child: Text('Delete post'),
-        ),
+        const PopupMenuItem<String>(value: 'delete', child: Text('Delete post')),
         if (widget.content.files.isNotEmpty)
-          const PopupMenuItem<String>(
-            value: 'delete_files',
-            child: Text('Delete files'),
-          ),
+          const PopupMenuItem<String>(value: 'delete_files', child: Text('Delete files')),
         const PopupMenuItem<String>(value: 'copy', child: Text('Copy content')),
         const PopupMenuItem<String>(value: 'report', child: Text('Report')),
       ],
     ).then((value) {
-      if (value == null ) return;
-
+      if (value == null) return;
       switch (value) {
         case 'edit':
           _showEditContentDialog(context);
@@ -945,55 +872,48 @@ class _FeedItemState extends State<FeedItem>
           _copyContentToClipboard();
           break;
         case 'report':
-          _showReportDialog(context);
+          _showReportLinkButton(context);
           break;
       }
     });
   }
 
-  // Add these methods to handle each action:
-
   void _showEditContentDialog(BuildContext context) {
-    final TextEditingController controller = TextEditingController(
-      text: widget.content.status,
-    );
+    final TextEditingController controller = TextEditingController(text: widget.content.status);
 
     showDialog(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Edit Content'),
-            content: TextField(
-              controller: controller,
-              decoration: const InputDecoration(
-                labelText: 'Status',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 5,
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () {
-                  _updateContentStatus(controller.text);
-                  Navigator.of(context).pop();
-                },
-                child: const Text('Update'),
-              ),
-            ],
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Content'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: 'Status',
+            border: OutlineInputBorder(),
           ),
+          maxLines: 5,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              _updateContentStatus(controller.text);
+              Navigator.of(context).pop();
+            },
+            child: const Text('Update'),
+          ),
+        ],
+      ),
     );
   }
 
   Future<void> _updateContentStatus(String newStatus) async {
     try {
       final response = await http.put(
-        Uri.parse(
-          'http://182.93.94.210:3064/api/v1/update-contents/${widget.content.id}',
-        ),
+        Uri.parse('http://182.93.94.210:3064/api/v1/update-contents/${widget.content.id}'),
         headers: {
           'Content-Type': 'application/json',
           'authorization': 'Bearer ${AppData().authToken}',
@@ -1010,53 +930,43 @@ class _FeedItemState extends State<FeedItem>
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to update content: ${response.statusCode}'),
-          ),
+          SnackBar(content: Text('Failed to update content: ${response.statusCode}')),
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: ${e.toString()}')),
+      );
     }
   }
 
   Future<bool?> _showDeleteConfirmation(BuildContext context) {
     return showDialog<bool>(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Delete Post'),
-            content: const Text(
-              'Are you sure you want to delete this post? This action cannot be undone.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop(true);
-                  _deleteContent();
-                },
-                child: const Text(
-                  'Delete',
-                  style: TextStyle(color: Colors.red),
-                ),
-              ),
-            ],
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Post'),
+        content: const Text('Are you sure you want to delete this post? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
           ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop(true);
+              _deleteContent();
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
     );
   }
 
   Future<void> _deleteContent() async {
     try {
       final response = await http.delete(
-        Uri.parse(
-          'http://182.93.94.210:3064/api/v1/delete-content/${widget.content.id}',
-        ),
+        Uri.parse('http://182.93.94.210:3064/api/v1/delete-content/${widget.content.id}'),
         headers: {'authorization': 'Bearer ${AppData().authToken}'},
       );
 
@@ -1064,47 +974,38 @@ class _FeedItemState extends State<FeedItem>
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Post deleted successfully')),
         );
-        // You might want to refresh the feed here or remove this item
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to delete post: ${response.statusCode}'),
-          ),
+          SnackBar(content: Text('Failed to delete post: ${response.statusCode}')),
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: ${e.toString()}')),
+      );
     }
   }
 
   Future<bool?> _showDeleteFilesConfirmation(BuildContext context) {
     return showDialog<bool>(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Delete Files'),
-            content: const Text(
-              'Are you sure you want to delete all files attached to this post?',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop(true);
-                  _deleteFiles();
-                },
-                child: const Text(
-                  'Delete Files',
-                  style: TextStyle(color: Colors.red),
-                ),
-              ),
-            ],
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Files'),
+        content: const Text('Are you sure you want to delete all files attached to this post?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
           ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop(true);
+              _deleteFiles();
+            },
+            child: const Text('Delete Files', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1121,7 +1022,6 @@ class _FeedItemState extends State<FeedItem>
 
       if (response.statusCode == 200) {
         setState(() {
-          // Clear files in the local content object
           (widget.content as dynamic).files = <String>[];
         });
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1129,15 +1029,13 @@ class _FeedItemState extends State<FeedItem>
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to delete files: ${response.statusCode}'),
-          ),
+          SnackBar(content: Text('Failed to delete files: ${response.statusCode}')),
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: ${e.toString()}')),
+      );
     }
   }
 
@@ -1148,50 +1046,44 @@ class _FeedItemState extends State<FeedItem>
     );
   }
 
-  void _showReportDialog(BuildContext context) {
+  void _showReportLinkButton(BuildContext context) {
     final TextEditingController controller = TextEditingController();
 
     showDialog(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Report Content'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Please tell us why you are reporting this content:',
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: controller,
-                  decoration: const InputDecoration(
-                    labelText: 'Reason',
-                    border: OutlineInputBorder(),
-                  ),
-                  maxLines: 3,
-                ),
-              ],
+      builder: (context) => AlertDialog(
+        title: const Text('Report Content'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Please tell us why you are reporting this content:'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                labelText: 'Reason',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 3,
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () {
-                  // Here you would add the code to send the report
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Your report has been submitted'),
-                    ),
-                  );
-                  Navigator.of(context).pop();
-                },
-                child: const Text('Submit'),
-              ),
-            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
           ),
+          TextButton(
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Your report has been submitted')),
+              );
+              Navigator.of(context).pop();
+            },
+            child: const Text('Submit'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1208,21 +1100,17 @@ class _FeedItemState extends State<FeedItem>
 
     return CachedNetworkImage(
       imageUrl: 'http://182.93.94.210:3064${widget.content.author.picture}',
-      imageBuilder:
-          (context, imageProvider) =>
-              CircleAvatar(backgroundImage: imageProvider),
-      placeholder:
-          (context, url) => const CircleAvatar(
-            child: CircularProgressIndicator(strokeWidth: 2.0),
-          ),
-      errorWidget:
-          (context, url, error) => CircleAvatar(
-            child: Text(
-              widget.content.author.name.isNotEmpty
-                  ? widget.content.author.name[0].toUpperCase()
-                  : '?',
-            ),
-          ),
+      imageBuilder: (context, imageProvider) => CircleAvatar(backgroundImage: imageProvider),
+      placeholder: (context, url) => const CircleAvatar(
+        child: CircularProgressIndicator(strokeWidth: 2.0),
+      ),
+      errorWidget: (context, url, error) => CircleAvatar(
+        child: Text(
+          widget.content.author.name.isNotEmpty
+              ? widget.content.author.name[0].toUpperCase()
+              : '?',
+        ),
+      ),
     );
   }
 
@@ -1231,7 +1119,6 @@ class _FeedItemState extends State<FeedItem>
 
     if (mediaUrls.isEmpty) return const SizedBox.shrink();
 
-    // If there's only one file
     if (mediaUrls.length == 1) {
       final fileUrl = mediaUrls.first;
 
@@ -1248,38 +1135,16 @@ class _FeedItemState extends State<FeedItem>
           maxHeight: 250.0,
           child: GestureDetector(
             onTap: () => _showMediaGallery(context, mediaUrls, 0),
-            child: Container(
-              height: 250.0,
-              width: double.infinity,
-              color: Colors.black,
-              child: const Center(
-                child: Icon(
-                  Icons.play_circle_fill,
-                  color: Colors.white,
-                  size: 64.0,
-                ),
-              ),
-            ),
+            child: VideoThumbnailWidget(url: fileUrl, height: 250.0),
           ),
         );
       } else if (FileTypeHelper.isPdf(fileUrl)) {
-        return _buildDocumentPreview(
-          fileUrl,
-          'PDF Document',
-          Icons.picture_as_pdf,
-          Colors.red,
-        );
+        return _buildDocumentPreview(fileUrl, 'PDF Document', Icons.picture_as_pdf, Colors.red);
       } else if (FileTypeHelper.isWordDoc(fileUrl)) {
-        return _buildDocumentPreview(
-          fileUrl,
-          'Word Document',
-          Icons.description,
-          Colors.blue,
-        );
+        return _buildDocumentPreview(fileUrl, 'Word Document', Icons.description, Colors.blue);
       }
     }
 
-    // If there are multiple files - use LimitedBox to constrain height
     return LimitedBox(
       maxHeight: 300.0,
       child: LayoutBuilder(
@@ -1296,7 +1161,6 @@ class _FeedItemState extends State<FeedItem>
             itemBuilder: (context, index) {
               final fileUrl = mediaUrls[index];
 
-              // Show remaining count if there are more than 4 files
               if (index == 3 && mediaUrls.length > 4) {
                 return GestureDetector(
                   onTap: () => _showMediaGallery(context, mediaUrls, index),
@@ -1324,16 +1188,7 @@ class _FeedItemState extends State<FeedItem>
               } else if (FileTypeHelper.isVideo(fileUrl)) {
                 return GestureDetector(
                   onTap: () => _showMediaGallery(context, mediaUrls, index),
-                  child: Container(
-                    color: Colors.black,
-                    child: const Center(
-                      child: Icon(
-                        Icons.play_circle_fill,
-                        color: Colors.white,
-                        size: 32.0,
-                      ),
-                    ),
-                  ),
+                  child: VideoThumbnailWidget(url: fileUrl),
                 );
               } else if (FileTypeHelper.isPdf(fileUrl)) {
                 return GestureDetector(
@@ -1341,11 +1196,7 @@ class _FeedItemState extends State<FeedItem>
                   child: Container(
                     color: Colors.grey[200],
                     child: const Center(
-                      child: Icon(
-                        Icons.picture_as_pdf,
-                        size: 32,
-                        color: Colors.red,
-                      ),
+                      child: Icon(Icons.picture_as_pdf, size: 32, color: Colors.red),
                     ),
                   ),
                 );
@@ -1355,11 +1206,7 @@ class _FeedItemState extends State<FeedItem>
                   child: Container(
                     color: Colors.grey[200],
                     child: const Center(
-                      child: Icon(
-                        Icons.description,
-                        size: 32,
-                        color: Colors.blue,
-                      ),
+                      child: Icon(Icons.description, size: 32, color: Colors.blue),
                     ),
                   ),
                 );
@@ -1368,11 +1215,7 @@ class _FeedItemState extends State<FeedItem>
               return Container(
                 color: Colors.grey[200],
                 child: const Center(
-                  child: Icon(
-                    Icons.insert_drive_file,
-                    size: 32,
-                    color: Colors.grey,
-                  ),
+                  child: Icon(Icons.insert_drive_file, size: 32, color: Colors.grey),
                 ),
               );
             },
@@ -1382,12 +1225,7 @@ class _FeedItemState extends State<FeedItem>
     );
   }
 
-  Widget _buildDocumentPreview(
-    String fileUrl,
-    String label,
-    IconData icon,
-    Color color,
-  ) {
+  Widget _buildDocumentPreview(String fileUrl, String label, IconData icon, Color color) {
     return GestureDetector(
       onTap: () => _showMediaGallery(context, [fileUrl], 0),
       child: Container(
@@ -1399,29 +1237,21 @@ class _FeedItemState extends State<FeedItem>
           children: [
             Icon(icon, size: 64, color: color),
             const SizedBox(height: 8),
-            Text(
-              label,
-              style: TextStyle(fontSize: 16, color: Colors.grey[800]),
-            ),
+            Text(label, style: TextStyle(fontSize: 16, color: Colors.grey[800])),
           ],
         ),
       ),
     );
   }
 
-  void _showMediaGallery(
-    BuildContext context,
-    List<String> mediaUrls,
-    int initialIndex,
-  ) {
+  void _showMediaGallery(BuildContext context, List<String> mediaUrls, int initialIndex) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder:
-            (context) => OptimizedMediaGalleryScreen(
-              mediaUrls: mediaUrls,
-              initialIndex: initialIndex,
-            ),
+        builder: (context) => OptimizedMediaGalleryScreen(
+          mediaUrls: mediaUrls,
+          initialIndex: initialIndex,
+        ),
       ),
     );
   }
@@ -1440,22 +1270,20 @@ class _OptimizedNetworkImage extends StatelessWidget {
       fit: BoxFit.cover,
       height: height,
       width: double.infinity,
-      placeholder:
-          (context, url) => Container(
-            color: Colors.grey[300],
-            child: const Center(
-              child: SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(strokeWidth: 2.0),
-              ),
-            ),
+      placeholder: (context, url) => Container(
+        color: Colors.grey[300],
+        child: const Center(
+          child: SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(strokeWidth: 2.0),
           ),
-      errorWidget:
-          (context, url, error) => Container(
-            color: Colors.grey[300],
-            child: const Center(child: Icon(Icons.error, color: Colors.white)),
-          ),
+        ),
+      ),
+      errorWidget: (context, url, error) => Container(
+        color: Colors.grey[300],
+        child: const Center(child: Icon(Icons.error, color: Colors.white)),
+      ),
       memCacheWidth: (MediaQuery.of(context).size.width * 1.2).toInt(),
     );
   }
@@ -1464,13 +1292,9 @@ class _OptimizedNetworkImage extends StatelessWidget {
 class FeedApiService {
   static const String baseUrl = 'http://182.93.94.210:3064';
 
-  // Fetch feed contents with pagination
-  static Future<List<FeedContent>> fetchContents(int page) async {
+  static Future<List<FeedContent>> fetchContents(String? lastId) async {
     try {
-      // Get auth token from AppData if available
       final String? authToken = AppData().authToken;
-
-      // Prepare headers with auth token if available
       final Map<String, String> headers = {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -1480,20 +1304,20 @@ class FeedApiService {
         headers['authorization'] = 'Bearer $authToken';
       }
 
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/v1/list-contents/$page'),
-        headers: headers,
-      );
+      final url = lastId == null
+          ? '$baseUrl/api/v1/list-contents'
+          : '$baseUrl/api/v1/list-contents?lastId=$lastId';
+
+      final response = await http.get(Uri.parse(url), headers: headers).timeout(Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
 
-        if (data.containsKey('data') && data['data'] ['contents'] is List) {
+        if (data.containsKey('data') && data['data']['contents'] is List) {
           final List<dynamic> contentList = data['data']['contents'] as List;
           return contentList.map((item) => FeedContent.fromJson(item)).toList();
         }
       } else if (response.statusCode == 401) {
-        // Handle unauthorized access - token might be expired
         throw Exception('Authentication required');
       }
 
@@ -1521,5 +1345,65 @@ extension DateTimeExtension on DateTime {
     } else {
       return 'Just now';
     }
+  }
+}
+
+class VideoThumbnailWidget extends StatelessWidget {
+  final String url;
+  final double? height;
+  final double? width;
+
+  static final Map<String, Uint8List> _thumbnailCache = {};
+
+  const VideoThumbnailWidget({required this.url, this.height, this.width});
+
+  Future<Uint8List?> _generateThumbnail() async {
+    if (_thumbnailCache.containsKey(url)) {
+      return _thumbnailCache[url];
+    }
+
+    final thumbnail = await VideoThumbnail.thumbnailData(
+      video: url,
+      imageFormat: ImageFormat.PNG,
+      maxWidth: 300,
+      quality: 25,
+    );
+
+    if (thumbnail != null) {
+      _thumbnailCache[url] = thumbnail;
+    }
+    return thumbnail;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Uint8List?>(
+      future: _generateThumbnail(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Container(
+            color: Colors.black,
+            child: const Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (snapshot.hasData && snapshot.data != null) {
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.memory(snapshot.data!, fit: BoxFit.cover, height: height, width: width),
+              const Center(
+                child: Icon(Icons.play_circle_fill, color: Colors.black, size: 38),
+              ),
+            ],
+          );
+        }
+        return Container(
+          color: Colors.black,
+          child: const Center(
+            child: Icon(Icons.play_circle_fill, color: Colors.white, size: 32),
+          ),
+        );
+      },
+    );
   }
 }

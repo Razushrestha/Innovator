@@ -28,293 +28,172 @@ class _LoginPageState extends State<LoginPage> {
 
   bool isLogin = true;
   bool _isLoading = false;
+  
+  // Create focus nodes for email and password fields
+  final FocusNode _emailFocusNode = FocusNode();
+  final FocusNode _passwordFocusNode = FocusNode();
+
+  // Create form key to manage AutofillGroup
+  final _formKey = GlobalKey<FormState>();
 
   TextEditingController emailController = TextEditingController();
   TextEditingController passwordController = TextEditingController();
 
+  @override
+  void dispose() {
+    // Clean up controllers and focus nodes when the widget is disposed
+    emailController.dispose();
+    passwordController.dispose();
+    _emailFocusNode.dispose();
+    _passwordFocusNode.dispose();
+    super.dispose();
+  }
+
   Future<void> _loginWithAPI() async {
-  if (emailController.text.isEmpty || passwordController.text.isEmpty) {
-    Dialogs.showSnackbar(context, 'Please enter both email and password');
-    return;
-  }
-
-  setState(() {
-    _isLoading = true;
-  });
-
-  try {
-    final url = Uri.parse('http://182.93.94.210:3064/api/v1/login');
-    final body = jsonEncode({
-      'email': emailController.text.trim(),
-      'password': passwordController.text.trim(),
-    });
-
-    final headers = {
-      'Content-Type': 'application/json',
-    };
-
-    final response = await http.post(
-      url,
-      headers: headers,
-      body: body,
-    );
-
-    // Debug: Print full response
-    log('API Response: ${response.statusCode} - ${response.body}');
-
-    if (response.statusCode == 200) {
-      // Parse response with proper error handling
-      Map<String, dynamic>? responseData;
-      try {
-        responseData = jsonDecode(response.body) as Map<String, dynamic>?;
-      } catch (e) {
-        log('Error parsing response: $e');
-        Dialogs.showSnackbar(context, 'Invalid response from server');
-        setState(() {
-          _isLoading = false;
-        });
-        return;
-      }
-
-      if (responseData == null) {
-        Dialogs.showSnackbar(context, 'Empty response from server');
-        setState(() {
-          _isLoading = false;
-        });
-        return;
-      }
-
-      // Extract and validate token
-      String? token;
-      
-      // Check various possible locations for the token
-      if (responseData['token'] is String) {
-        token = responseData['token'];
-      } else if (responseData['access_token'] is String) {
-        token = responseData['access_token'];
-      } else if (responseData['data'] is Map && responseData['data']?['token'] is String) {
-        token = responseData['data']['token'];
-      } else if (responseData['authToken'] is String) {
-        token = responseData['authToken'];
-      } else if (responseData['accessToken'] is String) {
-        token = responseData['accessToken'];
-      }
-
-      log('Extracted token: $token');
-      
-      // Extract user data with null safety
-      Map<String, dynamic>? userData;
-      if (responseData['user'] is Map) {
-        userData = Map<String, dynamic>.from(responseData['user']);
-      } else if (responseData['data']?['user'] is Map) {
-        userData = Map<String, dynamic>.from(responseData['data']['user']);
-      }
-      
-      // Save token if available
-      if (token != null && token.isNotEmpty) {
-        try {
-          await AppData().setAuthToken(token);
-          
-          // Verify token was saved
-          final savedToken = await AppData().authToken;
-          log('Token saved verification: ${savedToken != null ? "Success" : "Failed"}');
-        } catch (e) {
-          log('Error saving token: $e');
-          // Continue anyway - we might still want to save user data
-        }
-      } else {
-        log('Token not found in response. Full response: ${response.body}');
-      }
-      
-      // Save user data if available
-      if (userData != null) {
-        try {
-          await AppData().setCurrentUser(userData);
-          log('User data saved successfully');
-        } catch (e) {
-          log('Error saving user data: $e');
-          // If this is critical, we might want to show a dialog here
-        }
-      }
-      
-      // Navigate to home page if we have either token or user data
-      if ((token != null && token.isNotEmpty) || userData != null) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => Homepage()),
-        );
-      } else {
-        Dialogs.showSnackbar(context, 'Login response missing required data');
-      }
-    } else {
-      // Handle error response
-      Map<String, dynamic>? responseData;
-      try {
-        responseData = jsonDecode(response.body) as Map<String, dynamic>?;
-      } catch (e) {
-        log('Error parsing error response: $e');
-      }
-      
-      final message = responseData?['message'] ?? 
-                      responseData?['error'] ?? 
-                      'Login failed with status ${response.statusCode}';
-      Dialogs.showSnackbar(context, message.toString());
+    if (emailController.text.isEmpty || passwordController.text.isEmpty) {
+      Dialogs.showSnackbar(context, 'Please enter both email and password');
+      return;
     }
-  } catch (e) {
-    log('Login error: $e');
-    Dialogs.showSnackbar(context, 'Network error. Please check your connection.');
-  } finally {
+
     setState(() {
-      _isLoading = false;
+      _isLoading = true;
     });
-  }
-}
 
-//   _handleGoogleBtnClick() {
-//   Dialogs.showProgressBar(context);
-//   _signInWithGoogle().then((user) async {
-//     Navigator.pop(context);
-//     if (user != null) {
-//       log('\nUser: ${user.user}');
-//       log('\nUserAdditionalInfo: ${user.additionalUserInfo}');
+    try {
+      final url = Uri.parse('http://182.93.94.210:3064/api/v1/login');
+      final body = jsonEncode({
+        'email': emailController.text.trim(),
+        'password': passwordController.text.trim(),
+      });
 
-//       // Generate and save token to AppData
-//       final String token = await _generateLocalToken(user);
-//       await AppData().setAuthToken(token);
+      final headers = {
+        'Content-Type': 'application/json',
+      };
+
+      final response = await http.post(
+        url,
+        headers: headers,
+        body: body,
+      );
+
+      // Debug: Print full response
+      log('API Response: ${response.statusCode} - ${response.body}');
+
+      if (response.statusCode == 200) {
+        // Parse response with proper error handling
+        Map<String, dynamic>? responseData;
+        try {
+          responseData = jsonDecode(response.body) as Map<String, dynamic>?;
+        } catch (e) {
+          log('Error parsing response: $e');
+          Dialogs.showSnackbar(context, 'Invalid response from server');
+          setState(() {
+            _isLoading = false;
+          });
+          return;
+        }
+
+        if (responseData == null) {
+          Dialogs.showSnackbar(context, 'Empty response from server');
+          setState(() {
+            _isLoading = false;
+          });
+          return;
+        }
+
+        // Extract and validate token
+        String? token;
+        
+        // Check various possible locations for the token
+        if (responseData['token'] is String) {
+          token = responseData['token'];
+        } else if (responseData['access_token'] is String) {
+          token = responseData['access_token'];
+        } else if (responseData['data'] is Map && responseData['data']?['token'] is String) {
+          token = responseData['data']['token'];
+        } else if (responseData['authToken'] is String) {
+          token = responseData['authToken'];
+        } else if (responseData['accessToken'] is String) {
+          token = responseData['accessToken'];
+        }
+
+        log('Extracted token: $token');
+        
+        // Extract user data with null safety
+        Map<String, dynamic>? userData;
+        if (responseData['user'] is Map) {
+          userData = Map<String, dynamic>.from(responseData['user']);
+        } else if (responseData['data']?['user'] is Map) {
+          userData = Map<String, dynamic>.from(responseData['data']['user']);
+        }
+        
+        // Save token if available
+        if (token != null && token.isNotEmpty) {
+          try {
+            await AppData().setAuthToken(token);
+            
+            // Verify token was saved
+            final savedToken = await AppData().authToken;
+            log('Token saved verification: ${savedToken != null ? "Success" : "Failed"}');
+          } catch (e) {
+            log('Error saving token: $e');
+            // Continue anyway - we might still want to save user data
+          }
+        } else {
+          log('Token not found in response. Full response: ${response.body}');
+        }
+        
+        // Save user data if available
+        if (userData != null) {
+          try {
+            await AppData().setCurrentUser(userData);
+            log('User data saved successfully');
+          } catch (e) {
+            log('Error saving user data: $e');
+            // If this is critical, we might want to show a dialog here
+          }
+        }
+        
+        // Trigger save of credentials for autofill
+        TextInput.finishAutofillContext(shouldSave: true);
+        
+        // Navigate to home page if we have either token or user data
+        if ((token != null && token.isNotEmpty) || userData != null) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => Homepage()),
+          );
+        } else {
+          Dialogs.showSnackbar(context, 'Login response missing required data');
+        }
+      } else {
+        // Handle error response
+        Map<String, dynamic>? responseData;
+        try {
+          responseData = jsonDecode(response.body) as Map<String, dynamic>?;
+        } catch (e) {
+          log('Error parsing error response: $e');
+        }
+        
+        final message = responseData?['message'] ?? 
+                        responseData?['error'] ?? 
+                        'Login failed with status ${response.statusCode}';
+        Dialogs.showSnackbar(context, message.toString());
+      }
+    } catch (e) {
+      log('Login error: $e');
+      Dialogs.showSnackbar(context, 'Network error. Please check your connection.');
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
       
-//       // Save user data to AppData
-//       final userData = {
-//         'id': user.user?.uid,
-//         'email': user.user?.email,
-//         'name': user.user?.displayName,
-//         'photoUrl': user.user?.photoURL,
-//         'createdAt': DateTime.now().millisecondsSinceEpoch.toString(),
-//       };
-//       await AppData().setCurrentUser(userData);
-
-//       if ((await APIs.userExists())) {
-//         // User exists, navigate directly to the Inner homepage
-//         Navigator.pushReplacement(
-//           context,
-//           MaterialPageRoute(builder: (_) => Homepage())
-//         );
-//       } else {
-//         // Create new user and then navigate
-//         await APIs.createUser().then((value) {
-//           Navigator.pushReplacement(
-//             context,
-//             MaterialPageRoute(builder: (_) => Homepage())
-//           );
-//         });
-//       }
-//     }
-//   });
-// }
-
-// // Modified Google Sign-In method with improved error handling
-// Future<UserCredential?> _signInWithGoogle() async {
-//   try {
-//     // Check internet connection
-//     await InternetAddress.lookup('google.com');
-    
-//     // Initialize GoogleSignIn with web client ID
-//     final GoogleSignIn googleSignIn = GoogleSignIn(
-//       scopes: ['email', 'profile'],
-//     );
-
-//     // Sign out first to ensure account picker appears
-//     await googleSignIn.signOut();
-    
-//     // Try silent sign-in first for bette r user experience
-//     GoogleSignInAccount? googleUser;
-//     try {
-//       googleUser = await googleSignIn.signInSilently();
-//     } catch (e) {
-//       log('Silent sign-in failed, proceeding with interactive sign-in: ${e.toString()}');
-//     }
-    
-//     // If silent sign-in failed, try interactive sign-in
-//     if (googleUser == null) {
-//       try {
-//         googleUser = await googleSignIn.signIn();
-//       } catch (e) {
-//         log('Interactive sign-in failed: ${e.toString()}');
-        
-//         // Detailed error logging for debugging
-//         if (e is PlatformException) {
-//           log('Error code: ${e.code}');
-//           log('Error message: ${e.message}');
-//           log('Error details: ${e.details}');
-//         }
-        
-//         throw e; // Re-throw for general error handling
-//       }
-//     }
-    
-//     if (googleUser == null) {
-//       log('Sign-in canceled by user');
-//       return null; // User canceled the sign-in
-//     }
-
-//     // Obtain the auth details from the request
-//     final GoogleSignInAuthentication googleAuth = 
-//         await googleUser.authentication;
-
-//     // Create a new credential
-//     final credential = GoogleAuthProvider.credential(
-//       accessToken: googleAuth.accessToken,
-//       idToken: googleAuth.idToken,
-//     );
-
-//     // Once signed in, return the UserCredential
-//     return await FirebaseAuth.instance.signInWithCredential(credential);
-//   } catch (e) {
-//     log('\n_signInWithGoogle error: $e');
-    
-//     // Show more specific error message based on common error codes
-//     if (e.toString().contains('10:')) {
-//       Dialogs.showSnackbar(context, 'Google Sign-In failed. Check your Google Services configuration.');
-//     } else if (e.toString().contains('network_error')) {
-//       Dialogs.showSnackbar(context, 'Network error. Please check your internet connection.');
-//     } else {
-//       Dialogs.showSnackbar(context, 'Sign-In failed. Please try again later.');
-//     }
-//     return null;
-//   }
-// }
-
-// // Generate a local token based on user credentials
-// Future<String> _generateLocalToken(UserCredential user) async {
-//   try {
-//     // Get Firebase ID token as base for our local token
-//     final idToken = await user.user?.getIdToken();
-    
-//     // Create simplified token structure with important user data
-//     final tokenData = {
-//       'userId': user.user?.uid,
-//       'email': user.user?.email,
-//       'name': user.user?.displayName,
-//       'issuedAt': DateTime.now().millisecondsSinceEpoch,
-//       'expiresAt': DateTime.now().add(Duration(days: 30)).millisecondsSinceEpoch,
-//     };
-    
-//     // Encode as base64 - this is a simple token implementation
-//     final jsonData = jsonEncode(tokenData);
-//     final bytes = utf8.encode(jsonData);
-//     final token = base64Encode(bytes);
-    
-//     log('Generated local token for user: ${user.user?.email}');
-//     return token;
-//   } catch (e) {
-//     log('Error generating local token: $e');
-//     // Return a simple fallback token with limited data
-//     return base64Encode(utf8.encode(jsonEncode({
-//       'userId': user.user?.uid,
-//       'fallback': true,
-//       'issuedAt': DateTime.now().millisecondsSinceEpoch
-//     })));
-//   }
-// }
+      // On failure, cancel the autofill context without saving
+      if (_isLoading == false) {
+        TextInput.finishAutofillContext(shouldSave: false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -327,7 +206,6 @@ class _LoginPageState extends State<LoginPage> {
       child: Scaffold(
         appBar: AppBar(
           automaticallyImplyLeading: false,
-          
           backgroundColor: Color.fromRGBO(244, 135, 6, 1),
           centerTitle: true,
         ),
@@ -362,128 +240,149 @@ class _LoginPageState extends State<LoginPage> {
                 child: Padding(
                   padding: const EdgeInsets.all(20.0),
                   child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          margin: EdgeInsets.symmetric(vertical: 10.0),
-                          child: TextField(
-                            controller: emailController,
-                            decoration: InputDecoration(
-                                labelText: 'Email',
-                                prefixIcon: Icon(Icons.email)),
-                          ),
-                        ),
-                        Container(
-                          margin: EdgeInsets.symmetric(vertical: 10.0),
-                          child: TextField(
-                            obscureText: !_isPasswordVisible,
-                            controller: passwordController,
-                            decoration: InputDecoration(
-                              labelText: 'Password',
-                              prefixIcon: Icon(Icons.password_sharp),
-                              suffixIcon: IconButton(
-                                icon: Icon(
-                                  _isPasswordVisible
-                                      ? Icons.visibility_off
-                                      : Icons.visibility,
-                                  color: Colors.grey,
+                    child: AutofillGroup(
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              margin: EdgeInsets.symmetric(vertical: 10.0),
+                              child: TextFormField(
+                                controller: emailController,
+                                focusNode: _emailFocusNode,
+                                autofillHints: const [AutofillHints.username, AutofillHints.email],
+                                keyboardType: TextInputType.emailAddress,
+                                textInputAction: TextInputAction.next,
+                                onEditingComplete: () => _passwordFocusNode.requestFocus(),
+                                decoration: InputDecoration(
+                                  labelText: 'Email',
+                                  prefixIcon: Icon(Icons.email),
                                 ),
-                                onPressed: () {
-                                  setState(() {
-                                    _isPasswordVisible = !_isPasswordVisible;
-                                  });
-                                },
                               ),
                             ),
-                          ),
-                        ),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton(
-                            onPressed: (() => Get.to(Forgot_PWD())),
-                            child: Text(
-                              'Forgot Password ?',
-                              style: TextStyle(fontSize: 15),
-                            ),
-                          ),
-                        ),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Color.fromRGBO(244, 135, 6, 1),
-                            foregroundColor: Colors.white,
-                            elevation: 10,
-                            shadowColor: Colors.transparent,
-                            minimumSize: const Size(200, 50),
-                            maximumSize: const Size(200, 100),
-                            padding: const EdgeInsets.all(10),
-                            side: const BorderSide(
-                              width: 1,
-                              color: Colors.transparent,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                          onPressed: _isLoading ? null : _loginWithAPI,
-                          child: _isLoading 
-                              ? SizedBox(
-                                  width: 20, 
-                                  height: 20, 
-                                  child: CircularProgressIndicator(color: Colors.white)
-                                )
-                              : Text(
-                                  isLogin ? 'Login' : 'Sign Up',
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    letterSpacing: 1.1,
+                            Container(
+                              margin: EdgeInsets.symmetric(vertical: 10.0),
+                              child: TextFormField(
+                                controller: passwordController,
+                                focusNode: _passwordFocusNode,
+                                obscureText: !_isPasswordVisible,
+                                autofillHints: const [AutofillHints.password],
+                                onEditingComplete: () {
+                                  // This will trigger autofill save dialog in some operating systems
+                                  TextInput.finishAutofillContext();
+                                  // Then attempt login
+                                  _loginWithAPI();
+                                },
+                                decoration: InputDecoration(
+                                  labelText: 'Password',
+                                  prefixIcon: Icon(Icons.password_sharp),
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      _isPasswordVisible
+                                          ? Icons.visibility_off
+                                          : Icons.visibility,
+                                      color: Colors.grey,
+                                    ),
+                                    onPressed: () {
+                                      setState(() {
+                                        _isPasswordVisible = !_isPasswordVisible;
+                                      });
+                                    },
                                   ),
                                 ),
+                              ),
+                            ),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton(
+                                onPressed: (() => Get.to(Forgot_PWD())),
+                                child: Text(
+                                  'Forgot Password ?',
+                                  style: TextStyle(fontSize: 15),
+                                ),
+                              ),
+                            ),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Color.fromRGBO(244, 135, 6, 1),
+                                foregroundColor: Colors.white,
+                                elevation: 10,
+                                shadowColor: Colors.transparent,
+                                minimumSize: const Size(200, 50),
+                                maximumSize: const Size(200, 100),
+                                padding: const EdgeInsets.all(10),
+                                side: const BorderSide(
+                                  width: 1,
+                                  color: Colors.transparent,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              onPressed: _isLoading ? null : _loginWithAPI,
+                              child: _isLoading 
+                                  ? SizedBox(
+                                      width: 20, 
+                                      height: 20, 
+                                      child: CircularProgressIndicator(color: Colors.white)
+                                    )
+                                  : Text(
+                                      isLogin ? 'Login' : 'Sign Up',
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        letterSpacing: 1.1,
+                                      ),
+                                    ),
+                            ),
+                            SizedBox(
+                              height: 10,
+                            ),
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                  backgroundColor: Color.fromRGBO(244, 135, 6, 1),
+                                  shape: StadiumBorder(),
+                                  elevation: 1),
+                              onPressed: () {
+                                //_handleGoogleBtnClick();
+                              },
+                              icon: Lottie.asset(
+                                'animation/Googlesignup.json',
+                                height: mq.height * .05,
+                              ),
+                              label: RichText(
+                                  text: const TextSpan(
+                                      style: TextStyle(
+                                          color: Colors.black, fontSize: 19),
+                                      children: [
+                                    TextSpan(text: 'Sign In with ',style: TextStyle(color: Colors.white)),
+                                    TextSpan(
+                                        text: 'Google',
+                                        style:
+                                            TextStyle(fontWeight: FontWeight.w500))
+                                  ])),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                // Cancel autofill before navigating away
+                                TextInput.finishAutofillContext(shouldSave: false);
+                                Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (_) => Signup()));
+                              },
+                              child: Text(
+                                isLogin
+                                    ? 'Create new account'
+                                    : 'Already have an account?',
+                                style: TextStyle(
+                                    fontSize: 15,
+                                    color: Colors.blue,
+                                    fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
                         ),
-                        SizedBox(
-                          height: 10,
-                        ),
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                              backgroundColor: Color.fromRGBO(244, 135, 6, 1),
-                              shape: StadiumBorder(),
-                              elevation: 1),
-                          onPressed: () {
-                            //_handleGoogleBtnClick();
-                          },
-                          icon: Lottie.asset(
-                            'animation/Googlesignup.json',
-                            height: mq.height * .05,
-                          ),
-                          label: RichText(
-                              text: const TextSpan(
-                                  style: TextStyle(
-                                      color: Colors.black, fontSize: 19),
-                                  children: [
-                                TextSpan(text: 'Sign In with ',style: TextStyle(color: Colors.white)),
-                                TextSpan(
-                                    text: 'Google',
-                                    style:
-                                        TextStyle(fontWeight: FontWeight.w500))
-                              ])),
-                        ),
-                        TextButton(
-                          onPressed: () {
-                            Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (_) => Signup()));
-                          },
-                          child: Text(
-                            isLogin
-                                ? 'Create new account'
-                                : 'Already have an account?',
-                            style: TextStyle(
-                                fontSize: 15,
-                                color: Colors.blue,
-                                fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
@@ -494,4 +393,4 @@ class _LoginPageState extends State<LoginPage> {
       ),
     );
   }
-}
+} 

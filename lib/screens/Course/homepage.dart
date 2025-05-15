@@ -285,14 +285,8 @@ class _NewHomeScreenState extends ConsumerState<Course_Homepage>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Good Morning',
-                      style: TextStyle( 
-                        color: Colors.white,
-                        fontSize: isSmallPhone ? 18 : 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    greetUser(context),
+                    
                     Text(
                       _userData != null
                           ? '${_userData!['name']}'
@@ -405,6 +399,35 @@ class _NewHomeScreenState extends ConsumerState<Course_Homepage>
           ),
         ],
       ),
+    );
+  }
+}
+
+Widget greetUser(context) {
+  DateTime now = DateTime.now();
+  if (now.hour < 12) {
+    return Text(
+      "Good Morning",
+      style:
+          Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white),
+    );
+  } else if (now.hour >= 12 && now.hour < 18) {
+    return Text(
+      "Good Afternoon,",
+      style:
+          Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white),
+    );
+  } else if (now.hour >= 18 && now.hour < 21) {
+    return Text(
+      "Good Evening,",
+      style:
+          Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white),
+    );
+  } else {
+    return Text(
+      "💻 Let's Crack This Tonight 🎯",
+      style:
+          Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white),
     );
   }
 }

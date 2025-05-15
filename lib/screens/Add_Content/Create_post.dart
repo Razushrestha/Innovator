@@ -19,7 +19,7 @@ class CreatePostScreen extends StatefulWidget {
 
 class _CreatePostScreenState extends State<CreatePostScreen>
     with SingleTickerProviderStateMixin {
-        final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   bool _isLoading = true;
   Map<String, dynamic>? _userData;
@@ -73,6 +73,7 @@ class _CreatePostScreenState extends State<CreatePostScreen>
     // Start animation when description changes or files are uploaded
     _descriptionController.addListener(_updateButtonState);
   }
+
   // Listen to changes in the description field and update button state
   // Update button state whenever description or uploaded files change
   void _updateButtonState() {
@@ -105,7 +106,9 @@ class _CreatePostScreenState extends State<CreatePostScreen>
 
   // Check if post button should be enabled - now checks for either description or files
   bool get _isPostButtonEnabled {
-    return (_descriptionController.text.isNotEmpty || _uploadedFiles.isNotEmpty) && !_isCreatingPost;
+    return (_descriptionController.text.isNotEmpty ||
+            _uploadedFiles.isNotEmpty) &&
+        !_isCreatingPost;
   }
 
   Future<void> _pickFiles() async {
@@ -272,10 +275,11 @@ class _CreatePostScreenState extends State<CreatePostScreen>
 
       // Create post body with selected type
       final body = {
-        'type': _postTypes.firstWhere(
-          (type) => type['id'] == _selectedPostType,
-          orElse: () => _postTypes[0],
-        )['id'],
+        'type':
+            _postTypes.firstWhere(
+              (type) => type['id'] == _selectedPostType,
+              orElse: () => _postTypes[0],
+            )['id'],
         'status': _descriptionController.text,
         'description': _descriptionController.text,
         'files': _uploadedFiles.isEmpty ? [] : _uploadedFiles,
@@ -363,9 +367,10 @@ class _CreatePostScreenState extends State<CreatePostScreen>
     final String? picturePath = userData?['picture'];
     final String baseUrl = 'http://182.93.94.210:3064'; // Base URL for the API
     return Scaffold(
-            key: _scaffoldKey, // Add the scaffold key here
+      key: _scaffoldKey, // Add the scaffold key here
 
       backgroundColor: _backgroundColor,
+
       // appBar: AppBar(
       //   backgroundColor: _cardColor,
       //   elevation: 1,
@@ -406,397 +411,400 @@ class _CreatePostScreenState extends State<CreatePostScreen>
       //     const SizedBox(width: 12),
       //   ],
       // ),
-
       body: Stack(
         children: [
-        SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              
-              SizedBox(height: 15,),
-              // User info and post type selection
-              Container(
-                height: 400,
-                color: _cardColor,
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    // User info row
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        CircleAvatar(
-  radius: 40,
-  backgroundColor: Colors.grey[200],
-  backgroundImage: picturePath != null
-      ? NetworkImage('$baseUrl$picturePath')
-      : AssetImage('assets/images/person.png')
-),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Display current user name from AppData
-                              Text(
-                                '$name',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                  color: _textColor,
-                                ),
-                              ),
-        
-                              // Post type dropdown
-                              Container(
-                                margin: const EdgeInsets.only(top: 6),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade200,
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: DropdownButtonHideUnderline(
-                                  child: DropdownButton<String>(
-                                    value: _selectedPostType,
-                                    icon: const Icon(Icons.arrow_drop_down),
-                                    elevation: 16,
-                                    style: TextStyle(color: _textColor),
-                                    isDense: true,
-                                    isExpanded: false,
-                                    borderRadius: BorderRadius.circular(12),
-                                    onChanged: (String? value) {
-                                      if (value != null) {
-                                        setState(() {
-                                          _selectedPostType = value;
-                                        });
-                                      }
-                                    },
-                                    items:
-                                        _postTypes.map<DropdownMenuItem<String>>((
-                                          Map<String, dynamic> type,
-                                        ) {
-                                          return DropdownMenuItem<String>(
-                                            value: type['id'],
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(
-                                                  type['icon'],
-                                                  size: 18,
-                                                  color: _primaryColor,
-                                                ),
-                                                const SizedBox(width: 8),
-                                                Text(type['name']),
-                                              ],
-                                            ),
-                                          );
-                                        }).toList(),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-        
-                    const SizedBox(height: 16),
-        
-                    // Text input area
-                    TextField(
-                      controller: _descriptionController,
-                      style: TextStyle(color: _textColor, fontSize: 18),
-                      maxLines: 8,
-                      minLines: 3,
-                      decoration: InputDecoration(
-                        hintText: 'What\'s on your mind?',
-                        hintStyle: TextStyle(
-                          color: Colors.grey.shade500,
-                          fontSize: 18,
-                        ),
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-        
-              const SizedBox(height: 8),
-        
-              // Attachment section
-              Container(
-                color: _cardColor,
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Add to your post',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                        color: _textColor,
-                      ),
-                    ),
-        
-                    const SizedBox(height: 16),
-        
-                    // Media buttons
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      physics: const BouncingScrollPhysics(),
-                      child: Row(
-                        children: [
-                          _mediaButton(
-                            icon: Icons.photo_library,
-                            color: Colors.green,
-                            label: 'Photos',
-                            onTap: _pickFiles,
-                          ),
-                          _mediaButton(
-                            icon: Icons.videocam,
-                            color: Colors.red,
-                            label: 'Video',
-                            onTap: _pickFiles,
-                          ),
-                          _mediaButton(
-                            icon: Icons.attach_file,
-                            color: Colors.blue,
-                            label: 'Files',
-                            onTap: _pickFiles,
-                          ),
-                          // _mediaButton(
-                          //   icon: Icons.person_add,
-                          //   color: Colors.orange,
-                          //   label: 'Tag People',
-                          //   onTap: () {},
-                          // ),
-                          _mediaButton(
-                            icon: Icons.location_on,
-                            color: Colors.red.shade700,
-                            label: 'Location',
-                            onTap: () {},
-                          ),
-                        ],
-                      ),
-                    ),
-        
-                    if (_selectedFiles.isNotEmpty && _isUploading) ...[
-                      const SizedBox(height: 20),
-        
-                      // Upload status indicator
+          SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(height: 15),
+                // User info and post type selection
+                Container(
+                  height: 400,
+                  color: _cardColor,
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      // User info row
                       Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              color: _facebookBlue,
-                              strokeWidth: 2,
-                            ),
+                          CircleAvatar(
+                            radius: 40,
+                            backgroundColor: Colors.grey[200],
+                            backgroundImage:
+                                picturePath != null
+                                    ? NetworkImage('$baseUrl$picturePath')
+                                    : AssetImage('assets/images/person.png'),
                           ),
                           const SizedBox(width: 12),
-                          Text(
-                            'Uploading files...',
-                            style: TextStyle(
-                              color: _facebookBlue,
-                              fontWeight: FontWeight.w500,
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Display current user name from AppData
+                                Text(
+                                  '$name',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                    color: _textColor,
+                                  ),
+                                ),
+
+                                // Post type dropdown
+                                Container(
+                                  margin: const EdgeInsets.only(top: 6),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade200,
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButton<String>(
+                                      value: _selectedPostType,
+                                      icon: const Icon(Icons.arrow_drop_down),
+                                      elevation: 16,
+                                      style: TextStyle(color: _textColor),
+                                      isDense: true,
+                                      isExpanded: false,
+                                      borderRadius: BorderRadius.circular(12),
+                                      onChanged: (String? value) {
+                                        if (value != null) {
+                                          setState(() {
+                                            _selectedPostType = value;
+                                          });
+                                        }
+                                      },
+                                      items:
+                                          _postTypes.map<
+                                            DropdownMenuItem<String>
+                                          >((Map<String, dynamic> type) {
+                                            return DropdownMenuItem<String>(
+                                              value: type['id'],
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    type['icon'],
+                                                    size: 18,
+                                                    color: _primaryColor,
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  Text(type['name']),
+                                                ],
+                                              ),
+                                            );
+                                          }).toList(),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
-                    ],
-        
-                    if (_selectedFiles.isNotEmpty && !_isUploading) ...[
-                      const SizedBox(height: 20),
-        
-                      Text(
-                        'Selected Files (${_selectedFiles.length})',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: _textColor,
-                          fontSize: 16,
-                        ),
-                      ),
-        
-                      const SizedBox(height: 12),
-        
-                      // Horizontal file previews
-                      Container(
-                        height: 100,
-                        child: ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: _selectedFiles.length,
-                          itemBuilder: (context, index) {
-                            return Container(
-                              width: 100,
-                              margin: const EdgeInsets.only(right: 8),
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade200,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.grey.shade300),
-                              ),
-                              child: Stack(
-                                children: [
-                                  Center(
-                                    child: Icon(
-                                      _getFileIcon(
-                                        _selectedFiles[index].extension,
-                                      ),
-                                      size: 36,
-                                      color: _facebookBlue,
-                                    ),
-                                  ),
-                                  Positioned(
-                                    right: 0,
-                                    top: 0,
-                                    child: GestureDetector(
-                                      onTap: () {
-                                        setState(() {
-                                          _selectedFiles.removeAt(index);
-                                        });
-                                      },
-                                      child: Container(
-                                        padding: const EdgeInsets.all(4),
-                                        decoration: BoxDecoration(
-                                          color: Colors.black.withOpacity(0.5),
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: Icon(
-                                          Icons.close,
-                                          color: Colors.white,
-                                          size: 14,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
+
+                      const SizedBox(height: 16),
+
+                      // Text input area
+                      TextField(
+                        controller: _descriptionController,
+                        style: TextStyle(color: _textColor, fontSize: 18),
+                        maxLines: 8,
+                        minLines: 3,
+                        decoration: InputDecoration(
+                          hintText: 'What\'s on your mind?',
+                          hintStyle: TextStyle(
+                            color: Colors.grey.shade500,
+                            fontSize: 18,
+                          ),
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          contentPadding: EdgeInsets.zero,
                         ),
                       ),
                     ],
-                  ],
+                  ),
                 ),
-              ),
-        
-              // Uploaded files section
-              if (_uploadedFiles.isNotEmpty) ...[
+
                 const SizedBox(height: 8),
+
+                // Attachment section
                 Container(
                   color: _cardColor,
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.check_circle,
-                            color: Colors.green.shade600,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Uploaded Files',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: _textColor,
-                            ),
-                          ),
-                        ],
+                      Text(
+                        'Add to your post',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: _textColor,
+                        ),
                       ),
-        
-                      const SizedBox(height: 12),
-        
-                      ListView.separated(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: _uploadedFiles.length,
-                        separatorBuilder:
-                            (context, index) =>
-                                Divider(color: Colors.grey.shade200),
-                        itemBuilder: (context, index) {
-                          final item = _uploadedFiles[index];
-                          final originalname = _safeGetString(
-                            item,
-                            'originalname',
-                            'Unknown',
-                          );
-                          final filename = _safeGetString(
-                            item,
-                            'filename',
-                            'File $index',
-                          );
-                          final fileExt =
-                              path
-                                  .extension(originalname)
-                                  .replaceAll('.', '')
-                                  .toLowerCase();
-        
-                          return ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade100,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Icon(
-                                _getFileIcon(fileExt),
+
+                      const SizedBox(height: 16),
+
+                      // Media buttons
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        physics: const BouncingScrollPhysics(),
+                        child: Row(
+                          children: [
+                            _mediaButton(
+                              icon: Icons.photo_library,
+                              color: Colors.green,
+                              label: 'Photos',
+                              onTap: _pickFiles,
+                            ),
+                            _mediaButton(
+                              icon: Icons.videocam,
+                              color: Colors.red,
+                              label: 'Video',
+                              onTap: _pickFiles,
+                            ),
+                            _mediaButton(
+                              icon: Icons.attach_file,
+                              color: Colors.blue,
+                              label: 'Files',
+                              onTap: _pickFiles,
+                            ),
+                            // _mediaButton(
+                            //   icon: Icons.person_add,
+                            //   color: Colors.orange,
+                            //   label: 'Tag People',
+                            //   onTap: () {},
+                            // ),
+                            _mediaButton(
+                              icon: Icons.location_on,
+                              color: Colors.red.shade700,
+                              label: 'Location',
+                              onTap: () {},
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      if (_selectedFiles.isNotEmpty && _isUploading) ...[
+                        const SizedBox(height: 20),
+
+                        // Upload status indicator
+                        Row(
+                          children: [
+                            SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
                                 color: _facebookBlue,
+                                strokeWidth: 2,
                               ),
                             ),
-                            title: Text(
-                              originalname,
-                              style: TextStyle(color: _textColor),
-                            ),
-                            subtitle: Text(
-                              'Ready to post',
+                            const SizedBox(width: 12),
+                            Text(
+                              'Uploading files...',
                               style: TextStyle(
-                                color: Colors.green.shade600,
-                                fontSize: 12,
+                                color: _facebookBlue,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
-                            trailing: GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  _uploadedFiles.removeAt(index);
-                                  // Update button state after removing file
-                                  _updateButtonState();
-                                });
-                              },
-                              child: Icon(
-                                Icons.close,
-                                color: Colors.grey.shade600,
-                                size: 20,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
+                          ],
+                        ),
+                      ],
+
+                      if (_selectedFiles.isNotEmpty && !_isUploading) ...[
+                        const SizedBox(height: 20),
+
+                        Text(
+                          'Selected Files (${_selectedFiles.length})',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: _textColor,
+                            fontSize: 16,
+                          ),
+                        ),
+
+                        const SizedBox(height: 12),
+
+                        // Horizontal file previews
+                        Container(
+                          height: 100,
+                          child: ListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: _selectedFiles.length,
+                            itemBuilder: (context, index) {
+                              return Container(
+                                width: 100,
+                                margin: const EdgeInsets.only(right: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade200,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: Colors.grey.shade300,
+                                  ),
+                                ),
+                                child: Stack(
+                                  children: [
+                                    Center(
+                                      child: Icon(
+                                        _getFileIcon(
+                                          _selectedFiles[index].extension,
+                                        ),
+                                        size: 36,
+                                        color: _facebookBlue,
+                                      ),
+                                    ),
+                                    Positioned(
+                                      right: 0,
+                                      top: 0,
+                                      child: GestureDetector(
+                                        onTap: () {
+                                          setState(() {
+                                            _selectedFiles.removeAt(index);
+                                          });
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.all(4),
+                                          decoration: BoxDecoration(
+                                            color: Colors.black.withOpacity(
+                                              0.5,
+                                            ),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: Icon(
+                                            Icons.close,
+                                            color: Colors.white,
+                                            size: 14,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
+
+                // Uploaded files section
+                if (_uploadedFiles.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    color: _cardColor,
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.check_circle,
+                              color: Colors.green.shade600,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Uploaded Files',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: _textColor,
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 12),
+
+                        ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _uploadedFiles.length,
+                          separatorBuilder:
+                              (context, index) =>
+                                  Divider(color: Colors.grey.shade200),
+                          itemBuilder: (context, index) {
+                            final item = _uploadedFiles[index];
+                            final originalname = _safeGetString(
+                              item,
+                              'originalname',
+                              'Unknown',
+                            );
+                            final filename = _safeGetString(
+                              item,
+                              'filename',
+                              'File $index',
+                            );
+                            final fileExt =
+                                path
+                                    .extension(originalname)
+                                    .replaceAll('.', '')
+                                    .toLowerCase();
+
+                            return ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(
+                                  _getFileIcon(fileExt),
+                                  color: _facebookBlue,
+                                ),
+                              ),
+                              title: Text(
+                                originalname,
+                                style: TextStyle(color: _textColor),
+                              ),
+                              subtitle: Text(
+                                'Ready to post',
+                                style: TextStyle(
+                                  color: Colors.green.shade600,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              trailing: GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    _uploadedFiles.removeAt(index);
+                                    // Update button state after removing file
+                                    _updateButtonState();
+                                  });
+                                },
+                                child: Icon(
+                                  Icons.close,
+                                  color: Colors.grey.shade600,
+                                  size: 20,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
+                // Bottom area
               ],
-        
-              // Bottom area
-            ],
+            ),
           ),
-        ),
-        FloatingMenuWidget(scaffoldKey: _scaffoldKey,)
-        ]
+          FloatingMenuWidget(scaffoldKey: _scaffoldKey),
+        ],
       ),
 
       bottomSheet: Container(
