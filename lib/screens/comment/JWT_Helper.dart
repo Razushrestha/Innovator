@@ -1,6 +1,7 @@
 // Create a new file at: lib/utils/jwt_helper.dart
 
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 class JwtHelper {
   /// Decodes a JWT token and extracts the payload as a Map.
@@ -31,11 +32,20 @@ class JwtHelper {
   static String? extractUserId(String? token) {
     if (token == null || token.isEmpty) return null;
     
-    try {
-      final payload = decodeJwt(token);
-      return payload?['_id'];
+   try {
+      final parts = token.split('.');
+      if (parts.length != 3) {
+        developer.log('Invalid JWT token format');
+        return null;
+      }
+      final payload = parts[1];
+      final decoded = base64Url.decode(base64Url.normalize(payload));
+      final payloadMap = jsonDecode(utf8.decode(decoded)) as Map<String, dynamic>;
+      final userId = payloadMap['sub'] ?? payloadMap['userId'] ?? payloadMap['_id'];
+      developer.log('Extracted userId from JWT: ${userId ?? "null"}');
+      return userId?.toString();
     } catch (e) {
-      print('Error extracting user ID: $e');
+      developer.log('Error extracting userId from JWT: $e');
       return null;
     }
   }

@@ -27,7 +27,7 @@ class _SplashScreenState extends State<SplashScreen> {
     await Future.delayed(const Duration(milliseconds: 2000));
     
     // Check if user exists (is authenticated)
-    if (appData.isAuthenticated) {
+    if ( appData.isAuthenticated == true) {
       // Initialize socket connection if authenticated
       //await _initializeSocketConnection(appData);
       _navigateToHome();

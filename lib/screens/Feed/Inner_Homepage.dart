@@ -10,15 +10,14 @@ import 'package:innovator/screens/Likes/content-Like-Button.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart';
 import 'package:innovator/screens/SHow_Specific_Profile/Show_Specific_Profile.dart';
-import 'package:innovator/screens/chatrrom/screen/chat_list_screen.dart';
-import 'package:innovator/screens/chatrrom/socket_service.dart';
+import 'package:innovator/screens/chatrrom/Screen/chat_listscreen.dart';
 import 'package:innovator/screens/comment/JWT_Helper.dart';
 import 'package:innovator/screens/comment/comment_section.dart';
 import 'dart:io';
-import 'package:provider/provider.dart';
 import 'package:lottie/lottie.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
 import 'dart:typed_data';
+import 'dart:developer' as developer;
 
 // Enhanced Author model
 class Author {
@@ -109,6 +108,7 @@ class FeedContent {
       _hasVideos = false;
       _hasPdfs = false;
       _hasWordDocs = false;
+      developer.log('Error initializing FeedContent media: $e');
     }
   }
 
@@ -119,7 +119,7 @@ class FeedContent {
         status: json['status'] ?? '',
         type: json['type'] ?? '',
         files: List<String>.from(json['files'] ?? []),
-        author: Author.fromJson(json['author'] ?? {}),
+        author: Author.fromJson(json['author'] ?? {'_id': '', 'name': 'Unknown', 'email': '', 'picture': ''}),
         createdAt: json['createdAt'] != null
             ? DateTime.parse(json['createdAt'])
             : DateTime.now(),
@@ -132,6 +132,7 @@ class FeedContent {
         isFollowed: json['followed'] ?? false,
       );
     } catch (e) {
+      developer.log('Error parsing FeedContent: $e');
       return FeedContent(
         id: '',
         status: '',
@@ -204,7 +205,7 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
   final List<FeedContent> _contents = [];
   final ScrollController _scrollController = ScrollController();
   bool _isLoading = false;
-  String? _lastId; // Track the last content ID
+  String? _lastId;
   bool _hasError = false;
   String _errorMessage = '';
   bool _hasMoreData = true;
@@ -273,6 +274,7 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
         _hasError = true;
         _errorMessage = 'Authentication required. Please login.';
       });
+      Navigator.of(context).pushReplacementNamed('/login');
       return false;
     }
     return true;
@@ -283,7 +285,7 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
         ? 'http://182.93.94.210:3064/api/v1/list-contents'
         : 'http://182.93.94.210:3064/api/v1/list-contents?lastId=$_lastId';
     
-    debugPrint('Request URL: $url'); // Log request URL for debugging
+    debugPrint('Request URL: $url');
     final response = await http.get(
       Uri.parse(url),
       headers: {
@@ -291,8 +293,8 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
         'Accept': 'application/json',
         'authorization': 'Bearer ${_appData.authToken}',
       },
-    ).timeout(Duration(seconds: 30)); // Add timeout
-    debugPrint('Response: ${response.body}'); // Log response for debugging
+    ).timeout(Duration(seconds: 30));
+    debugPrint('Response: ${response.body}');
     return response;
   }
 
@@ -323,15 +325,15 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
 
       if (success) {
         await _loadMoreContent();
-        return;
+      } else {
+        await _appData.logout();
+        Navigator.of(context).pushReplacementNamed('/login');
+        setState(() {
+          _hasError = true;
+          _errorMessage = 'Session expired. Please login again.';
+        });
       }
     }
-
-    await _appData.clearAuthToken();
-    setState(() {
-      _hasError = true;
-      _errorMessage = 'Session expired. Please login again.';
-    });
   }
 
   Future<bool> _refreshToken() async {
@@ -394,8 +396,6 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
 
   @override
   void dispose() {
-    final socketService = Provider.of<SocketService>(context, listen: false);
-    socketService.disconnect();
     _scrollController.dispose();
     super.dispose();
   }
@@ -424,8 +424,7 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          Navigator.push(context, MaterialPageRoute(builder: (_) => ChatListScreen()));
-          debugPrint('FloatingActionButton pressed!');
+         Navigator.push(context, MaterialPageRoute(builder: (_) => ChatListScreen(currentUserId: AppData().currentUserId ?? '', currentUserName: AppData().currentUserName ?? '', currentUserPicture: AppData().currentUserProfilePicture ?? '', currentUserEmail: AppData().currentUserEmail ?? '')));
         },
         child: Container(
           height: 200,
@@ -598,13 +597,26 @@ class _FeedItemState extends State<FeedItem> with SingleTickerProviderStateMixin
 
   bool _isAuthorCurrentUser() {
     if (AppData().isCurrentUser(widget.content.author.id)) {
+      developer.log('isAuthorCurrentUser: Matched via AppData');
       return true;
     }
 
     final String? token = AppData().authToken;
     if (token != null && token.isNotEmpty) {
-      final String? currentUserId = JwtHelper.extractUserId(token);
-      return currentUserId == widget.content.author.id;
+      try {
+        final String? currentUserId = JwtHelper.extractUserId(token);
+        if (currentUserId != null) {
+          final result = currentUserId == widget.content.author.id;
+          developer.log('isAuthorCurrentUser: JWT check, currentUserId=$currentUserId, authorId=${widget.content.author.id}, result=$result');
+          return result;
+        } else {
+          developer.log('isAuthorCurrentUser: JWT token does not contain user ID');
+        }
+      } catch (e) {
+        developer.log('isAuthorCurrentUser: Error parsing JWT token: $e');
+      }
+    } else {
+      developer.log('isAuthorCurrentUser: No auth token available');
     }
 
     return false;

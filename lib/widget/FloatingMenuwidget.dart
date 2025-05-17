@@ -94,7 +94,7 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
       case 'navigate_golf':
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => Homepage()),
+          MaterialPageRoute(builder: (context) => Homepage() ),
           
         );
         break;
@@ -129,7 +129,7 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => AuthCheck(child: UserProfileScreen()),
+            builder: (_) => UserProfileScreen(),
           ),
           
         );

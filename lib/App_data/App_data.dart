@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:developer' as developer;
+import 'package:innovator/screens/comment/JWT_Helper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AppData {
@@ -23,12 +24,22 @@ class AppData {
   // Enhanced getter with debug logging
   String? get currentUserEmail {
     final email = _currentUser?['email'];
-    developer.log('Getting current user email: $email');
+    developer.log('Getting current user email: ${email ?? "null"}');
     return email;
   }
   
-  String? get currentUserId => _currentUser?['id'];
+  // Modified to use JWT helper
+  String? get currentUserId {
+    // Use the JWT helper to extract the user ID from the token
+    final id = JwtHelper.extractUserId(_authToken);
+    developer.log('Getting current user ID from JWT: ${id ?? "null"}');
+    return id;
+  }
+  
   String? get currentUserName => _currentUser?['name'];
+  
+  // New getter for profile picture
+  String? get currentUserProfilePicture => _currentUser?['profilePicture'];
   
   // Initialize app data (call this at app startup)
   Future<void> initialize() async {
@@ -37,12 +48,21 @@ class AppData {
       
       // Load auth token
       _authToken = prefs.getString(_tokenKey);
+      developer.log('Auth token: ${_authToken ?? "null"}');
       
       // Load current user data
       final userJson = prefs.getString(_currentUserKey);
       if (userJson != null) {
-        _currentUser = jsonDecode(userJson) as Map<String, dynamic>;
-        developer.log('Loaded user data: $_currentUser');
+        try {
+          _currentUser = jsonDecode(userJson) as Map<String, dynamic>;
+          developer.log('Loaded user data: $_currentUser');
+          if (_currentUser?['_id'] == null) {
+            developer.log('Warning: User data does not contain "id" field');
+          }
+        } catch (e) {
+          developer.log('Error decoding user JSON: $e');
+          _currentUser = null;
+        }
       } else {
         developer.log('No user data found in SharedPreferences');
       }
@@ -79,6 +99,10 @@ class AppData {
   
   // Set current user data
   Future<void> setCurrentUser(Map<String, dynamic> userData) async {
+    if (userData['_id'] == null) {
+      developer.log('Error: Attempted to set user data without "_id" field: $userData');
+      return;
+    }
     _currentUser = userData;
     developer.log('Setting current user: $_currentUser');
     try {
@@ -121,19 +145,20 @@ class AppData {
     }
   }
   
+  // New method to update profile picture
+  Future<void> updateProfilePicture(String pictureUrl) async {
+    await updateCurrentUserField('profilePicture', pictureUrl);
+    developer.log('Profile picture updated: $pictureUrl');
+  }
+  
   // Enhanced helper to check if this is the current user with debug logging
   bool isCurrentUser(String userId) {
-    final result = _currentUser != null && _currentUser!['id'] == userId;
-    developer.log('isCurrentUser check - Current user ID: ${_currentUser?['id']}, Comparing with: $userId, Result: $result');
+    // Updated to use JWT helper for consistency with currentUserId getter
+    final currentId = JwtHelper.extractUserId(_authToken);
+    final result = currentId != null && currentId == userId;
+    developer.log('isCurrentUser check - Current user ID from JWT: ${currentId ?? "null"}, Comparing with: $userId, Result: $result');
     return result;
   }
-
-  /*
- ronit 
-  nfh
-  n ronit 
-  nkjdf
-  */
   
   // Enhanced helper to check if this is the current user by email with debug logging
   bool isCurrentUserByEmail(String email) {
@@ -157,6 +182,8 @@ class AppData {
   Future<void> logout() async {
     await clearAuthToken();
     await clearCurrentUser();
+    _authToken = null;
+    _currentUser = null;
     developer.log('User logged out - all data cleared');
   }
 }

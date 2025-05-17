@@ -15,15 +15,16 @@ Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
 
 late Size mq;
 void main() async {
+      await AppData().initialize();
+
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
-  ]).then((value) async {
+  ]).then((value)  {
     //final appData = AppData();
-    await AppData().initialize();
     // await _initializeFirebase();
     runApp(
         ProviderScope(child: InnovatorHomePage()),

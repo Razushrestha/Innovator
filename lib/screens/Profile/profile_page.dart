@@ -13,7 +13,6 @@ import 'package:innovator/screens/Follow/follow_Button.dart';
 import 'package:innovator/screens/Profile/Edit_Profile.dart';
 import 'package:innovator/screens/SHow_Specific_Profile/Show_Specific_Profile.dart';
 import 'package:innovator/widget/FloatingMenuwidget.dart';
-import 'package:innovator/widget/auth_check.dart';
 import 'package:path/path.dart' as path;
 import 'package:http_parser/http_parser.dart';
 
@@ -319,7 +318,7 @@ class UserProfileScreen extends StatefulWidget {
 
 class _UserProfileScreenState extends State<UserProfileScreen>
     with SingleTickerProviderStateMixin {
-        final List<FeedContent> _contents = [];
+       // final List<FeedContent> _contents = [];
 
   late Future<UserProfile> _profileFuture;
   bool _isUploading = false;
@@ -660,16 +659,16 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                           ),
                         ),
                         SizedBox(height: 12),
-                        TextButton(
-                          onPressed: () async {
-                            await AppData().clearAuthToken();
-                            Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(builder: (_) => LoginPage()),
-                            );
-                          },
-                          child: Text('Return to Login'),
-                        ),
+                        // TextButton(
+                        //   onPressed: () async {
+                        //     await AppData().clearAuthToken();
+                        //     Navigator.pushReplacement(
+                        //       context,
+                        //       MaterialPageRoute(builder: (_) => LoginPage()),
+                        //     );
+                        //   },
+                        //   child: Text('Return to Login'),
+                        // ),
                       ],
                     ),
                   ),
@@ -757,9 +756,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                                       onPressed: () {
                                         Navigator.of(context).pushReplacement(
                                           MaterialPageRoute(
-                                            builder: (_) => AuthCheck(
-                                              child: EditProfileScreen(),
-                                            ),
+                                            builder: (_) => EditProfileScreen()
                                           ),
                                         );
                                       },

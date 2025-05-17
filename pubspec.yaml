@@ -60,11 +60,12 @@ dependencies:
   open_file: ^3.5.10
   emoji_picker_flutter: ^4.3.0
   msix: ^3.16.9
-  socket_io_client: ^3.1.2
   mockito: ^5.4.6
   riverpod: ^2.6.1
   flutter_riverpod: ^2.6.1
   video_thumbnail: ^0.5.6
+  mqtt_client: ^10.8.0
+  connectivity_plus: ^6.1.4
 
 dev_dependencies:
   flutter_test:

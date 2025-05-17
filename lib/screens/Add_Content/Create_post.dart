@@ -33,13 +33,14 @@ class _CreatePostScreenState extends State<CreatePostScreen>
   late AnimationController _animationController;
   late Animation<double> _animation;
 
-  // Post type selection
-  String _selectedPostType = 'Innovation';
+  // Post type selection - FIXED: Ensure value matches dropdown item value
+  String _selectedPostType = 'innovation'; // Changed to match the id in _postTypes
   final List<Map<String, dynamic>> _postTypes = [
-    {'id': 'Innovation', 'name': 'Innovation', 'icon': Icons.lightbulb_outline},
+    {'id': 'innovation', 'name': 'Innovation', 'icon': Icons.lightbulb_outline},
     {'id': 'idea', 'name': 'Idea', 'icon': Icons.tips_and_updates},
     {'id': 'project', 'name': 'Project', 'icon': Icons.rocket_launch},
     {'id': 'question', 'name': 'Question', 'icon': Icons.help_outline},
+    {'id': 'announcement', 'name': 'Announcement', 'icon': Icons.campaign}, // Fixed typo in 'announcement' and changed icon
     {'id': 'other', 'name': 'Other', 'icon': Icons.more_horiz},
   ];
 
@@ -140,7 +141,7 @@ class _CreatePostScreenState extends State<CreatePostScreen>
       return;
     }
 
-    if (!_appData.isAuthenticated) {
+    if (!await _appData.isAuthenticated) {
       _showError('Please log in first');
       return;
     }
@@ -261,7 +262,7 @@ class _CreatePostScreenState extends State<CreatePostScreen>
       return;
     }
 
-    if (!_appData.isAuthenticated) {
+    if (!await _appData.isAuthenticated) {
       _showError('Please log in first');
       return;
     }
@@ -275,11 +276,7 @@ class _CreatePostScreenState extends State<CreatePostScreen>
 
       // Create post body with selected type
       final body = {
-        'type':
-            _postTypes.firstWhere(
-              (type) => type['id'] == _selectedPostType,
-              orElse: () => _postTypes[0],
-            )['id'],
+        'type': _selectedPostType, // Using the correct value directly
         'status': _descriptionController.text,
         'description': _descriptionController.text,
         'files': _uploadedFiles.isEmpty ? [] : _uploadedFiles,
@@ -317,7 +314,7 @@ class _CreatePostScreenState extends State<CreatePostScreen>
       _descriptionController.clear();
       _selectedFiles = [];
       _uploadedFiles = [];
-      _selectedPostType = 'innovation';
+      _selectedPostType = 'innovation'; // Reset to default value that matches the id
     });
   }
 
@@ -371,46 +368,6 @@ class _CreatePostScreenState extends State<CreatePostScreen>
 
       backgroundColor: _backgroundColor,
 
-      // appBar: AppBar(
-      //   backgroundColor: _cardColor,
-      //   elevation: 1,
-      //   centerTitle: false,
-      //   title: Text(
-      //     'Create Post',
-      //     style: TextStyle(
-      //       color: _textColor,
-      //       fontWeight: FontWeight.bold,
-      //       fontSize: 20,
-      //     ),
-      //   ),
-      //   actions: [
-      //     TextButton(
-      //       onPressed: _isPostButtonEnabled ? _createPost : null,
-      //       style: TextButton.styleFrom(
-      //         foregroundColor: _facebookBlue,
-      //         backgroundColor: _facebookBlue.withOpacity(0.1),
-      //         shape: RoundedRectangleBorder(
-      //           borderRadius: BorderRadius.circular(20),
-      //         ),
-      //         disabledForegroundColor: Colors.grey,
-      //         disabledBackgroundColor: Colors.grey.withOpacity(0.1),
-      //       ),
-      //       child: AnimatedBuilder(
-      //         animation: _animation,
-      //         builder: (context, child) {
-      //           return Transform.scale(
-      //             scale: 1.0 + (_animation.value * 0.1),
-      //             child: Text(
-      //               'Post',
-      //               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-      //             ),
-      //           );
-      //         },
-      //       ),
-      //     ),
-      //     const SizedBox(width: 12),
-      //   ],
-      // ),
       body: Stack(
         children: [
           SingleChildScrollView(
@@ -433,10 +390,12 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                           CircleAvatar(
                             radius: 40,
                             backgroundColor: Colors.grey[200],
-                            backgroundImage:
-                                picturePath != null
-                                    ? NetworkImage('$baseUrl$picturePath')
-                                    : AssetImage('assets/images/person.png'),
+                            backgroundImage: picturePath != null
+                                ? NetworkImage('$baseUrl$picturePath')
+                                : null, // Removed AssetImage to fix potential error
+                            child: picturePath == null
+                                ? Icon(Icons.person, size: 40, color: Colors.grey)
+                                : null,
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -445,7 +404,7 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                               children: [
                                 // Display current user name from AppData
                                 Text(
-                                  '$name',
+                                  name,
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 16,
@@ -480,26 +439,25 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                                           });
                                         }
                                       },
-                                      items:
-                                          _postTypes.map<
-                                            DropdownMenuItem<String>
-                                          >((Map<String, dynamic> type) {
-                                            return DropdownMenuItem<String>(
-                                              value: type['id'],
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Icon(
-                                                    type['icon'],
-                                                    size: 18,
-                                                    color: _primaryColor,
-                                                  ),
-                                                  const SizedBox(width: 8),
-                                                  Text(type['name']),
-                                                ],
+                                      items: _postTypes
+                                          .map<DropdownMenuItem<String>>(
+                                              (Map<String, dynamic> type) {
+                                        return DropdownMenuItem<String>(
+                                          value: type['id'], // Using id as value
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                type['icon'],
+                                                size: 18,
+                                                color: _primaryColor,
                                               ),
-                                            );
-                                          }).toList(),
+                                              const SizedBox(width: 8),
+                                              Text(type['name']),
+                                            ],
+                                          ),
+                                        );
+                                      }).toList(),
                                     ),
                                   ),
                                 ),
@@ -577,12 +535,6 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                               label: 'Files',
                               onTap: _pickFiles,
                             ),
-                            // _mediaButton(
-                            //   icon: Icons.person_add,
-                            //   color: Colors.orange,
-                            //   label: 'Tag People',
-                            //   onTap: () {},
-                            // ),
                             _mediaButton(
                               icon: Icons.location_on,
                               color: Colors.red.shade700,
@@ -731,9 +683,8 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
                           itemCount: _uploadedFiles.length,
-                          separatorBuilder:
-                              (context, index) =>
-                                  Divider(color: Colors.grey.shade200),
+                          separatorBuilder: (context, index) =>
+                              Divider(color: Colors.grey.shade200),
                           itemBuilder: (context, index) {
                             final item = _uploadedFiles[index];
                             final originalname = _safeGetString(
@@ -746,11 +697,10 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                               'filename',
                               'File $index',
                             );
-                            final fileExt =
-                                path
-                                    .extension(originalname)
-                                    .replaceAll('.', '')
-                                    .toLowerCase();
+                            final fileExt = path
+                                .extension(originalname)
+                                .replaceAll('.', '')
+                                .toLowerCase();
 
                             return ListTile(
                               contentPadding: EdgeInsets.zero,
@@ -836,36 +786,35 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
-                  child:
-                      _isCreatingPost
-                          ? Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: const [
-                              SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2,
-                                ),
+                  child: _isCreatingPost
+                      ? Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: const [
+                            SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
                               ),
-                              SizedBox(width: 8),
-                              Text(
-                                'Publishing...',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ],
-                          )
-                          : Text(
-                            'Publish',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
                             ),
+                            SizedBox(width: 8),
+                            Text(
+                              'Publishing...',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        )
+                      : Text(
+                          'Publish',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
                           ),
+                        ),
                 ),
               ),
             ],

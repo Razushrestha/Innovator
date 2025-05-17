@@ -28,7 +28,7 @@ class _LoginPageState extends State<LoginPage> {
 
   bool isLogin = true;
   bool _isLoading = false;
-  
+
   // Create focus nodes for email and password fields
   final FocusNode _emailFocusNode = FocusNode();
   final FocusNode _passwordFocusNode = FocusNode();
@@ -66,15 +66,9 @@ class _LoginPageState extends State<LoginPage> {
         'password': passwordController.text.trim(),
       });
 
-      final headers = {
-        'Content-Type': 'application/json',
-      };
+      final headers = {'Content-Type': 'application/json'};
 
-      final response = await http.post(
-        url,
-        headers: headers,
-        body: body,
-      );
+      final response = await http.post(url, headers: headers, body: body);
 
       // Debug: Print full response
       log('API Response: ${response.statusCode} - ${response.body}');
@@ -103,13 +97,14 @@ class _LoginPageState extends State<LoginPage> {
 
         // Extract and validate token
         String? token;
-        
+
         // Check various possible locations for the token
         if (responseData['token'] is String) {
           token = responseData['token'];
         } else if (responseData['access_token'] is String) {
           token = responseData['access_token'];
-        } else if (responseData['data'] is Map && responseData['data']?['token'] is String) {
+        } else if (responseData['data'] is Map &&
+            responseData['data']?['token'] is String) {
           token = responseData['data']['token'];
         } else if (responseData['authToken'] is String) {
           token = responseData['authToken'];
@@ -118,7 +113,7 @@ class _LoginPageState extends State<LoginPage> {
         }
 
         log('Extracted token: $token');
-        
+
         // Extract user data with null safety
         Map<String, dynamic>? userData;
         if (responseData['user'] is Map) {
@@ -126,23 +121,36 @@ class _LoginPageState extends State<LoginPage> {
         } else if (responseData['data']?['user'] is Map) {
           userData = Map<String, dynamic>.from(responseData['data']['user']);
         }
-        
+
         // Save token if available
+        // Inside _loginWithAPI, after saving the token
         if (token != null && token.isNotEmpty) {
           try {
             await AppData().setAuthToken(token);
-            
             // Verify token was saved
-            final savedToken = await AppData().authToken;
-            log('Token saved verification: ${savedToken != null ? "Success" : "Failed"}');
+            final savedToken = AppData().authToken; // Synchronous getter
+            log(
+              'Token saved verification: ${savedToken != null ? "Success: $savedToken" : "Failed"}',
+            );
+            if (savedToken == null) {
+              Dialogs.showSnackbar(
+                context,
+                'Failed to persist authentication token',
+              );
+              setState(() {
+                _isLoading = false;
+              });
+              return;
+            }
           } catch (e) {
             log('Error saving token: $e');
-            // Continue anyway - we might still want to save user data
+            Dialogs.showSnackbar(context, 'Error saving authentication token');
+            setState(() {
+              _isLoading = false;
+            });
+            return;
           }
-        } else {
-          log('Token not found in response. Full response: ${response.body}');
         }
-        
         // Save user data if available
         if (userData != null) {
           try {
@@ -153,10 +161,10 @@ class _LoginPageState extends State<LoginPage> {
             // If this is critical, we might want to show a dialog here
           }
         }
-        
+
         // Trigger save of credentials for autofill
         TextInput.finishAutofillContext(shouldSave: true);
-        
+
         // Navigate to home page if we have either token or user data
         if ((token != null && token.isNotEmpty) || userData != null) {
           Navigator.pushReplacement(
@@ -174,20 +182,24 @@ class _LoginPageState extends State<LoginPage> {
         } catch (e) {
           log('Error parsing error response: $e');
         }
-        
-        final message = responseData?['message'] ?? 
-                        responseData?['error'] ?? 
-                        'Login failed with status ${response.statusCode}';
+
+        final message =
+            responseData?['message'] ??
+            responseData?['error'] ??
+            'Login failed with status ${response.statusCode}';
         Dialogs.showSnackbar(context, message.toString());
       }
     } catch (e) {
       log('Login error: $e');
-      Dialogs.showSnackbar(context, 'Network error. Please check your connection.');
+      Dialogs.showSnackbar(
+        context,
+        'Network error. Please check your connection.',
+      );
     } finally {
       setState(() {
         _isLoading = false;
       });
-      
+
       // On failure, cancel the autofill context without saving
       if (_isLoading == false) {
         TextInput.finishAutofillContext(shouldSave: false);
@@ -200,9 +212,7 @@ class _LoginPageState extends State<LoginPage> {
     final Size screenSize = MediaQuery.of(context).size;
     mq = MediaQuery.of(context).size;
     return Theme(
-      data: ThemeData(
-        primaryColor: preciseGreen,
-      ),
+      data: ThemeData(primaryColor: preciseGreen),
       child: Scaffold(
         appBar: AppBar(
           automaticallyImplyLeading: false,
@@ -216,15 +226,17 @@ class _LoginPageState extends State<LoginPage> {
               height: MediaQuery.of(context).size.height / 2.0,
               decoration: const BoxDecoration(
                 color: Color.fromRGBO(244, 135, 6, 1),
-                borderRadius:
-                    BorderRadius.only(bottomRight: Radius.circular(70)),
-                    
+                borderRadius: BorderRadius.only(
+                  bottomRight: Radius.circular(70),
+                ),
               ),
               child: Padding(
                 padding: EdgeInsets.only(bottom: mq.height * 0.15),
                 child: Center(
-                  child: Image.asset('animation/login.gif',
-                      width: mq.width * .95),
+                  child: Image.asset(
+                    'animation/login.gif',
+                    width: mq.width * .95,
+                  ),
                 ),
               ),
             ),
@@ -251,10 +263,14 @@ class _LoginPageState extends State<LoginPage> {
                               child: TextFormField(
                                 controller: emailController,
                                 focusNode: _emailFocusNode,
-                                autofillHints: const [AutofillHints.username, AutofillHints.email],
+                                autofillHints: const [
+                                  AutofillHints.username,
+                                  AutofillHints.email,
+                                ],
                                 keyboardType: TextInputType.emailAddress,
                                 textInputAction: TextInputAction.next,
-                                onEditingComplete: () => _passwordFocusNode.requestFocus(),
+                                onEditingComplete:
+                                    () => _passwordFocusNode.requestFocus(),
                                 decoration: InputDecoration(
                                   labelText: 'Email',
                                   prefixIcon: Icon(Icons.email),
@@ -286,7 +302,8 @@ class _LoginPageState extends State<LoginPage> {
                                     ),
                                     onPressed: () {
                                       setState(() {
-                                        _isPasswordVisible = !_isPasswordVisible;
+                                        _isPasswordVisible =
+                                            !_isPasswordVisible;
                                       });
                                     },
                                   ),
@@ -321,28 +338,30 @@ class _LoginPageState extends State<LoginPage> {
                                 ),
                               ),
                               onPressed: _isLoading ? null : _loginWithAPI,
-                              child: _isLoading 
-                                  ? SizedBox(
-                                      width: 20, 
-                                      height: 20, 
-                                      child: CircularProgressIndicator(color: Colors.white)
-                                    )
-                                  : Text(
-                                      isLogin ? 'Login' : 'Sign Up',
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                        letterSpacing: 1.1,
+                              child:
+                                  _isLoading
+                                      ? SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                      : Text(
+                                        isLogin ? 'Login' : 'Sign Up',
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          letterSpacing: 1.1,
+                                        ),
                                       ),
-                                    ),
                             ),
-                            SizedBox(
-                              height: 10,
-                            ),
+                            SizedBox(height: 10),
                             ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(
-                                  backgroundColor: Color.fromRGBO(244, 135, 6, 1),
-                                  shape: StadiumBorder(),
-                                  elevation: 1),
+                                backgroundColor: Color.fromRGBO(244, 135, 6, 1),
+                                shape: StadiumBorder(),
+                                elevation: 1,
+                              ),
                               onPressed: () {
                                 //_handleGoogleBtnClick();
                               },
@@ -351,33 +370,46 @@ class _LoginPageState extends State<LoginPage> {
                                 height: mq.height * .05,
                               ),
                               label: RichText(
-                                  text: const TextSpan(
-                                      style: TextStyle(
-                                          color: Colors.black, fontSize: 19),
-                                      children: [
-                                    TextSpan(text: 'Sign In with ',style: TextStyle(color: Colors.white)),
+                                text: const TextSpan(
+                                  style: TextStyle(
+                                    color: Colors.black,
+                                    fontSize: 19,
+                                  ),
+                                  children: [
                                     TextSpan(
-                                        text: 'Google',
-                                        style:
-                                            TextStyle(fontWeight: FontWeight.w500))
-                                  ])),
+                                      text: 'Sign In with ',
+                                      style: TextStyle(color: Colors.white),
+                                    ),
+                                    TextSpan(
+                                      text: 'Google',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                             TextButton(
                               onPressed: () {
                                 // Cancel autofill before navigating away
-                                TextInput.finishAutofillContext(shouldSave: false);
+                                TextInput.finishAutofillContext(
+                                  shouldSave: false,
+                                );
                                 Navigator.push(
-                                    context,
-                                    MaterialPageRoute(builder: (_) => Signup()));
+                                  context,
+                                  MaterialPageRoute(builder: (_) => Signup()),
+                                );
                               },
                               child: Text(
                                 isLogin
                                     ? 'Create new account'
                                     : 'Already have an account?',
                                 style: TextStyle(
-                                    fontSize: 15,
-                                    color: Colors.blue,
-                                    fontWeight: FontWeight.bold),
+                                  fontSize: 15,
+                                  color: Colors.blue,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ),
                           ],
@@ -393,4 +425,4 @@ class _LoginPageState extends State<LoginPage> {
       ),
     );
   }
-} 
+}
