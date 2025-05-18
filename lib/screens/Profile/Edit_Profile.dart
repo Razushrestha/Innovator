@@ -16,6 +16,8 @@ class EditProfileScreen extends StatefulWidget {
 }
 
 class _EditProfileScreenState extends State<EditProfileScreen> with SingleTickerProviderStateMixin {
+  late Future<UserProfile> profile;
+
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
@@ -32,6 +34,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> with SingleTicker
   @override
   void initState() {
     super.initState();
+    profile = UserProfileService.getUserProfile(); // Initialize the future
     _loadUserData();
   }
 
@@ -42,14 +45,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> with SingleTicker
 
     try {
       // Get user profile data
-      final profile = await UserProfileService.getUserProfile();
+      final userProfile = await UserProfileService.getUserProfile();
 
       setState(() {
-        _nameController.text = profile.name;
-        _phoneController.text = profile.phone;
-        _selectedDate = profile.dob;
-
-        // Initialize with empty values if not available
+        _nameController.text = userProfile.name;
+        _phoneController.text = userProfile.phone;
+        _selectedDate = userProfile.dob;
         _locationController.text = "";
         _bioController.text = "";
       });
@@ -93,270 +94,283 @@ class _EditProfileScreenState extends State<EditProfileScreen> with SingleTicker
   }
 
   Future<void> _updateProfile() async {
-    // Debug print the EXACT request being sent
-final debugRequest = {
-  'url': 'http://182.93.94.210:3064/api/v1/set-details',
-  'headers': {
-    'Content-Type': 'application/json',
-    'Authorization': 'Bearer ${AppData().authToken}',
-  },
-  'body': jsonEncode({
-    "name": _nameController.text.trim(),
-    "phone": _phoneController.text.trim(),
-    "dob": DateFormat('yyyy-MM-dd').format(_selectedDate),
-    "location": _locationController.text.trim(),
-    "bio": _bioController.text.trim(),
-  }),
-};
-log('FULL REQUEST: ${jsonEncode(debugRequest)}');
-  if (!_formKey.currentState!.validate()) {
-    return;
-  }
+    final debugRequest = {
+      'url': 'http://182.93.94.210:3064/api/v1/set-details',
+      'headers': {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ${AppData().authToken}',
+      },
+      'body': jsonEncode({
+        "name": _nameController.text.trim(),
+        "phone": _phoneController.text.trim(),
+        "dob": DateFormat('yyyy-MM-dd').format(_selectedDate),
+        "location": _locationController.text.trim(),
+        "bio": _bioController.text.trim(),
+      }),
+    };
+    log('FULL REQUEST: ${jsonEncode(debugRequest)}');
 
-  setState(() {
-    _isLoading = true;
-  });
-
-  try {
-    final token = AppData().authToken;
-    
-    if (token == null || token.isEmpty) {
-      throw Exception('No authentication token found');
+    if (!_formKey.currentState!.validate()) {
+      return;
     }
 
-    // Format date to match API requirements
-    final formattedDate = DateFormat('yyyy-MM-dd').format(_selectedDate);
+    setState(() {
+      _isLoading = true;
+    });
 
-    // Prepare the complete request data
-    final Map<String, dynamic> requestData = {
-      "name": _nameController.text.trim(),
-      "phone": _phoneController.text.trim(), // IntlPhoneField handles formatting
-      "dob": formattedDate,
-      "location": _locationController.text.trim(),
-      "bio": _bioController.text.trim(),
-    };
+    try {
+      final token = AppData().authToken;
 
-    log('Sending profile update with data: $requestData');
+      if (token == null || token.isEmpty) {
+        throw Exception('No authentication token found');
+      }
 
-    final response = await http.post(
-      Uri.parse('http://182.93.94.210:3064/api/v1/set-details'),
-      headers: {
-        'Content-Type': 'application/json',
-        'authorization': 'Bearer $token',
-      },
-      body: jsonEncode(requestData),
-    );
+      final formattedDate = DateFormat('yyyy-MM-dd').format(_selectedDate);
 
-    log('Update profile response status: ${response.statusCode}');
-    log('Update profile response body: ${response.body}');
+      final Map<String, dynamic> requestData = {
+        "name": _nameController.text.trim(),
+        "phone": _phoneController.text.trim(),
+        "dob": formattedDate,
+        "location": _locationController.text.trim(),
+        "bio": _bioController.text.trim(),
+      };
 
-    if (response.statusCode == 200) {
-      final responseData = jsonDecode(response.body);
+      log('Sending profile update with data: $requestData');
+
+      final response = await http.post(
+        Uri.parse('http://182.93.94.210:3064/api/v1/set-details'),
+        headers: {
+          'Content-Type': 'application/json',
+          'authorization': 'Bearer $token',
+        },
+        body: jsonEncode(requestData),
+      );
+
+      log('Update profile response status: ${response.statusCode}');
+      log('Update profile response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(responseData['message'] ?? 'Profile updated successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => UserProfileScreen()),
+        );
+      } else {
+        final errorData = jsonDecode(response.body);
+        final errorMessage = errorData['error']?['error'] ??
+            errorData['message'] ??
+            'Failed to update profile (Status: ${response.statusCode})';
+        throw Exception(errorMessage);
+      }
+    } catch (e) {
+      log('Error updating profile: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(responseData['message'] ?? 'Profile updated successfully!'),
-          backgroundColor: Colors.green,
+          content: Text('Error: ${e.toString()}'),
+          backgroundColor: Colors.red,
         ),
       );
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => UserProfileScreen()),
-      );
-    } else {
-      final errorData = jsonDecode(response.body);
-      final errorMessage = errorData['error']?['error'] ?? 
-                         errorData['message'] ?? 
-                         'Failed to update profile (Status: ${response.statusCode})';
-      throw Exception(errorMessage);
+    } finally {
+      setState(() {
+        _isLoading = false;
+        profile = UserProfileService.getUserProfile();
+      });
     }
-  } catch (e) {
-    log('Error updating profile: $e');
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Error: ${e.toString()}'),
-        backgroundColor: Colors.red,
-      ),
-    );
-  } finally {
-    setState(() {
-      _isLoading = false;
-    });
   }
-}
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-            key: _scaffoldKey, // Add the scaffold key here
-
+      key: _scaffoldKey,
       body: Stack(
         children: [
-          // SizedBox(
-          //   height: 50
-          // ),
           _isLoading
               ? const Center(
-                child: CircularProgressIndicator(
-                  color: Color.fromRGBO(235, 111, 70, 1),
-                ),
-              )
+                  child: CircularProgressIndicator(
+                    color: Color.fromRGBO(235, 111, 70, 1),
+                  ),
+                )
               : SingleChildScrollView(
-                padding: const EdgeInsets.all(16.0),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      const SizedBox(height: 40),
-                      CircleAvatar(
-                        radius: 80,
-                        backgroundImage: NetworkImage(
-                          'https://via.placeholder.com/150',
-                        ),
-                      ),
-                      SizedBox(
-                        height: 20,
-                      ),
-                      TextFormField(
-                        controller: _nameController,
-                        decoration: const InputDecoration(
-                          labelText: 'Full Name *',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.person),
-                          focusedBorder: OutlineInputBorder(
-                            borderSide: BorderSide(
-                              color: Color.fromRGBO(235, 111, 70, 1),
-                            ),
-                          ),
-                          labelStyle: TextStyle(
-                            color: Color.fromRGBO(235, 111, 70, 1),
-                          ),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please enter your name';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _locationController,
-                        decoration: const InputDecoration(
-                          labelText: 'Location',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.location_on),
-                          focusedBorder: OutlineInputBorder(
-                            borderSide: BorderSide(
-                              color: Color.fromRGBO(235, 111, 70, 1),
-                            ),
-                          ),
-                          labelStyle: TextStyle(
-                            color: Color.fromRGBO(235, 111, 70, 1),
-                          ),
-                          hintText: 'Optional',
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      // In your state class (replace the relevant parts):
-
-                      // Change the phone field in your build method to:
-                      IntlPhoneField(
-                        controller: _phoneController,
-                        decoration: const InputDecoration(
-                          labelText: 'Phone Number *',
-                          border: OutlineInputBorder(),
-                          focusedBorder: OutlineInputBorder(
-                            borderSide: BorderSide(
-                              color: Color.fromRGBO(235, 111, 70, 1),
-                            ),
-                           
-                          ),
-                          
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      
-                      GestureDetector(
-                        onTap: () => _selectDate(context),
-                        child: AbsorbPointer(
-                          child: TextFormField(
-                            decoration: const InputDecoration(
-                              labelText: 'Date of Birth *',
-                              border: OutlineInputBorder(),
-                              prefixIcon: Icon(Icons.calendar_today),
-                              focusedBorder: OutlineInputBorder(
-                                borderSide: BorderSide(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        const SizedBox(height: 40),
+                        FutureBuilder<UserProfile>(
+                          future: profile,
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState == ConnectionState.waiting) {
+                              return const CircleAvatar(
+                                radius: 80,
+                                backgroundColor: Color.fromRGBO(235, 111, 70, 0.2),
+                                child: CircularProgressIndicator(
                                   color: Color.fromRGBO(235, 111, 70, 1),
                                 ),
-                              ),
-                              labelStyle: TextStyle(
+                              );
+                            } else if (snapshot.hasError) {
+                              return const CircleAvatar(
+                                radius: 80,
+                                backgroundColor: Color.fromRGBO(235, 111, 70, 0.2),
+                                child: Icon(
+                                  Icons.error,
+                                  size: 60,
+                                  color: Color.fromRGBO(235, 111, 70, 1),
+                                ),
+                              );
+                            } else if (snapshot.hasData && snapshot.data!.picture != null) {
+                              return CircleAvatar(
+                                radius: 80,
+                                backgroundColor: Color.fromRGBO(235, 111, 70, 0.2),
+                                backgroundImage: NetworkImage(
+                                  'http://182.93.94.210:3064${snapshot.data!.picture}',
+                                ),
+                              );
+                            } else {
+                              return const CircleAvatar(
+                                radius: 80,
+                                backgroundColor: Color.fromRGBO(235, 111, 70, 0.2),
+                                child: Icon(
+                                  Icons.person,
+                                  size: 60,
+                                  color: Color.fromRGBO(235, 111, 70, 1),
+                                ),
+                              );
+                            }
+                          },
+                        ),
+                        const SizedBox(height: 20),
+                        TextFormField(
+                          controller: _nameController,
+                          decoration: const InputDecoration(
+                            labelText: 'Full Name *',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.person),
+                            focusedBorder: OutlineInputBorder(
+                              borderSide: BorderSide(
                                 color: Color.fromRGBO(235, 111, 70, 1),
                               ),
                             ),
-                            controller: TextEditingController(
-                              text: DateFormat(
-                                'MMMM dd, yyyy',
-                              ).format(_selectedDate),
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please select your date of birth';
-                              }
-                              return null;
-                            },
-                          ),
-                          
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _bioController,
-                        decoration: const InputDecoration(
-                          labelText: 'Bio',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.edit),
-                          focusedBorder: OutlineInputBorder(
-                            borderSide: BorderSide(
+                            labelStyle: TextStyle(
                               color: Color.fromRGBO(235, 111, 70, 1),
                             ),
                           ),
-                          labelStyle: TextStyle(
-                            color: Color.fromRGBO(235, 111, 70, 1),
-                          ),
-                          hintText: 'Optional',
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Please enter your name';
+                            }
+                            return null;
+                          },
                         ),
-                        maxLines: 3,
-                      ),
-                      
-                      const SizedBox(height: 32),
-                      ElevatedButton(
-                        onPressed: _updateProfile,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color.fromRGBO(
-                            235,
-                            111,
-                            70,
-                            1,
-                          ),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 50,
-                            vertical: 12,
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _locationController,
+                          decoration: const InputDecoration(
+                            labelText: 'Location',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.location_on),
+                            focusedBorder: OutlineInputBorder(
+                              borderSide: BorderSide(
+                                color: Color.fromRGBO(235, 111, 70, 1),
+                              ),
+                            ),
+                            labelStyle: TextStyle(
+                              color: Color.fromRGBO(235, 111, 70, 1),
+                            ),
+                            hintText: 'Optional',
                           ),
                         ),
-                        child: const Text(
-                          'Save Changes',
-                          style: TextStyle(fontSize: 16),
+                        const SizedBox(height: 16),
+                        IntlPhoneField(
+                          controller: _phoneController,
+                          decoration: const InputDecoration(
+                            labelText: 'Phone Number *',
+                            border: OutlineInputBorder(),
+                            focusedBorder: OutlineInputBorder(
+                              borderSide: BorderSide(
+                                color: Color.fromRGBO(235, 111, 70, 1),
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 16),
+                        GestureDetector(
+                          onTap: () => _selectDate(context),
+                          child: AbsorbPointer(
+                            child: TextFormField(
+                              decoration: const InputDecoration(
+                                labelText: 'Date of Birth *',
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.calendar_today),
+                                focusedBorder: OutlineInputBorder(
+                                  borderSide: BorderSide(
+                                    color: Color.fromRGBO(235, 111, 70, 1),
+                                  ),
+                                ),
+                                labelStyle: TextStyle(
+                                  color: Color.fromRGBO(235, 111, 70, 1),
+                                ),
+                              ),
+                              controller: TextEditingController(
+                                text: DateFormat('MMMM dd, yyyy').format(_selectedDate),
+                              ),
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Please select your date of birth';
+                                }
+                                return null;
+                              },
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _bioController,
+                          decoration: const InputDecoration(
+                            labelText: 'Bio',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.edit),
+                            focusedBorder: OutlineInputBorder(
+                              borderSide: BorderSide(
+                                color: Color.fromRGBO(235, 111, 70, 1),
+                              ),
+                            ),
+                            labelStyle: TextStyle(
+                              color: Color.fromRGBO(235, 111, 70, 1),
+                            ),
+                            hintText: 'Optional',
+                          ),
+                          maxLines: 3,
+                        ),
+                        const SizedBox(height: 32),
+                        ElevatedButton(
+                          onPressed: _updateProfile,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color.fromRGBO(235, 111, 70, 1),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 50,
+                              vertical: 12,
+                            ),
+                          ),
+                          child: const Text(
+                            'Save Changes',
+                            style: TextStyle(fontSize: 16),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              FloatingMenuWidget()
-        ],
-      )
-          
+          const FloatingMenuWidget(),
+        ], 
+      ),
     );
   }
 }

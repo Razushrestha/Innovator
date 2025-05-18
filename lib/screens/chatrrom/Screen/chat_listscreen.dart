@@ -27,6 +27,7 @@ class ChatListScreen extends StatefulWidget {
 
 class _ChatListScreenState extends State<ChatListScreen> {
   List<dynamic> _chats = [];
+  static const String baseUrl = 'http://182.93.94.210:3064';
 
   @override
   void initState() {
@@ -42,7 +43,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
       }
 
       final response = await http.get(
-        Uri.parse('http://182.93.94.210:3064/api/v1/chats'),
+        Uri.parse('$baseUrl/api/v1/chats'),
         headers: {
           'Authorization': 'Bearer $token',
           'Accept': 'application/json',
@@ -84,7 +85,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
   bool _isValidImageUrl(String? url) {
     if (url == null || url.isEmpty) return false;
-    return url.startsWith('http://') || url.startsWith('https://');
+    if (url.startsWith('http://') || url.startsWith('https://')) return true;
+    if (url.startsWith('/')) return true;
+    return false;
+  }
+
+  String _getImageUrl(String? url) {
+    if (url == null || url.isEmpty) return '';
+    if (url.startsWith('http://') || url.startsWith('https://')) return url;
+    return '$baseUrl$url';
   }
 
   @override
@@ -112,15 +121,28 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 final displayName = user['name']?.toString() ?? 'Unknown';
                 final email = user['email']?.toString() ?? '';
 
+                log('Profile picture URL: ${_getImageUrl(profilePicture)}');
+
                 return ListTile(
                   leading: CircleAvatar(
-                    backgroundImage: _isValidImageUrl(profilePicture) ? NetworkImage(profilePicture) : null,
-                    child: profilePicture.isEmpty
-                        ? Text(
+                    backgroundColor: Colors.grey[200],
+                    child: _isValidImageUrl(profilePicture)
+                        ? ClipOval(
+                            child: Image.network(
+                              _getImageUrl(profilePicture),
+                              fit: BoxFit.cover,
+                              width: 40,
+                              height: 40,
+                              errorBuilder: (context, error, stackTrace) => Text(
+                                displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
+                                style: const TextStyle(fontSize: 20),
+                              ),
+                            ),
+                          )
+                        : Text(
                             displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
                             style: const TextStyle(fontSize: 20),
-                          )
-                        : null,
+                          ),
                   ),
                   title: Text(displayName),
                   subtitle: Text(chat['lastMessage']?['message']?.toString() ?? 'No messages yet'),
