@@ -88,30 +88,34 @@ class MQTTService {
   }
 
   void initiateChat(String receiverId, Map<String, dynamic> message, Function(String) onMessage) {
-    if (_currentUserId == null) {
-      print('Cannot initiate chat: currentUserId is null');
-      return;
-    }
-    final chatTopic = getChatTopic(_currentUserId!, receiverId);
-    final initTopic = 'chat/init/$receiverId';
-    final payload = {
-    'senderId': _currentUserId,
-    'senderName': message['senderName'] ?? 'Unknown',
-    'senderPicture': message['senderPicture'] ?? '',
-    'senderEmail': message['senderEmail'] ?? '',
-    'receiverId': receiverId,
-    'receiverName': message['receiverName'] ?? 'Unknown',
-    'receiverPicture': message['receiverPicture'] ?? '',
-    'receiverEmail': message['receiverEmail'] ?? '',
+  if (_currentUserId == null) {
+    print('Cannot initiate chat: currentUserId is null');
+    return;
+  }
+  final chatTopic = getChatTopic(_currentUserId!, receiverId);
+  final initTopic = 'chat/init/$receiverId';
+  final payload = {
+    'sender': {
+      '_id': _currentUserId,
+      'name': message['senderName'] ?? 'Unknown',
+      'picture': message['senderPicture'] ?? '',
+      'email': message['senderEmail'] ?? '',
+    },
+    'receiver': {
+      '_id': receiverId,
+      'name': message['receiverName'] ?? 'Unknown',
+      'picture': message['receiverPicture'] ?? '',
+      'email': message['receiverEmail'] ?? '',
+    },
   };
 
-    // Subscribe to chat topic
-    subscribe(chatTopic, onMessage);
+  // Subscribe to chat topic
+  subscribe(chatTopic, onMessage);
 
-    // Publish chat initiation
-    print('Initiating chat on topic: $initTopic');
-    publish(initTopic, payload);
-  }
+  // Publish chat initiation
+  print('Initiating chat on topic: $initTopic');
+  publish(initTopic, payload);
+}
 
   void subscribe(String topic, Function(String) onMessage) {
     if (_client?.connectionStatus?.state == MqttConnectionState.connected) {
