@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:innovator/App_data/App_data.dart';
 import 'package:innovator/screens/Feed/OptimizeMediaScreen.dart';
+import 'package:innovator/screens/Follow/follow-Service.dart';
 import 'package:innovator/screens/Follow/follow_Button.dart';
 import 'package:innovator/screens/Likes/Content-Like-Service.dart';
 import 'package:innovator/screens/Likes/content-Like-Button.dart';
@@ -1327,7 +1328,35 @@ class FeedApiService {
 
         if (data.containsKey('data') && data['data']['contents'] is List) {
           final List<dynamic> contentList = data['data']['contents'] as List;
-          return contentList.map((item) => FeedContent.fromJson(item)).toList();
+          final List<FeedContent> contents = [];
+
+          // Process each content item and fetch follow status
+          for (var item in contentList) {
+            final content = FeedContent.fromJson(item);
+            try {
+              // Fetch follow status for the author
+              final isFollowing = await FollowService.checkFollowStatus(content.author.email);
+              contents.add(FeedContent(
+                id: content.id,
+                status: content.status,
+                type: content.type,
+                files: content.files,
+                author: content.author,
+                createdAt: content.createdAt,
+                updatedAt: content.updatedAt,
+                likes: content.likes,
+                comments: content.comments,
+                isLiked: content.isLiked,
+                isFollowed: isFollowing, // Set the follow status
+              ));
+            } catch (e) {
+              print('Error checking follow status for ${content.author.email}: $e');
+              // Fallback to default isFollowed value if check fails
+              contents.add(content);
+            }
+          }
+
+          return contents;
         }
       } else if (response.statusCode == 401) {
         throw Exception('Authentication required');

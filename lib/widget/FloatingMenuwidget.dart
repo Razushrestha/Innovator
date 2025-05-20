@@ -4,10 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:innovator/innovator_home.dart';
 import 'package:innovator/screens/Add_Content/Create_post.dart';
 import 'package:innovator/screens/Course/homepage.dart';
-import 'package:innovator/screens/Profile/profile_page.dart';
+import 'package:innovator/screens/Search/Searchpage.dart';
 import 'package:innovator/screens/Shop/Shop_Page.dart';
 import 'package:innovator/utils/custom_drawer.dart';
-import 'package:innovator/widget/auth_check.dart';
 
 class FloatingMenuWidget extends StatefulWidget {
   final GlobalKey<ScaffoldState>? scaffoldKey;
@@ -42,7 +41,7 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
   // Features to display below the menu button with their respective actions
   final List<Map<String, dynamic>> _bottomIcons = [
     {'icon': Icons.shop, 'name': 'Settings', 'action': 'open_settings'},
-    {'icon': Icons.person, 'name': 'Profile', 'action': 'view_profile'},
+    {'icon': Icons.search, 'name': 'Profile', 'action': 'view_profile'},
     {'icon': Icons.menu, 'name': 'Drawer', 'action': 'drawer'},
   ];
 
@@ -129,7 +128,7 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => UserProfileScreen(),
+            builder: (_) => SearchPage(),
           ),
           
         );

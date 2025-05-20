@@ -5,11 +5,11 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
-import 'package:innovator/App_DATA/App_data.dart';
+import 'package:innovator/App_data/App_data.dart';
 import 'package:innovator/Authorization/Login.dart';
-import 'package:innovator/main.dart';
 import 'package:innovator/screens/Feed/Inner_Homepage.dart';
 import 'package:innovator/screens/Follow/follow_Button.dart';
+import 'package:innovator/screens/Follow/follow-Service.dart';
 import 'package:innovator/screens/Profile/Edit_Profile.dart';
 import 'package:innovator/screens/SHow_Specific_Profile/Show_Specific_Profile.dart';
 import 'package:innovator/widget/FloatingMenuwidget.dart';
@@ -75,7 +75,6 @@ class FollowerFollowing {
   });
 
   factory FollowerFollowing.fromJson(Map<String, dynamic> json) {
-    // Handle nested follower/following structure
     if (json.containsKey('follower')) {
       final follower = json['follower'];
       return FollowerFollowing(
@@ -93,7 +92,6 @@ class FollowerFollowing {
         picture: following['picture'],
       );
     } else {
-      // Fallback for direct user data
       return FollowerFollowing(
         id: json['_id'] ?? '',
         name: json['name'] ?? '',
@@ -118,13 +116,10 @@ class AuthException implements Exception {
 class UserProfileService {
   static const String baseUrl = 'http://182.93.94.210:3064/api/v1';
 
-  // Fetch user profile using the stored token
   static Future<UserProfile> getUserProfile() async {
     final token = AppData().authToken;
 
-    log(
-      'Retrieved token from AppData: ${token != null ? "Token exists" : "No token found"}',
-    );
+    log('Retrieved token from AppData: ${token != null ? "Token exists" : "No token found"}');
 
     if (token == null || token.isEmpty) {
       throw AuthException('No authentication token found');
@@ -168,14 +163,13 @@ class UserProfileService {
     }
   }
 
-  // Fetch followers list
-  static Future<List<FollowerFollowing>> getFollowers(int page) async {
+  static Future<List<FollowerFollowing>> getFollowers() async {
     final token = AppData().authToken;
     if (token == null || token.isEmpty) {
       throw AuthException('No authentication token found');
     }
 
-    final url = Uri.parse('$baseUrl/list-followers/$page');
+    final url = Uri.parse('$baseUrl/list-followers');
     try {
       final response = await http.get(
         url,
@@ -210,14 +204,13 @@ class UserProfileService {
     }
   }
 
-  // Fetch following list
-  static Future<List<FollowerFollowing>> getFollowing(int page) async {
+  static Future<List<FollowerFollowing>> getFollowing() async {
     final token = AppData().authToken;
     if (token == null || token.isEmpty) {
       throw AuthException('No authentication token found');
     }
 
-    final url = Uri.parse('$baseUrl/list-followings/$page');
+    final url = Uri.parse('$baseUrl/list-followings');
     try {
       final response = await http.get(
         url,
@@ -252,7 +245,6 @@ class UserProfileService {
     }
   }
 
-  // Upload profile picture
   static Future<String> uploadProfilePicture(File imageFile) async {
     final token = AppData().authToken;
 
@@ -303,7 +295,7 @@ class UserProfileService {
         throw Exception('Failed to upload avatar: ${response.statusCode}');
       }
     } catch (e) {
-      log('Error uploading avatar: $e');
+      log('Error uploading avatar: $e');
       throw Exception('Avatar upload failed: $e');
     }
   }
@@ -318,8 +310,6 @@ class UserProfileScreen extends StatefulWidget {
 
 class _UserProfileScreenState extends State<UserProfileScreen>
     with SingleTickerProviderStateMixin {
-       // final List<FeedContent> _contents = [];
-
   late Future<UserProfile> _profileFuture;
   bool _isUploading = false;
   String? _errorMessage;
@@ -343,7 +333,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     return "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
   }
 
-  Future<void> _pickAndUploadImage() async {
+  Future<void> _pickAndUploadImage()  async {
     try {
       final ImagePicker picker = ImagePicker();
       final XFile? image = await picker.pickImage(
@@ -415,9 +405,21 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     );
   }
 
+  void _refreshFollowers() {
+    setState(() {
+      _currentPageFollowers = 1;
+    });
+  }
+
+  void _refreshFollowing() {
+    setState(() {
+      _currentPageFollowing = 1;
+    });
+  }
+
   Widget _buildFollowingList() {
     return FutureBuilder<List<FollowerFollowing>>(
-      future: UserProfileService.getFollowing(_currentPageFollowing),
+      future: UserProfileService.getFollowing(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Center(child: CircularProgressIndicator());
@@ -432,48 +434,54 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                   itemCount: following.length,
                   itemBuilder: (context, index) {
                     final follow = following[index];
-                    return ListTile(
-                      leading: CircleAvatar(
-                        radius: 24,
-                        backgroundColor: Color.fromRGBO(235, 111, 70, 0.2),
-                        backgroundImage: follow.picture != null
-                            ? NetworkImage(
-                                'http://182.93.94.210:3064${follow.picture}')
-                            : null,
-                        child: follow.picture == null
-                            ? Icon(Icons.person,
-                                color: Color.fromRGBO(235, 111, 70, 1))
-                            : null,
-                      ),
-                      title: GestureDetector(
-                        child: Text(follow.name), 
-                        onTap: () {
-                          Navigator.push(
-                            context, 
-                            MaterialPageRoute(
-                              builder: (_) => SpecificUserProfilePage(userId: follow.id)
-                            )
+                    return FutureBuilder<bool>(
+                      future: FollowService.checkFollowStatus(follow.email),
+                      builder: (context, followSnapshot) {
+                        if (followSnapshot.connectionState == ConnectionState.waiting) {
+                          return ListTile(
+                            leading: CircularProgressIndicator(),
+                            title: Text(follow.name),
+                            subtitle: Text(follow.email),
                           );
-                        },
-                      ),
-                      subtitle: Text(follow.email),
-                      trailing: FollowButton(
-                        targetUserEmail: follow.email,
-                        initialFollowStatus: true, // Already following
-                        onFollowSuccess: () {
-                          // Refresh the list after status changes
-                          setState(() {
-                            _profileFuture = UserProfileService.getUserProfile();
-                          });
-                        },
-                        onUnfollowSuccess: () {
-                          // Refresh the list after status changes
-                          setState(() {
-                            _profileFuture = UserProfileService.getUserProfile();
-                          });
-                        },
-                        size: 36, // Smaller size to fit in ListTile
-                      ),
+                        } else if (followSnapshot.hasError) {
+                          return ListTile(
+                            title: Text(follow.name),
+                            subtitle: Text('Error checking follow status'),
+                          );
+                        }
+                        final isFollowing = followSnapshot.data ?? true;
+                        return ListTile(
+                          leading: CircleAvatar(
+                            radius: 24,
+                            backgroundColor: Color.fromRGBO(235, 111, 70, 0.2),
+                            backgroundImage: follow.picture != null
+                                ? NetworkImage('http://182.93.94.210:3064${follow.picture}')
+                                : null,
+                            child: follow.picture == null
+                                ? Icon(Icons.person, color: Color.fromRGBO(235, 111, 70, 1))
+                                : null,
+                          ),
+                          title: GestureDetector(
+                            child: Text(follow.name),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => SpecificUserProfilePage(userId: follow.id),
+                                ),
+                              );
+                            },
+                          ),
+                          subtitle: Text(follow.email),
+                          trailing: FollowButton(
+                            targetUserEmail: follow.email,
+                            initialFollowStatus: isFollowing,
+                            onFollowSuccess: _refreshFollowing,
+                            onUnfollowSuccess: _refreshFollowing,
+                            size: 36,
+                          ),
+                        );
+                      },
                     );
                   },
                 ),
@@ -515,7 +523,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
 
   Widget _buildFollowersList() {
     return FutureBuilder<List<FollowerFollowing>>(
-      future: UserProfileService.getFollowers(_currentPageFollowers),
+      future: UserProfileService.getFollowers(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Center(child: CircularProgressIndicator());
@@ -530,51 +538,54 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                   itemCount: followers.length,
                   itemBuilder: (context, index) {
                     final follower = followers[index];
-                    return ListTile(
-                      leading: CircleAvatar(
-                        radius: 24,
-                        backgroundColor: Color.fromRGBO(235, 111, 70, 0.2),
-                        backgroundImage: follower.picture != null
-                            ? NetworkImage(
-                                'http://182.93.94.210:3064${follower.picture}')
-                            : null,
-                        child: follower.picture == null
-                            ? Icon(Icons.person,
-                                color: Color.fromRGBO(235, 111, 70, 1))
-                            : null,
-                      ),
-                      title: GestureDetector(
-                        child: Text(follower.name), 
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => SpecificUserProfilePage(userId: follower.id),
-                            ),
+                    return FutureBuilder<bool>(
+                      future: FollowService.checkFollowStatus(follower.email),
+                      builder: (context, followSnapshot) {
+                        if (followSnapshot.connectionState == ConnectionState.waiting) {
+                          return ListTile(
+                            leading: CircularProgressIndicator(),
+                            title: Text(follower.name),
+                            subtitle: Text(follower.email),
                           );
-                        },
-                      ),
-                      subtitle: Text(follower.email),
-                      trailing: FollowButton(
-                        targetUserEmail: follower.email,
-                        // We need to check if we're following this person 
-                        // Assuming false for followers by default, could be improved with actual status check
-                        initialFollowStatus: false, 
-                        onFollowSuccess: () {
-                          // Refresh after follow
-                          setState(() {
-                            _profileFuture = UserProfileService.getUserProfile();
-                          });
-                        },
-                        onUnfollowSuccess: () {
-                          // Refresh after unfollow
-                          
-                          setState(() {
-                            _profileFuture = UserProfileService.getUserProfile();
-                          });
-                        },
-                        size: 36, // Smaller size to fit in ListTile
-                      ),
+                        } else if (followSnapshot.hasError) {
+                          return ListTile(
+                            title: Text(follower.name),
+                            subtitle: Text('Error checking follow status'),
+                          );
+                        }
+                        final isFollowing = followSnapshot.data ?? false;
+                        return ListTile(
+                          leading: CircleAvatar(
+                            radius: 24,
+                            backgroundColor: Color.fromRGBO(235, 111, 70, 0.2),
+                            backgroundImage: follower.picture != null
+                                ? NetworkImage('http://182.93.94.210:3064${follower.picture}')
+                                : null,
+                            child: follower.picture == null
+                                ? Icon(Icons.person, color: Color.fromRGBO(235, 111, 70, 1))
+                                : null,
+                          ),
+                          title: GestureDetector(
+                            child: Text(follower.name),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => SpecificUserProfilePage(userId: follower.id),
+                                ),
+                              );
+                            },
+                          ),
+                          subtitle: Text(follower.email),
+                          trailing: FollowButton(
+                            targetUserEmail: follower.email,
+                            initialFollowStatus: isFollowing,
+                            onFollowSuccess: _refreshFollowers,
+                            onUnfollowSuccess: _refreshFollowers,
+                            size: 36,
+                          ),
+                        );
+                      },
                     );
                   },
                 ),
@@ -658,17 +669,6 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                             backgroundColor: Color.fromRGBO(235, 111, 70, 1),
                           ),
                         ),
-                        SizedBox(height: 12),
-                        // TextButton(
-                        //   onPressed: () async {
-                        //     await AppData().clearAuthToken();
-                        //     Navigator.pushReplacement(
-                        //       context,
-                        //       MaterialPageRoute(builder: (_) => LoginPage()),
-                        //     );
-                        //   },
-                        //   child: Text('Return to Login'),
-                        // ),
                       ],
                     ),
                   ),
@@ -691,18 +691,15 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                                   children: [
                                     CircleAvatar(
                                       radius: 60,
-                                      backgroundColor:
-                                          Color.fromRGBO(235, 111, 70, 0.2),
+                                      backgroundColor: Color.fromRGBO(235, 111, 70, 0.2),
                                       backgroundImage: profile.picture != null
-                                          ? NetworkImage(
-                                              'http://182.93.94.210:3064${profile.picture}')
+                                          ? NetworkImage('http://182.93.94.210:3064${profile.picture}')
                                           : null,
                                       child: profile.picture == null
                                           ? Icon(
                                               Icons.person,
                                               size: 60,
-                                              color: Color.fromRGBO(
-                                                  235, 111, 70, 1),
+                                              color: Color.fromRGBO(235, 111, 70, 1),
                                             )
                                           : null,
                                     ),
@@ -710,21 +707,18 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                                       right: 0,
                                       bottom: 0,
                                       child: GestureDetector(
-                                        onTap:
-                                            _isUploading ? null : _pickAndUploadImage,
+                                        onTap: _isUploading ? null : _pickAndUploadImage,
                                         child: Container(
                                           padding: EdgeInsets.all(8),
                                           decoration: BoxDecoration(
-                                            color:
-                                                Color.fromRGBO(235, 111, 70, 1),
+                                            color: Color.fromRGBO(235, 111, 70, 1),
                                             shape: BoxShape.circle,
                                           ),
                                           child: _isUploading
                                               ? SizedBox(
                                                   width: 16,
                                                   height: 16,
-                                                  child:
-                                                      CircularProgressIndicator(
+                                                  child: CircularProgressIndicator(
                                                     color: Colors.white,
                                                     strokeWidth: 2,
                                                   ),
@@ -750,13 +744,12 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                                     ),
                                     ElevatedButton.icon(
                                       style: ElevatedButton.styleFrom(
-                                        backgroundColor:
-                                            Color.fromRGBO(235, 111, 70, 1),
+                                        backgroundColor: Color.fromRGBO(235, 111, 70, 1),
                                       ),
                                       onPressed: () {
                                         Navigator.of(context).pushReplacement(
                                           MaterialPageRoute(
-                                            builder: (_) => EditProfileScreen()
+                                            builder: (_) => EditProfileScreen(),
                                           ),
                                         );
                                       },

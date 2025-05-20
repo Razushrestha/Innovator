@@ -4,7 +4,7 @@ import 'package:innovator/screens/Follow/follow-Service.dart';
 class FollowButton extends StatefulWidget {
   final String targetUserEmail;
   final VoidCallback? onFollowSuccess;
-  final VoidCallback? onUnfollowSuccess; // Add callback for unfollow
+  final VoidCallback? onUnfollowSuccess;
   final double? size;
   final bool initialFollowStatus;
 
@@ -12,7 +12,7 @@ class FollowButton extends StatefulWidget {
     Key? key,
     required this.targetUserEmail,
     this.onFollowSuccess,
-    this.onUnfollowSuccess, // Add this parameter
+    this.onUnfollowSuccess,
     this.size,
     this.initialFollowStatus = false,
   }) : super(key: key);
@@ -26,12 +26,11 @@ class _FollowButtonState extends State<FollowButton> with SingleTickerProviderSt
   int _state = 0; // 0 = plus, 1 = requested text, 2 = following (checkmark), 3 = unfollow hover
   late AnimationController _animationController;
   late Animation<double> _widthAnimation;
-  bool _isHovering = false; // Track hover state for unfollow
+  bool _isHovering = false;
 
   @override
   void initState() {
     super.initState();
-    // Initialize state based on initialFollowStatus
     _state = widget.initialFollowStatus ? 2 : 0;
     
     _animationController = AnimationController(
@@ -83,7 +82,7 @@ class _FollowButtonState extends State<FollowButton> with SingleTickerProviderSt
     if (_state == 2 && !_isHovering) {
       return Colors.green;
     } else if (_state == 2 && _isHovering) {
-      return Colors.red; // Red when hovering over "Following" button
+      return Colors.red;
     } else {
       return Colors.blue;
     }
@@ -109,7 +108,6 @@ class _FollowButtonState extends State<FollowButton> with SingleTickerProviderSt
       );
     }
 
-    // Show "Unfollow" text when hovering over checkmark
     if (_state == 2 && _isHovering) {
       return Text(
         'Unfollow',
@@ -142,11 +140,9 @@ class _FollowButtonState extends State<FollowButton> with SingleTickerProviderSt
   Future<void> _handleButtonPress() async {
     if (_isLoading) return;
 
-    // If already following, unfollow
     if (_state == 2) {
       await _handleUnfollow();
     } else {
-      // Otherwise, send follow request
       await _handleFollow();
     }
   }
@@ -157,17 +153,13 @@ class _FollowButtonState extends State<FollowButton> with SingleTickerProviderSt
     });
 
     try {
-      // Show "Requested" text with animation
       setState(() => _state = 1);
       await _animationController.forward();
       
-      // Send follow request
       await FollowService.sendFollowRequest(widget.targetUserEmail);
       
-      // Wait a moment before showing checkmark
       await Future.delayed(const Duration(milliseconds: 500));
       
-      // Show checkmark
       setState(() => _state = 2);
       await _animationController.reverse();
       
@@ -182,7 +174,6 @@ class _FollowButtonState extends State<FollowButton> with SingleTickerProviderSt
         ),
       );
     } catch (e) {
-      // Reset on error
       setState(() => _state = 0);
       _animationController.reset();
       
@@ -203,24 +194,17 @@ class _FollowButtonState extends State<FollowButton> with SingleTickerProviderSt
     });
 
     try {
-      // Animate button width
       await _animationController.forward();
       
-      // Send unfollow request
       final result = await FollowService.unfollowUser(widget.targetUserEmail);
       
-      // Print response for debugging
       print('Unfollow response: $result');
       
-      // Reset to "follow" state
       setState(() => _state = 0);
       await _animationController.reverse();
       
       if (widget.onUnfollowSuccess != null) {
         widget.onUnfollowSuccess!();
-      } else if (widget.onFollowSuccess != null) {
-        // If no specific unfollow callback, use the follow callback with false
-        widget.onFollowSuccess!();
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -230,11 +214,9 @@ class _FollowButtonState extends State<FollowButton> with SingleTickerProviderSt
         ),
       );
     } catch (e) {
-      // Keep following state on error
       setState(() => _state = 2);
       _animationController.reset();
       
-      // More descriptive error message
       String errorMessage = e.toString();
       if (errorMessage.contains('FormatException')) {
         errorMessage = 'Server returned invalid response. The unfollow endpoint might not be configured correctly.';
@@ -247,7 +229,6 @@ class _FollowButtonState extends State<FollowButton> with SingleTickerProviderSt
         ),
       );
       
-      // Log the full error for debugging
       print('Unfollow error details: $e');
     } finally {
       setState(() => _isLoading = false);

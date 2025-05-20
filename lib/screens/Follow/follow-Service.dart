@@ -4,6 +4,7 @@ import 'package:innovator/App_data/App_data.dart';
 
 class FollowService {
   static const String _baseUrl = 'http://182.93.94.210:3064/api/v1';
+  static const String _checkUrl = 'http://182.93.94.210:3065/api/v1/check';
 
   static Future<Map<String, dynamic>> sendFollowRequest(String email) async {
     try {
@@ -12,7 +13,7 @@ class FollowService {
         throw Exception('User not authenticated');
       }
 
-      final url = Uri.parse('$_baseUrl/update-follow-request');
+      final url = Uri.parse('$_baseUrl/follow');
       final headers = {
         'Content-Type': 'application/json',
         'authorization': 'Bearer $authToken',
@@ -42,13 +43,11 @@ class FollowService {
         throw Exception('User not authenticated');
       }
 
-      // Use the same endpoint but with an action parameter
-      final url = Uri.parse('$_baseUrl/update-follow-request');
+      final url = Uri.parse('$_baseUrl/follow');
       final headers = {
         'Content-Type': 'application/json',
         'authorization': 'Bearer $authToken',
       };
-      // Include action: 'unfollow' in the request body
       final body = jsonEncode({
         'email': email,
         'action': 'unfollow'
@@ -63,13 +62,42 @@ class FollowService {
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       } else {
-        // Print response for debugging
         print('Unfollow error response: ${response.body}');
         throw Exception('Failed to unfollow user: ${response.statusCode}');
       }
     } catch (e) {
       print('Unfollow exception: $e');
       throw Exception('Error unfollowing user: $e');
+    }
+  }
+
+  static Future<bool> checkFollowStatus(String email) async {
+    try {
+      final authToken = AppData().authToken;
+      if (authToken == null) {
+        throw Exception('User not authenticated');
+      }
+
+      final url = Uri.parse('$_checkUrl?email=$email');
+      final headers = {
+        'Content-Type': 'application/json',
+        'authorization': 'Bearer $authToken',
+      };
+
+      final response = await http.get(
+        url,
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['data']['isFollowing'] ?? false;
+      } else {
+        throw Exception('Failed to check follow status: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Check follow status exception: $e');
+      throw Exception('Error checking follow status: $e');
     }
   }
 }

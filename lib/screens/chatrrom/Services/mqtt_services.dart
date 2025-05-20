@@ -1,6 +1,7 @@
 import 'package:mqtt_client/mqtt_client.dart';
 import 'package:mqtt_client/mqtt_server_client.dart';
 import 'dart:convert';
+import 'dart:async';
 
 class MQTTService {
   static final MQTTService _instance = MQTTService._internal();
@@ -12,12 +13,19 @@ class MQTTService {
   final String _identifier = DateTime.now().millisecondsSinceEpoch.toString();
   String? _currentUserId;
   final Map<String, Function(String)> _topicCallbacks = {};
+  Timer? _reconnectTimer;
+  bool _isConnecting = false;
 
   Future<void> connect(String token, String userId) async {
+    if (_client?.connectionStatus?.state == MqttConnectionState.connected) {
+      print('Already connected, skipping connect');
+      return;
+    }
+
     _currentUserId = userId;
     _client = MqttServerClient(_host, _identifier);
     _client!.port = 1883;
-    _client!.logging(on: true); // Enable logging for debugging
+    _client!.logging(on: true);
     _client!.keepAlivePeriod = 60;
     _client!.onDisconnected = _onDisconnected;
     _client!.onConnected = _onConnected;
@@ -25,7 +33,7 @@ class MQTTService {
 
     final connMessage = MqttConnectMessage()
         .withClientIdentifier(_identifier)
-        .authenticateAs(null, token) // JWT as password
+        .authenticateAs(null, token)
         .withWillQos(MqttQos.atLeastOnce)
         .withWillTopic('user/$userId/presence')
         .withWillMessage(json.encode({
@@ -36,15 +44,34 @@ class MQTTService {
 
     _client!.connectionMessage = connMessage;
 
+    await _attemptConnect();
+  }
+
+  Future<void> _attemptConnect() async {
+    if (_isConnecting) return;
+    _isConnecting = true;
+
     try {
       print('Attempting to connect to MQTT broker at $_host:1883');
       await _client!.connect();
       _subscribeToPersonalTopics();
+      _reconnectTimer?.cancel();
     } catch (e) {
       print('MQTT Connection Exception: $e');
-      _client!.disconnect();
-      rethrow;
+      _scheduleReconnect();
+    } finally {
+      _isConnecting = false;
     }
+  }
+
+  void _scheduleReconnect() {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = Timer(const Duration(seconds: 5), () async {
+      if (_client?.connectionStatus?.state != MqttConnectionState.connected &&
+          !_isConnecting) {
+        await _attemptConnect();
+      }
+    });
   }
 
   void _subscribeToPersonalTopics() {
@@ -72,7 +99,6 @@ class MQTTService {
       _topicCallbacks[topic]?.call(payload);
     });
 
-    // Publish online status
     publish('user/$_currentUserId/presence', {
       'userId': _currentUserId,
       'status': 'online',
@@ -88,34 +114,31 @@ class MQTTService {
   }
 
   void initiateChat(String receiverId, Map<String, dynamic> message, Function(String) onMessage) {
-  if (_currentUserId == null) {
-    print('Cannot initiate chat: currentUserId is null');
-    return;
+    if (_currentUserId == null) {
+      print('Cannot initiate chat: currentUserId is null');
+      return;
+    }
+    final chatTopic = getChatTopic(_currentUserId!, receiverId);
+    final initTopic = 'chat/init/$receiverId';
+    final payload = {
+      'sender': {
+        '_id': _currentUserId,
+        'name': message['senderName'] ?? 'Unknown',
+        'picture': message['senderPicture'] ?? '',
+        'email': message['senderEmail'] ?? '',
+      },
+      'receiver': {
+        '_id': receiverId,
+        'name': message['receiverName'] ?? 'Unknown',
+        'picture': message['receiverPicture'] ?? '',
+        'email': message['receiverEmail'] ?? '',
+      },
+    };
+
+    subscribe(chatTopic, onMessage);
+    print('Initiating chat on topic: $initTopic');
+    publish(initTopic, payload);
   }
-  final chatTopic = getChatTopic(_currentUserId!, receiverId);
-  final initTopic = 'chat/init/$receiverId';
-  final payload = {
-    'sender': {
-      '_id': _currentUserId,
-      'name': message['senderName'] ?? 'Unknown',
-      'picture': message['senderPicture'] ?? '',
-      'email': message['senderEmail'] ?? '',
-    },
-    'receiver': {
-      '_id': receiverId,
-      'name': message['receiverName'] ?? 'Unknown',
-      'picture': message['receiverPicture'] ?? '',
-      'email': message['receiverEmail'] ?? '',
-    },
-  };
-
-  // Subscribe to chat topic
-  subscribe(chatTopic, onMessage);
-
-  // Publish chat initiation
-  print('Initiating chat on topic: $initTopic');
-  publish(initTopic, payload);
-}
 
   void subscribe(String topic, Function(String) onMessage) {
     if (_client?.connectionStatus?.state == MqttConnectionState.connected) {
@@ -123,20 +146,19 @@ class MQTTService {
       _client!.subscribe(topic, MqttQos.atLeastOnce);
       _topicCallbacks[topic] = onMessage;
     } else {
-      print('Cannot subscribe to $topic: Client not connected');
+      print('Cannot subscribe to $topic: Client not connected, queuing subscription');
+      Future.delayed(const Duration(seconds: 1), () {
+        if (_client?.connectionStatus?.state == MqttConnectionState.connected) {
+          subscribe(topic, onMessage);
+        }
+      });
     }
   }
 
   Future<void> publish(String topic, Map<String, dynamic> message) async {
     if (_client?.connectionStatus?.state != MqttConnectionState.connected) {
       print('Client not connected, attempting to reconnect...');
-      try {
-        await _client!.connect();
-        print('Reconnected successfully');
-      } catch (e) {
-        print('Reconnection failed: $e');
-        throw Exception('Failed to reconnect to MQTT broker');
-      }
+      await _attemptConnect();
     }
     final payload = json.encode(message);
     print('Publishing to topic: $topic with message: $payload');
@@ -147,12 +169,14 @@ class MQTTService {
       print('Publish initiated for topic: $topic');
     } catch (e) {
       print('Error publishing message: $e');
+      _scheduleReconnect();
       throw Exception('Failed to publish message');
     }
   }
 
   void _onConnected() {
     print('Connected to MQTT broker');
+    _reconnectTimer?.cancel();
   }
 
   void _onDisconnected() {
@@ -164,6 +188,7 @@ class MQTTService {
         'timestamp': DateTime.now().toIso8601String(),
       });
     }
+    _scheduleReconnect();
   }
 
   void _onSubscribed(String topic) {
@@ -178,6 +203,7 @@ class MQTTService {
         'timestamp': DateTime.now().toIso8601String(),
       });
     }
+    _reconnectTimer?.cancel();
     _client?.disconnect();
     _currentUserId = null;
     _topicCallbacks.clear();
