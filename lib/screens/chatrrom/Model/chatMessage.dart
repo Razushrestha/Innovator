@@ -72,6 +72,7 @@ class ChatMessage {
       timestamp: _parseTimestamp(json['createdAt'] ?? json['timestamp']),
       read: json['read'] as bool? ?? false,
       readAt: json['readAt'] != null ? DateTime.tryParse(json['readAt'].toString()) : null,
+      
     );
   }
 
@@ -79,7 +80,6 @@ class ChatMessage {
   Map<String, dynamic> toJson() {
     return {
       '_id': id,
-      'id': id, // Include both for compatibility
       'sender': {
         '_id': senderId,
         'name': senderName,

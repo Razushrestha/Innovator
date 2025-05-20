@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:innovator/App_data/App_data.dart';
+import 'package:innovator/screens/chatrrom/sound/soundplayer.dart';
 import 'package:innovator/screens/comment/JWT_Helper.dart';
 import 'package:innovator/screens/comment/comment_Model.dart';
 import 'package:innovator/screens/comment/comment_services.dart';
@@ -125,6 +126,8 @@ class _CommentSectionState extends State<CommentSection> {
     } finally {
       setState(() => _isLoading = false);
     }
+    SoundPlayer player = SoundPlayer();
+    player.playlikeSound();
   }
 
   Future<void> _deleteComment(String commentId) async {

@@ -5,7 +5,7 @@ import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 import 'package:innovator/App_data/App_data.dart';
 import 'package:innovator/Authorization/Login.dart';
-import 'package:innovator/helper/dialogs.dart'; 
+import 'package:innovator/helper/dialogs.dart';
 import 'package:innovator/screens/chatrrom/Model/chatMessage.dart';
 import 'package:innovator/screens/chatrrom/Services/mqtt_services.dart';
 import 'package:innovator/screens/chatrrom/sound/soundplayer.dart';
@@ -75,7 +75,7 @@ class _ChatScreenState extends State<ChatScreen> {
       if (cachedMessages != null) {
         final List<dynamic> jsonMessages = jsonDecode(cachedMessages);
         setState(() {
-          _messages.addAll(jsonMessages.map((m) => ChatMessage.fromJson(m)));
+          _messages.addAll(jsonMessages.map((m) => ChatMessage.fromJson(m)).toList());
         });
         _scrollToBottom();
         log('ChatScreen: Loaded ${_messages.length} cached messages');
@@ -127,49 +127,50 @@ class _ChatScreenState extends State<ChatScreen> {
       _chatTopic = _mqttService.getChatTopic(widget.currentUserId, widget.receiverId);
       log('ChatScreen: Initialized chat topic: $_chatTopic');
 
-      _mqttService.initiateChat(
-        widget.receiverId,
-        {
-          'senderName': widget.currentUserName,
-          'senderPicture': widget.currentUserPicture,
-          'senderEmail': widget.currentUserEmail,
-          'receiverName': widget.receiverName,
-          'receiverPicture': widget.receiverPicture,
-          'receiverEmail': widget.receiverEmail,
-        },
-        (String payload) {
-          try {
-            log('ChatScreen: Received MQTT message on chat topic: $payload');
-            final message = ChatMessage.fromJson(jsonDecode(payload));
-            log('ChatScreen: Parsed message: senderId=${message.senderId}, receiverId=${message.receiverId}, content=${message.content}');
-            if ((message.senderId == widget.currentUserId && message.receiverId == widget.receiverId) ||
-                (message.senderId == widget.receiverId && message.receiverId == widget.currentUserId)) {
-              bool isDuplicate = _messages.any((m) => m.id == message.id);
-              if (!isDuplicate) {
-                setState(() {
+      // Subscribe to chat topic for real-time messages
+      _mqttService.subscribe(_chatTopic!, (String payload) async {
+        try {
+          log('ChatScreen: Received MQTT message on chat topic: $payload');
+          final message = ChatMessage.fromJson(jsonDecode(payload));
+          log('ChatScreen: Parsed message: senderId=${message.senderId}, receiverId=${message.receiverId}, content=${message.content}');
+          if ((message.senderId == widget.currentUserId && message.receiverId == widget.receiverId) ||
+              (message.senderId == widget.receiverId && message.receiverId == widget.currentUserId)) {
+            bool isDuplicate = _messages.any((m) => m.id == message.id);
+            if (!isDuplicate) {
+              setState(() {
+                // Replace temporary message if it exists
+                final tempIndex = _messages.indexWhere((m) =>
+                    m.id.startsWith('temp_') &&
+                    m.senderId == message.senderId &&
+                    m.content == message.content &&
+                    m.timestamp.difference(message.timestamp).inSeconds.abs() < 5);
+                if (tempIndex != -1) {
+                  _messages[tempIndex] = message;
+                  log('ChatScreen: Replaced temporary message with server Confirmed message: ${message.id}');
+                } else {
                   _messages.add(message);
                   log('ChatScreen: Added new message to UI: ${message.content}');
-                });
-                _cacheMessages();
-                _scrollToBottom();
-                // Mark message as read if received from the other user
-                if (message.senderId == widget.receiverId && !message.read) {
-                  _markMessageAsRead(message.id);
                 }
-              } else {
-                log('ChatScreen: Ignored duplicate message with id: ${message.id}');
+              });
+              await _cacheMessages();
+              _scrollToBottom();
+              // Mark message as read if received from the other user and screen is active
+              if (message.senderId == widget.receiverId && !message.read && mounted) {
+                await _markMessageAsRead(message.id);
               }
             } else {
-              log('ChatScreen: Ignored message with mismatched sender/receiver IDs');
+              log('ChatScreen: Ignored duplicate message with id: ${message.id}');
             }
-          } catch (e) {
-            log('ChatScreen: Error processing MQTT message: $e');
+          } else {
+            log('ChatScreen: Ignored message with mismatched sender/receiver IDs');
           }
-        },
-      );
+        } catch (e) {
+          log('ChatScreen: Error processing MQTT message: $e');
+        }
+      });
 
-      // Subscribe to user messages topic for additional message updates
-      _mqttService.subscribe('user/${widget.currentUserId}/messages', (String payload) {
+      // Subscribe to user-specific messages topic for read receipts and additional updates
+      _mqttService.subscribe('user/${widget.currentUserId}/messages', (String payload) async {
         try {
           log('ChatScreen: Received MQTT message on user messages topic: $payload');
           final data = jsonDecode(payload);
@@ -180,7 +181,6 @@ class _ChatScreenState extends State<ChatScreen> {
               bool isDuplicate = _messages.any((m) => m.id == message.id);
               if (!isDuplicate) {
                 setState(() {
-                  // Replace temporary message if sent by current user
                   final tempIndex = _messages.indexWhere((m) =>
                       m.id.startsWith('temp_') &&
                       m.senderId == message.senderId &&
@@ -194,37 +194,38 @@ class _ChatScreenState extends State<ChatScreen> {
                     log('ChatScreen: Added new message from user topic: ${message.content}');
                   }
                 });
-                _cacheMessages();
+                await _cacheMessages();
                 _scrollToBottom();
-                if (message.senderId == widget.receiverId && !message.read) {
-                  _markMessageAsRead(message.id);
+                if (message.senderId == widget.receiverId && !message.read && mounted) {
+                  await _markMessageAsRead(message.id);
                 }
               }
             }
           } else if (data['type'] == 'read_receipt') {
-            setState(() {
-              final messageId = data['messageId'] as String?;
-              if (messageId != null) {
+            final messageId = data['messageId'] as String?;
+            if (messageId != null) {
+              setState(() {
                 final messageIndex = _messages.indexWhere((m) => m.id == messageId);
                 if (messageIndex != -1) {
                   final message = _messages[messageIndex];
                   message.read = true;
-                  message.readAt = DateTime.now();
+                  message.readAt = DateTime.parse(data['readAt'] ?? DateTime.now().toIso8601String());
                   log('ChatScreen: Updated read receipt for message: $messageId');
                 } else {
                   log('ChatScreen: No message found for read receipt: $messageId');
                 }
-              } else {
-                log('ChatScreen: Invalid read receipt: messageId is null');
-              }
-            });
-            _cacheMessages();
+              });
+              await _cacheMessages();
+            } else {
+              log('ChatScreen: Invalid read receipt: messageId is null');
+            }
           }
         } catch (e) {
           log('ChatScreen: Error processing user messages: $e');
         }
       });
 
+      // Subscribe to notifications
       _mqttService.subscribe('user/${widget.currentUserId}/notifications', (String payload) {
         try {
           final notification = jsonDecode(payload);
@@ -312,13 +313,12 @@ class _ChatScreenState extends State<ChatScreen> {
               _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
               _isLoading = false;
             });
-            _cacheMessages();
+            await _cacheMessages();
             _scrollToBottom();
-            log('ChatScreen: Loaded ${_messages.length} messages from server');
-            // Mark unread messages as read
+            // Mark unread messages as read if screen is active
             for (var message in _messages) {
-              if (message.senderId == widget.receiverId && !message.read) {
-                _markMessageAsRead(message.id);
+              if (message.senderId == widget.receiverId && !message.read && mounted) {
+                await _markMessageAsRead(message.id);
               }
             }
           } else {
@@ -359,6 +359,9 @@ class _ChatScreenState extends State<ChatScreen> {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
         },
+        body: jsonEncode({
+          'readAt': DateTime.now().toIso8601String(),
+        }),
       );
 
       if (response.statusCode == 200) {
@@ -371,11 +374,12 @@ class _ChatScreenState extends State<ChatScreen> {
             log('ChatScreen: Marked message as read: $messageId');
           }
         });
-        _cacheMessages();
-        _mqttService.publish('user/${widget.receiverId}/messages', {
+        await _cacheMessages();
+        await _mqttService.publish('user/${widget.receiverId}/messages', {
           'type': 'read_receipt',
           'messageId': messageId,
           'chatTopic': _chatTopic,
+          'readAt': DateTime.now().toIso8601String(),
         });
       } else {
         log('ChatScreen: Failed to mark message as read, status: ${response.statusCode}');
@@ -442,6 +446,11 @@ class _ChatScreenState extends State<ChatScreen> {
         });
         await _cacheMessages();
         log('ChatScreen: Deleted message for everyone: $messageId');
+        await _mqttService.publish('user/${widget.receiverId}/messages', {
+          'type': 'message_deleted',
+          'messageId': messageId,
+          'chatTopic': _chatTopic,
+        });
         return true;
       }
       return false;
@@ -476,6 +485,10 @@ class _ChatScreenState extends State<ChatScreen> {
         });
         await _cacheMessages();
         log('ChatScreen: Deleted conversation');
+        await _mqttService.publish('user/${widget.receiverId}/messages', {
+          'type': 'conversation_deleted',
+          'chatTopic': _chatTopic,
+        });
         return true;
       }
       return false;
@@ -484,6 +497,81 @@ class _ChatScreenState extends State<ChatScreen> {
       return false;
     }
   }
+
+  Future<void> _sendMessage() async {
+  if (_isSendingMessage || _messageController.text.trim().isEmpty || _chatTopic == null) {
+    log('ChatScreen: Cannot send message: ' +
+        (_isSendingMessage
+            ? 'Already sending'
+            : _messageController.text.trim().isEmpty
+                ? 'Empty message'
+                : 'Null chat topic'));
+    return;
+  }
+
+  _isSendingMessage = true;
+  try {
+    final messageContent = _messageController.text.trim();
+    _messageController.clear();
+
+    final tempId = 'temp_${DateTime.now().millisecondsSinceEpoch}_${widget.currentUserId}';
+    final message = ChatMessage(
+      id: tempId,
+      senderId: widget.currentUserId,
+      senderName: widget.currentUserName,
+      senderPicture: widget.currentUserPicture,
+      senderEmail: widget.currentUserEmail,
+      receiverId: widget.receiverId,
+      receiverName: widget.receiverName,
+      receiverPicture: widget.receiverPicture,
+      receiverEmail: widget.receiverEmail,
+      content: messageContent,
+      timestamp: DateTime.now(),
+      read: false,
+      readAt: null,
+    );
+
+    setState(() {
+      _messages.add(message);
+      log('ChatScreen: Added temporary message to UI: $tempId');
+    });
+    await _cacheMessages();
+    _scrollToBottom();
+
+    // Use the old payload structure
+    final payload = {
+      'sender': {
+        '_id': widget.currentUserId,
+        'email': widget.currentUserEmail,
+        'name': widget.currentUserName.isNotEmpty ? widget.currentUserName : 'Unknown', // Ensure name is not empty
+        'picture': widget.currentUserPicture,
+      },
+      'receiver': {
+        '_id': widget.receiverId,
+        'email': widget.receiverEmail,
+        'name': widget.receiverName.isNotEmpty ? widget.receiverName : 'Unknown',
+        'picture': widget.receiverPicture,
+      },
+      'message': messageContent,
+      'timestamp': message.timestamp.toIso8601String(),
+    };
+
+    log('ChatScreen: Sending message to topic: $_chatTopic');
+    await _mqttService.publish(_chatTopic!, payload);
+    SoundPlayer().playSound();
+  } catch (e) {
+    log('ChatScreen: Error sending message: $e');
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Failed to send message. Please try again.')),
+    );
+    setState(() {
+      _messages.removeWhere((m) => m.id.startsWith('temp_'));
+    });
+    await _cacheMessages();
+  } finally {
+    _isSendingMessage = false;
+  }
+}
 
   void _showDeleteOptions(BuildContext context, ChatMessage message) {
     final isMe = message.senderId == widget.currentUserId;
@@ -572,80 +660,6 @@ class _ChatScreenState extends State<ChatScreen> {
         false;
   }
 
-  Future<void> _sendMessage() async {
-    if (_isSendingMessage || _messageController.text.trim().isEmpty || _chatTopic == null) {
-      log('ChatScreen: Cannot send message: ' +
-          (_isSendingMessage
-              ? 'Already sending'
-              : _messageController.text.trim().isEmpty
-                  ? 'Empty message'
-                  : 'Null chat topic'));
-      return;
-    }
-
-    _isSendingMessage = true;
-    try {
-      final messageContent = _messageController.text.trim();
-      _messageController.clear();
-
-      final tempId = 'temp_${DateTime.now().millisecondsSinceEpoch}_${widget.currentUserId}';
-      final message = ChatMessage(
-        id: tempId,
-        senderId: widget.currentUserId,
-        senderName: widget.currentUserName,
-        senderPicture: widget.currentUserPicture,
-        senderEmail: widget.currentUserEmail,
-        receiverId: widget.receiverId,
-        receiverName: widget.receiverName,
-        receiverPicture: widget.receiverPicture,
-        receiverEmail: widget.receiverEmail,
-        content: messageContent,
-        timestamp: DateTime.now(),
-        read: false,
-        readAt: null,
-      );
-
-      setState(() {
-        _messages.add(message);
-        log('ChatScreen: Added temporary message to UI: $tempId');
-      });
-      _cacheMessages();
-      _scrollToBottom();
-
-      final payload = {
-        'sender': {
-          '_id': widget.currentUserId,
-          'email': widget.currentUserEmail,
-          'name': widget.currentUserName,
-          'picture': widget.currentUserPicture,
-        },
-        'receiver': {
-          '_id': widget.receiverId,
-          'email': widget.receiverEmail,
-          'name': widget.receiverName,
-          'picture': widget.receiverPicture,
-        },
-        'message': messageContent,
-        'timestamp': message.timestamp.toIso8601String(),
-      };
-
-      log('ChatScreen: Sending message to topic: $_chatTopic');
-      await _mqttService.publish(_chatTopic!, payload);
-      SoundPlayer().playSound();
-    } catch (e) {
-      log('ChatScreen: Error sending message: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to send message. Please try again.')),
-      );
-      setState(() {
-        _messages.removeWhere((m) => m.id.startsWith('temp_'));
-      });
-      _cacheMessages();
-    } finally {
-      _isSendingMessage = false;
-    }
-  }
-
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
@@ -728,6 +742,9 @@ class _ChatScreenState extends State<ChatScreen> {
                     content: Text(success ? 'Conversation deleted successfully' : 'Failed to delete conversation'),
                   ),
                 );
+                if (success) {
+                  Navigator.pop(context);
+                }
               }
             },
             tooltip: 'Delete conversation',

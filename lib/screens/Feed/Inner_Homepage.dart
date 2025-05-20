@@ -12,6 +12,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart';
 import 'package:innovator/screens/SHow_Specific_Profile/Show_Specific_Profile.dart';
 import 'package:innovator/screens/chatrrom/Screen/chat_listscreen.dart';
+import 'package:innovator/screens/chatrrom/sound/soundplayer.dart';
 import 'package:innovator/screens/comment/JWT_Helper.dart';
 import 'package:innovator/screens/comment/comment_section.dart';
 import 'dart:io';
@@ -78,10 +79,11 @@ class FeedContent {
     this.isFollowed = false,
   }) {
     try {
-      _mediaUrls = files.map((file) {
-        if (file.startsWith('http')) return file;
-        return 'http://182.93.94.210:3064${file.startsWith('/') ? file : '/$file'}';
-      }).toList();
+      _mediaUrls =
+          files.map((file) {
+            if (file.startsWith('http')) return file;
+            return 'http://182.93.94.210:3064${file.startsWith('/') ? file : '/$file'}';
+          }).toList();
 
       _hasImages = files.any((file) {
         final lowerFile = file.toLowerCase();
@@ -120,13 +122,18 @@ class FeedContent {
         status: json['status'] ?? '',
         type: json['type'] ?? '',
         files: List<String>.from(json['files'] ?? []),
-        author: Author.fromJson(json['author'] ?? {'_id': '', 'name': 'Unknown', 'email': '', 'picture': ''}),
-        createdAt: json['createdAt'] != null
-            ? DateTime.parse(json['createdAt'])
-            : DateTime.now(),
-        updatedAt: json['updatedAt'] != null
-            ? DateTime.parse(json['updatedAt'])
-            : DateTime.now(),
+        author: Author.fromJson(
+          json['author'] ??
+              {'_id': '', 'name': 'Unknown', 'email': '', 'picture': ''},
+        ),
+        createdAt:
+            json['createdAt'] != null
+                ? DateTime.parse(json['createdAt'])
+                : DateTime.now(),
+        updatedAt:
+            json['updatedAt'] != null
+                ? DateTime.parse(json['updatedAt'])
+                : DateTime.now(),
         likes: json['likes'] ?? 0,
         comments: json['comments'] ?? 0,
         isLiked: json['liked'] ?? false,
@@ -230,7 +237,8 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
     if (!_isLoading &&
         _hasMoreData &&
         _scrollController.position.pixels >=
-            _scrollController.position.maxScrollExtent - _loadTriggerThreshold) {
+            _scrollController.position.maxScrollExtent -
+                _loadTriggerThreshold) {
       _loadMoreContent();
     }
   }
@@ -282,19 +290,22 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
   }
 
   Future<http.Response> _makeApiRequest() async {
-    final url = _lastId == null
-        ? 'http://182.93.94.210:3064/api/v1/list-contents'
-        : 'http://182.93.94.210:3064/api/v1/list-contents?lastId=$_lastId';
-    
+    final url =
+        _lastId == null
+            ? 'http://182.93.94.210:3064/api/v1/list-contents'
+            : 'http://182.93.94.210:3064/api/v1/list-contents?lastId=$_lastId';
+
     debugPrint('Request URL: $url');
-    final response = await http.get(
-      Uri.parse(url),
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'authorization': 'Bearer ${_appData.authToken}',
-      },
-    ).timeout(Duration(seconds: 30));
+    final response = await http
+        .get(
+          Uri.parse(url),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'authorization': 'Bearer ${_appData.authToken}',
+          },
+        )
+        .timeout(Duration(seconds: 30));
     debugPrint('Response: ${response.body}');
     return response;
   }
@@ -425,7 +436,19 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-         Navigator.push(context, MaterialPageRoute(builder: (_) => ChatListScreen(currentUserId: AppData().currentUserId ?? '', currentUserName: AppData().currentUserName ?? '', currentUserPicture: AppData().currentUserProfilePicture ?? '', currentUserEmail: AppData().currentUserEmail ?? '')));
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder:
+                  (_) => ChatListScreen(
+                    currentUserId: AppData().currentUserId ?? '',
+                    currentUserName: AppData().currentUserName ?? '',
+                    currentUserPicture:
+                        AppData().currentUserProfilePicture ?? '',
+                    currentUserEmail: AppData().currentUserEmail ?? '',
+                  ),
+            ),
+          );
         },
         child: Container(
           height: 200,
@@ -462,9 +485,9 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
   Widget _buildLoadingIndicator() {
     return _isLoading
         ? const Padding(
-            padding: EdgeInsets.all(16.0),
-            child: Center(child: CircularProgressIndicator()),
-          )
+          padding: EdgeInsets.all(16.0),
+          child: Center(child: CircularProgressIndicator()),
+        )
         : const SizedBox.shrink();
   }
 
@@ -481,20 +504,22 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
                   ? Icons.warning_amber
                   : Icons.error_outline,
               size: 48,
-              color: _errorMessage.contains('expired') ||
-                      _errorMessage.contains('Authentication')
-                  ? Colors.orange
-                  : Colors.red,
+              color:
+                  _errorMessage.contains('expired') ||
+                          _errorMessage.contains('Authentication')
+                      ? Colors.orange
+                      : Colors.red,
             ),
             const SizedBox(height: 16),
             Text(
               _errorMessage,
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: _errorMessage.contains('expired') ||
-                        _errorMessage.contains('Authentication')
-                    ? Colors.orange
-                    : Colors.red,
+                color:
+                    _errorMessage.contains('expired') ||
+                            _errorMessage.contains('Authentication')
+                        ? Colors.orange
+                        : Colors.red,
               ),
             ),
             const SizedBox(height: 16),
@@ -549,7 +574,8 @@ class FeedItem extends StatefulWidget {
   State<FeedItem> createState() => _FeedItemState();
 }
 
-class _FeedItemState extends State<FeedItem> with SingleTickerProviderStateMixin {
+class _FeedItemState extends State<FeedItem>
+    with SingleTickerProviderStateMixin {
   bool _isExpanded = false;
   static const int _maxLinesCollapsed = 3;
 
@@ -608,10 +634,14 @@ class _FeedItemState extends State<FeedItem> with SingleTickerProviderStateMixin
         final String? currentUserId = JwtHelper.extractUserId(token);
         if (currentUserId != null) {
           final result = currentUserId == widget.content.author.id;
-          developer.log('isAuthorCurrentUser: JWT check, currentUserId=$currentUserId, authorId=${widget.content.author.id}, result=$result');
+          developer.log(
+            'isAuthorCurrentUser: JWT check, currentUserId=$currentUserId, authorId=${widget.content.author.id}, result=$result',
+          );
           return result;
         } else {
-          developer.log('isAuthorCurrentUser: JWT token does not contain user ID');
+          developer.log(
+            'isAuthorCurrentUser: JWT token does not contain user ID',
+          );
         }
       } catch (e) {
         developer.log('isAuthorCurrentUser: Error parsing JWT token: $e');
@@ -656,21 +686,38 @@ class _FeedItemState extends State<FeedItem> with SingleTickerProviderStateMixin
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => SpecificUserProfilePage(
-                            userId: widget.content.author.id,
-                          ),
+                          builder:
+                              (_) => SpecificUserProfilePage(
+                                userId: widget.content.author.id,
+                              ),
                         ),
                       );
                     },
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          widget.content.author.name,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16.0,
-                          ),
+                        Row(
+                          children: [
+                            Text(
+                              widget.content.author.name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16.0,
+                              ),
+                            ),
+                            VerticalDivider(),
+                            if (!isOwnContent)
+                              FollowButton(
+                                targetUserEmail: widget.content.author.email,
+                                initialFollowStatus: widget.content.isFollowed,
+                                onFollowSuccess: () {
+                                  widget.onFollowToggled(true);
+                                },
+                                onUnfollowSuccess: () {
+                                  widget.onFollowToggled(false);
+                                },
+                              ),
+                          ],
                         ),
                         Text(
                           '${widget.content.type} • $formattedTimeAgo',
@@ -683,17 +730,7 @@ class _FeedItemState extends State<FeedItem> with SingleTickerProviderStateMixin
                     ),
                   ),
                 ),
-                if (!isOwnContent)
-                  FollowButton(
-                    targetUserEmail: widget.content.author.email,
-                    initialFollowStatus: widget.content.isFollowed,
-                    onFollowSuccess: () {
-                      widget.onFollowToggled(true);
-                    },
-                    onUnfollowSuccess: () {
-                      widget.onFollowToggled(false);
-                    },
-                  ),
+
                 IconButton(
                   icon: const Icon(Icons.more_vert),
                   onPressed: () {
@@ -709,7 +746,10 @@ class _FeedItemState extends State<FeedItem> with SingleTickerProviderStateMixin
           ),
           if (widget.content.status.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16.0,
+                vertical: 8.0,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -732,9 +772,14 @@ class _FeedItemState extends State<FeedItem> with SingleTickerProviderStateMixin
                         children: [
                           Text(
                             widget.content.status,
-                            style: TextStyle(fontSize: 16.0, fontFamily: 'Segoe UI', letterSpacing: 0.5),
+                            style: TextStyle(
+                              fontSize: 16.0,
+                              fontFamily: 'Segoe UI',
+                              letterSpacing: 0.5,
+                            ),
                             maxLines: _isExpanded ? null : _maxLinesCollapsed,
-                            overflow: _isExpanded ? null : TextOverflow.ellipsis,
+                            overflow:
+                                _isExpanded ? null : TextOverflow.ellipsis,
                           ),
                           if (needsExpandCollapse)
                             GestureDetector(
@@ -745,7 +790,10 @@ class _FeedItemState extends State<FeedItem> with SingleTickerProviderStateMixin
                               },
                               child: Text(
                                 _isExpanded ? 'Show Less' : 'Show More',
-                                style: TextStyle(color: Colors.blue, fontSize: 14),
+                                style: TextStyle(
+                                  color: Colors.blue,
+                                  fontSize: 14,
+                                ),
                               ),
                             ),
                         ],
@@ -769,6 +817,8 @@ class _FeedItemState extends State<FeedItem> with SingleTickerProviderStateMixin
                       likeService: likeService,
                       onLikeToggled: (isLiked) {
                         widget.onLikeToggled(isLiked);
+                        SoundPlayer player = SoundPlayer();
+                        player.playlikeSound();
                       },
                     ),
                     Text('${widget.content.likes}'),
@@ -816,12 +866,19 @@ class _FeedItemState extends State<FeedItem> with SingleTickerProviderStateMixin
 
   void _showQuickspecificSuggestions(BuildContext context) {
     final RenderBox button = context.findRenderObject() as RenderBox;
-    final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final RenderBox overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox;
 
     final RelativeRect position = RelativeRect.fromRect(
       Rect.fromPoints(
-        button.localToGlobal(button.size.topRight(Offset(-40, 0)), ancestor: overlay),
-        button.localToGlobal(button.size.topRight(Offset.zero), ancestor: overlay),
+        button.localToGlobal(
+          button.size.topRight(Offset(-40, 0)),
+          ancestor: overlay,
+        ),
+        button.localToGlobal(
+          button.size.topRight(Offset.zero),
+          ancestor: overlay,
+        ),
       ),
       Offset.zero & overlay.size,
     );
@@ -848,12 +905,19 @@ class _FeedItemState extends State<FeedItem> with SingleTickerProviderStateMixin
 
   void _showQuickSuggestions(BuildContext context) {
     final RenderBox button = context.findRenderObject() as RenderBox;
-    final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final RenderBox overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox;
 
     final RelativeRect position = RelativeRect.fromRect(
       Rect.fromPoints(
-        button.localToGlobal(button.size.topRight(Offset(-40, 0)), ancestor: overlay),
-        button.localToGlobal(button.size.topRight(Offset.zero), ancestor: overlay),
+        button.localToGlobal(
+          button.size.topRight(Offset(-40, 0)),
+          ancestor: overlay,
+        ),
+        button.localToGlobal(
+          button.size.topRight(Offset.zero),
+          ancestor: overlay,
+        ),
       ),
       Offset.zero & overlay.size,
     );
@@ -863,9 +927,15 @@ class _FeedItemState extends State<FeedItem> with SingleTickerProviderStateMixin
       position: position,
       items: [
         const PopupMenuItem<String>(value: 'edit', child: Text('Edit content')),
-        const PopupMenuItem<String>(value: 'delete', child: Text('Delete post')),
+        const PopupMenuItem<String>(
+          value: 'delete',
+          child: Text('Delete post'),
+        ),
         if (widget.content.files.isNotEmpty)
-          const PopupMenuItem<String>(value: 'delete_files', child: Text('Delete files')),
+          const PopupMenuItem<String>(
+            value: 'delete_files',
+            child: Text('Delete files'),
+          ),
         const PopupMenuItem<String>(value: 'copy', child: Text('Copy content')),
         const PopupMenuItem<String>(value: 'report', child: Text('Report')),
       ],
@@ -892,41 +962,46 @@ class _FeedItemState extends State<FeedItem> with SingleTickerProviderStateMixin
   }
 
   void _showEditContentDialog(BuildContext context) {
-    final TextEditingController controller = TextEditingController(text: widget.content.status);
+    final TextEditingController controller = TextEditingController(
+      text: widget.content.status,
+    );
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit Content'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            labelText: 'Status',
-            border: OutlineInputBorder(),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Edit Content'),
+            content: TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                labelText: 'Status',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 5,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () {
+                  _updateContentStatus(controller.text);
+                  Navigator.of(context).pop();
+                },
+                child: const Text('Update'),
+              ),
+            ],
           ),
-          maxLines: 5,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              _updateContentStatus(controller.text);
-              Navigator.of(context).pop();
-            },
-            child: const Text('Update'),
-          ),
-        ],
-      ),
     );
   }
 
   Future<void> _updateContentStatus(String newStatus) async {
     try {
       final response = await http.put(
-        Uri.parse('http://182.93.94.210:3064/api/v1/update-contents/${widget.content.id}'),
+        Uri.parse(
+          'http://182.93.94.210:3064/api/v1/update-contents/${widget.content.id}',
+        ),
         headers: {
           'Content-Type': 'application/json',
           'authorization': 'Bearer ${AppData().authToken}',
@@ -943,43 +1018,53 @@ class _FeedItemState extends State<FeedItem> with SingleTickerProviderStateMixin
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update content: ${response.statusCode}')),
+          SnackBar(
+            content: Text('Failed to update content: ${response.statusCode}'),
+          ),
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${e.toString()}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
     }
   }
 
   Future<bool?> _showDeleteConfirmation(BuildContext context) {
     return showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Post'),
-        content: const Text('Are you sure you want to delete this post? This action cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Delete Post'),
+            content: const Text(
+              'Are you sure you want to delete this post? This action cannot be undone.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop(true);
+                  _deleteContent();
+                },
+                child: const Text(
+                  'Delete',
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop(true);
-              _deleteContent();
-            },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
     );
   }
 
   Future<void> _deleteContent() async {
     try {
       final response = await http.delete(
-        Uri.parse('http://182.93.94.210:3064/api/v1/delete-content/${widget.content.id}'),
+        Uri.parse(
+          'http://182.93.94.210:3064/api/v1/delete-content/${widget.content.id}',
+        ),
         headers: {'authorization': 'Bearer ${AppData().authToken}'},
       );
 
@@ -989,36 +1074,44 @@ class _FeedItemState extends State<FeedItem> with SingleTickerProviderStateMixin
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to delete post: ${response.statusCode}')),
+          SnackBar(
+            content: Text('Failed to delete post: ${response.statusCode}'),
+          ),
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${e.toString()}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
     }
   }
 
   Future<bool?> _showDeleteFilesConfirmation(BuildContext context) {
     return showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Files'),
-        content: const Text('Are you sure you want to delete all files attached to this post?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Delete Files'),
+            content: const Text(
+              'Are you sure you want to delete all files attached to this post?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop(true);
+                  _deleteFiles();
+                },
+                child: const Text(
+                  'Delete Files',
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop(true);
-              _deleteFiles();
-            },
-            child: const Text('Delete Files', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
     );
   }
 
@@ -1042,13 +1135,15 @@ class _FeedItemState extends State<FeedItem> with SingleTickerProviderStateMixin
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to delete files: ${response.statusCode}')),
+          SnackBar(
+            content: Text('Failed to delete files: ${response.statusCode}'),
+          ),
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${e.toString()}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
     }
   }
 
@@ -1064,39 +1159,44 @@ class _FeedItemState extends State<FeedItem> with SingleTickerProviderStateMixin
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Report Content'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Please tell us why you are reporting this content:'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: controller,
-              decoration: const InputDecoration(
-                labelText: 'Reason',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 3,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Report Content'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Please tell us why you are reporting this content:',
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: controller,
+                  decoration: const InputDecoration(
+                    labelText: 'Reason',
+                    border: OutlineInputBorder(),
+                  ),
+                  maxLines: 3,
+                ),
+              ],
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Your report has been submitted'),
+                    ),
+                  );
+                  Navigator.of(context).pop();
+                },
+                child: const Text('Submit'),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Your report has been submitted')),
-              );
-              Navigator.of(context).pop();
-            },
-            child: const Text('Submit'),
-          ),
-        ],
-      ),
     );
   }
 
@@ -1113,17 +1213,21 @@ class _FeedItemState extends State<FeedItem> with SingleTickerProviderStateMixin
 
     return CachedNetworkImage(
       imageUrl: 'http://182.93.94.210:3064${widget.content.author.picture}',
-      imageBuilder: (context, imageProvider) => CircleAvatar(backgroundImage: imageProvider),
-      placeholder: (context, url) => const CircleAvatar(
-        child: CircularProgressIndicator(strokeWidth: 2.0),
-      ),
-      errorWidget: (context, url, error) => CircleAvatar(
-        child: Text(
-          widget.content.author.name.isNotEmpty
-              ? widget.content.author.name[0].toUpperCase()
-              : '?',
-        ),
-      ),
+      imageBuilder:
+          (context, imageProvider) =>
+              CircleAvatar(backgroundImage: imageProvider),
+      placeholder:
+          (context, url) => const CircleAvatar(
+            child: CircularProgressIndicator(strokeWidth: 2.0),
+          ),
+      errorWidget:
+          (context, url, error) => CircleAvatar(
+            child: Text(
+              widget.content.author.name.isNotEmpty
+                  ? widget.content.author.name[0].toUpperCase()
+                  : '?',
+            ),
+          ),
     );
   }
 
@@ -1152,9 +1256,19 @@ class _FeedItemState extends State<FeedItem> with SingleTickerProviderStateMixin
           ),
         );
       } else if (FileTypeHelper.isPdf(fileUrl)) {
-        return _buildDocumentPreview(fileUrl, 'PDF Document', Icons.picture_as_pdf, Colors.red);
+        return _buildDocumentPreview(
+          fileUrl,
+          'PDF Document',
+          Icons.picture_as_pdf,
+          Colors.red,
+        );
       } else if (FileTypeHelper.isWordDoc(fileUrl)) {
-        return _buildDocumentPreview(fileUrl, 'Word Document', Icons.description, Colors.blue);
+        return _buildDocumentPreview(
+          fileUrl,
+          'Word Document',
+          Icons.description,
+          Colors.blue,
+        );
       }
     }
 
@@ -1209,7 +1323,11 @@ class _FeedItemState extends State<FeedItem> with SingleTickerProviderStateMixin
                   child: Container(
                     color: Colors.grey[200],
                     child: const Center(
-                      child: Icon(Icons.picture_as_pdf, size: 32, color: Colors.red),
+                      child: Icon(
+                        Icons.picture_as_pdf,
+                        size: 32,
+                        color: Colors.red,
+                      ),
                     ),
                   ),
                 );
@@ -1219,7 +1337,11 @@ class _FeedItemState extends State<FeedItem> with SingleTickerProviderStateMixin
                   child: Container(
                     color: Colors.grey[200],
                     child: const Center(
-                      child: Icon(Icons.description, size: 32, color: Colors.blue),
+                      child: Icon(
+                        Icons.description,
+                        size: 32,
+                        color: Colors.blue,
+                      ),
                     ),
                   ),
                 );
@@ -1228,7 +1350,11 @@ class _FeedItemState extends State<FeedItem> with SingleTickerProviderStateMixin
               return Container(
                 color: Colors.grey[200],
                 child: const Center(
-                  child: Icon(Icons.insert_drive_file, size: 32, color: Colors.grey),
+                  child: Icon(
+                    Icons.insert_drive_file,
+                    size: 32,
+                    color: Colors.grey,
+                  ),
                 ),
               );
             },
@@ -1238,7 +1364,12 @@ class _FeedItemState extends State<FeedItem> with SingleTickerProviderStateMixin
     );
   }
 
-  Widget _buildDocumentPreview(String fileUrl, String label, IconData icon, Color color) {
+  Widget _buildDocumentPreview(
+    String fileUrl,
+    String label,
+    IconData icon,
+    Color color,
+  ) {
     return GestureDetector(
       onTap: () => _showMediaGallery(context, [fileUrl], 0),
       child: Container(
@@ -1250,21 +1381,29 @@ class _FeedItemState extends State<FeedItem> with SingleTickerProviderStateMixin
           children: [
             Icon(icon, size: 64, color: color),
             const SizedBox(height: 8),
-            Text(label, style: TextStyle(fontSize: 16, color: Colors.grey[800])),
+            Text(
+              label,
+              style: TextStyle(fontSize: 16, color: Colors.grey[800]),
+            ),
           ],
         ),
       ),
     );
   }
 
-  void _showMediaGallery(BuildContext context, List<String> mediaUrls, int initialIndex) {
+  void _showMediaGallery(
+    BuildContext context,
+    List<String> mediaUrls,
+    int initialIndex,
+  ) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => OptimizedMediaGalleryScreen(
-          mediaUrls: mediaUrls,
-          initialIndex: initialIndex,
-        ),
+        builder:
+            (context) => OptimizedMediaGalleryScreen(
+              mediaUrls: mediaUrls,
+              initialIndex: initialIndex,
+            ),
       ),
     );
   }
@@ -1283,20 +1422,22 @@ class _OptimizedNetworkImage extends StatelessWidget {
       fit: BoxFit.cover,
       height: height,
       width: double.infinity,
-      placeholder: (context, url) => Container(
-        color: Colors.grey[300],
-        child: const Center(
-          child: SizedBox(
-            width: 24,
-            height: 24,
-            child: CircularProgressIndicator(strokeWidth: 2.0),
+      placeholder:
+          (context, url) => Container(
+            color: Colors.grey[300],
+            child: const Center(
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2.0),
+              ),
+            ),
           ),
-        ),
-      ),
-      errorWidget: (context, url, error) => Container(
-        color: Colors.grey[300],
-        child: const Center(child: Icon(Icons.error, color: Colors.white)),
-      ),
+      errorWidget:
+          (context, url, error) => Container(
+            color: Colors.grey[300],
+            child: const Center(child: Icon(Icons.error, color: Colors.white)),
+          ),
       memCacheWidth: (MediaQuery.of(context).size.width * 1.2).toInt(),
     );
   }
@@ -1317,11 +1458,14 @@ class FeedApiService {
         headers['authorization'] = 'Bearer $authToken';
       }
 
-      final url = lastId == null
-          ? '$baseUrl/api/v1/list-contents'
-          : '$baseUrl/api/v1/list-contents?lastId=$lastId';
+      final url =
+          lastId == null
+              ? '$baseUrl/api/v1/list-contents'
+              : '$baseUrl/api/v1/list-contents?lastId=$lastId';
 
-      final response = await http.get(Uri.parse(url), headers: headers).timeout(Duration(seconds: 30));
+      final response = await http
+          .get(Uri.parse(url), headers: headers)
+          .timeout(Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
@@ -1335,22 +1479,28 @@ class FeedApiService {
             final content = FeedContent.fromJson(item);
             try {
               // Fetch follow status for the author
-              final isFollowing = await FollowService.checkFollowStatus(content.author.email);
-              contents.add(FeedContent(
-                id: content.id,
-                status: content.status,
-                type: content.type,
-                files: content.files,
-                author: content.author,
-                createdAt: content.createdAt,
-                updatedAt: content.updatedAt,
-                likes: content.likes,
-                comments: content.comments,
-                isLiked: content.isLiked,
-                isFollowed: isFollowing, // Set the follow status
-              ));
+              final isFollowing = await FollowService.checkFollowStatus(
+                content.author.email,
+              );
+              contents.add(
+                FeedContent(
+                  id: content.id,
+                  status: content.status,
+                  type: content.type,
+                  files: content.files,
+                  author: content.author,
+                  createdAt: content.createdAt,
+                  updatedAt: content.updatedAt,
+                  likes: content.likes,
+                  comments: content.comments,
+                  isLiked: content.isLiked,
+                  isFollowed: isFollowing, // Set the follow status
+                ),
+              );
             } catch (e) {
-              print('Error checking follow status for ${content.author.email}: $e');
+              print(
+                'Error checking follow status for ${content.author.email}: $e',
+              );
               // Fallback to default isFollowed value if check fails
               contents.add(content);
             }
@@ -1431,9 +1581,18 @@ class VideoThumbnailWidget extends StatelessWidget {
           return Stack(
             fit: StackFit.expand,
             children: [
-              Image.memory(snapshot.data!, fit: BoxFit.cover, height: height, width: width),
+              Image.memory(
+                snapshot.data!,
+                fit: BoxFit.cover,
+                height: height,
+                width: width,
+              ),
               const Center(
-                child: Icon(Icons.play_circle_fill, color: Colors.black, size: 38),
+                child: Icon(
+                  Icons.play_circle_fill,
+                  color: Colors.black,
+                  size: 38,
+                ),
               ),
             ],
           );

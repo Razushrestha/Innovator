@@ -50,7 +50,7 @@ class _FollowButtonState extends State<FollowButton> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
-    final size = widget.size ?? 40.0;
+    final size = widget.size ?? 25.0;
     
     return AnimatedBuilder(
       animation: _animationController,
@@ -99,8 +99,8 @@ class _FollowButtonState extends State<FollowButton> with SingleTickerProviderSt
   Widget _buildChild(double size) {
     if (_isLoading) {
       return SizedBox(
-        width: size * 0.5,
-        height: size * 0.5,
+        width: size * 0.1,
+        height: size * 0.1,
         child: const CircularProgressIndicator(
           color: Colors.white,
           strokeWidth: 2,
@@ -121,7 +121,7 @@ class _FollowButtonState extends State<FollowButton> with SingleTickerProviderSt
 
     switch (_state) {
       case 0:
-        return Icon(Icons.person_add, color: Colors.white, size: size * 0.6);
+        return Icon(Icons.add, color: Colors.white, size: size * 0.6);
       case 1:
         return Text(
           'Requested',

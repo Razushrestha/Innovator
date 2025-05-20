@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:innovator/App_data/App_data.dart';
 import 'package:innovator/Authorization/Login.dart';
 import 'package:innovator/screens/chatrrom/Screen/chatscreen.dart';
+import 'package:innovator/screens/chatrrom/Services/mqtt_services.dart';
 import 'package:innovator/screens/chatrrom/utils.dart';
 import 'package:innovator/widget/FloatingMenuwidget.dart';
 
@@ -32,17 +33,21 @@ class _ChatListScreenState extends State<ChatListScreen> with SingleTickerProvid
   List<dynamic> _chats = [];
   List<dynamic> _filteredChats = [];
   final TextEditingController _searchController = TextEditingController();
+  final MQTTService _mqttService = MQTTService();
+  bool _isMqttConnected = false;
 
   @override
   void initState() {
     super.initState();
     _fetchChats();
+    _initializeMQTT();
     _searchController.addListener(_onSearchChanged);
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _mqttService.disconnect();
     super.dispose();
   }
 
@@ -55,6 +60,7 @@ class _ChatListScreenState extends State<ChatListScreen> with SingleTickerProvid
         final email = (user['email'] ?? '').toString().toLowerCase();
         return name.contains(query) || email.contains(query);
       }).toList();
+      log('Filtered chats updated: ${_filteredChats.length} chats');
     });
   }
 
@@ -73,14 +79,16 @@ class _ChatListScreenState extends State<ChatListScreen> with SingleTickerProvid
         },
       );
 
-      log('Chat API Response: ${response.statusCode}');
+      log('Chat API Response: ${response.statusCode}, Body: ${response.body}');
 
       if (response.statusCode == 200 && response.headers['content-type']?.contains('application/json') == true) {
         final responseData = jsonDecode(response.body);
         if (responseData is Map<String, dynamic> && responseData['data'] is List) {
           setState(() {
             _chats = responseData['data'];
-            _filteredChats = _chats; // Initialize filtered list
+            _filteredChats = List.from(_chats);
+            log('Chats fetched: ${_chats.length} chats');
+            _subscribeToChatTopics();
           });
         } else {
           throw Exception('Invalid chat list format');
@@ -90,26 +98,104 @@ class _ChatListScreenState extends State<ChatListScreen> with SingleTickerProvid
       }
     } catch (e) {
       log('Error fetching chats: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error fetching chats: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error fetching chats: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _initializeMQTT() async {
+    try {
+      final token = AppData().authToken;
+      if (token == null) {
+        throw Exception('No auth token available for MQTT');
+      }
+      await _mqttService.connect(token, widget.currentUserId);
+      setState(() {
+        _isMqttConnected = true;
+      });
+      log('MQTTService: Initialized and connected');
+      // Subscribe to general user message topic
+      _mqttService.subscribe('user/${widget.currentUserId}/messages', (payload) {
+        log('Received message on user topic: $payload');
+        _handleMqttMessage(payload);
+      });
+    } catch (e) {
+      log('Error initializing MQTT: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error connecting to MQTT: $e')),
+        );
+      }
+      setState(() {
+        _isMqttConnected = false;
+      });
+    }
+  }
+
+  void _subscribeToChatTopics() {
+    if (!_isMqttConnected) {
+      log('Cannot subscribe to chat topics: MQTT not connected');
+      return;
+    }
+    for (var chat in _chats) {
+      final user = chat['user'] as Map<String, dynamic>? ?? {};
+      final receiverId = user['_id']?.toString() ?? '';
+      if (receiverId.isNotEmpty) {
+        final chatTopic = _mqttService.getChatTopic(widget.currentUserId, receiverId);
+        log('Subscribing to chat topic: $chatTopic');
+        _mqttService.subscribe(chatTopic, _handleMqttMessage);
+      }
+    }
+  }
+
+  void _handleMqttMessage(String payload) {
+    if (!mounted) return;
+    try {
+      final data = jsonDecode(payload);
+      if (data is Map<String, dynamic> && data['chatId'] != null && data['message'] != null) {
+        log('Processing MQTT message for chatId: ${data['chatId']}');
+        setState(() {
+          final chatIndex = _chats.indexWhere((c) => c['_id'] == data['chatId']);
+          if (chatIndex != -1) {
+            _chats[chatIndex]['lastMessage'] = data['message'];
+            _filteredChats = List.from(_chats);
+            _onSearchChanged();
+            log('Updated last message for chatId: ${data['chatId']}');
+          } else {
+            log('ChatId ${data['chatId']} not found in chats list');
+            // Optionally fetch chats again if new chat is detected
+            _fetchChats();
+          }
+        });
+      } else {
+        log('Invalid MQTT message format: $payload');
+      }
+    } catch (e) {
+      log('Error processing MQTT message: $e');
     }
   }
 
   Future<void> _logout() async {
     try {
       await AppData().logout();
+      _mqttService.disconnect();
       Get.offAll(() => const LoginPage());
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error logging out: $e')),
-      );
+      log('Error logging out: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error logging out: $e')),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return  Scaffold(
+    return Scaffold(
       key: _scaffoldKey,
       body: Stack(
         children: [
@@ -159,6 +245,27 @@ class _ChatListScreenState extends State<ChatListScreen> with SingleTickerProvid
                     ),
                   ),
                 ),
+                // Connection Status Indicator
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _isMqttConnected ? Icons.wifi : Icons.wifi_off,
+                        color: _isMqttConnected ? Colors.green : Colors.red,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _isMqttConnected ? 'Connected to real-time updates' : 'Disconnected from real-time updates',
+                        style: TextStyle(
+                          color: _isMqttConnected ? Colors.green : Colors.red,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
                 // Chat List
                 Expanded(
                   child: _filteredChats.isEmpty
@@ -172,7 +279,7 @@ class _ChatListScreenState extends State<ChatListScreen> with SingleTickerProvid
                             final displayName = user['name']?.toString() ?? 'Unknown';
                             final email = user['email']?.toString() ?? '';
 
-                            log('Profile picture URL: ${Utils.getImageUrl(profilePicture)}');
+                            log('Rendering chat for user: $displayName, lastMessage: ${chat['lastMessage']?['message']}');
 
                             return ListTile(
                               leading: CircleAvatar(
@@ -213,7 +320,10 @@ class _ChatListScreenState extends State<ChatListScreen> with SingleTickerProvid
                                       receiverEmail: email,
                                     ),
                                   ),
-                                );
+                                ).then((_) {
+                                  // Refresh chats on return to handle any missed updates
+                                  _fetchChats();
+                                });
                               },
                             );
                           },
