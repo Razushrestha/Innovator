@@ -34,7 +34,7 @@ class _CreatePostScreenState extends State<CreatePostScreen>
   late Animation<double> _animation;
 
   // Post type selection - FIXED: Ensure value matches dropdown item value
-  String _selectedPostType = 'Innovation'; // Changed to match the id in _postTypes
+  String _selectedPostType = 'innovation'; // Changed to match the id in _postTypes
   final List<Map<String, dynamic>> _postTypes = [
     {'id': 'innovation', 'name': 'Innovation', 'icon': Icons.lightbulb_outline},
     {'id': 'idea', 'name': 'Idea', 'icon': Icons.tips_and_updates},

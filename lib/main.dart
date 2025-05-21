@@ -20,6 +20,8 @@ late Size mq;
 void main() async {
   await AppData().initialize();
   WidgetsFlutterBinding.ensureInitialized();
+  
+  //BackgroundService.initialize();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   SystemChrome.setPreferredOrientations([

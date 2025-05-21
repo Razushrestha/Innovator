@@ -15,6 +15,7 @@ import 'package:innovator/screens/chatrrom/Screen/chat_listscreen.dart';
 import 'package:innovator/screens/chatrrom/sound/soundplayer.dart';
 import 'package:innovator/screens/comment/JWT_Helper.dart';
 import 'package:innovator/screens/comment/comment_section.dart';
+import 'package:innovator/widget/CustomizeFAB.dart';
 import 'dart:io';
 import 'package:lottie/lottie.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
@@ -434,9 +435,11 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.push(
+      
+       floatingActionButton: CustomFAB(
+        gifAsset: 'animation/chaticon.gif',
+  onPressed: () {
+    Navigator.push(
             context,
             MaterialPageRoute(
               builder:
@@ -449,15 +452,39 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
                   ),
             ),
           );
-        },
-        child: Container(
-          height: 200,
-          width: 200,
-          child: Lottie.asset('animation/chaticon.json'),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 100.0,
-      ),
+    // Handle button press
+    print('FAB pressed!');
+  },
+  backgroundColor: Colors.transparent,
+  showBadge: true,
+  badgeText: '3',
+  badgeColor: Colors.red,
+  
+)
+       //FloatingActionButton(
+      //   onPressed: () {
+      //     Navigator.push(
+      //       context,
+      //       MaterialPageRoute(
+      //         builder:
+      //             (_) => ChatListScreen(
+      //               currentUserId: AppData().currentUserId ?? '',
+      //               currentUserName: AppData().currentUserName ?? '',
+      //               currentUserPicture:
+      //                   AppData().currentUserProfilePicture ?? '',
+      //               currentUserEmail: AppData().currentUserEmail ?? '',
+      //             ),
+      //       ),
+      //     );
+      //   },
+      //   child: Container(
+      //     height: 200,
+      //     width: 200,
+      //     child: Lottie.asset('animation/chaticon.json'),
+      //   ),
+      //   backgroundColor: Colors.transparent,
+      //   elevation: 100.0,
+      // ),
     );
   }
 
