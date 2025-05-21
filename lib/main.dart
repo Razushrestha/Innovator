@@ -23,7 +23,7 @@ void main() async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitUp, 
     DeviceOrientation.portraitDown,
   ]).then((value) {
     runApp(

@@ -141,8 +141,8 @@ class _CustomDrawerState extends State<CustomDrawer> {
       builder:
           (context) => AlertDialog(
             title: const Text('Logout Confirmation ↪️'),
-            content: const Text(
-              'Are you sure you want to logout?',
+            content:  Text(
+              'Are you sure you want to logout?', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, letterSpacing: 1.0),
             ),
             actions: [
               TextButton(
@@ -159,8 +159,8 @@ class _CustomDrawerState extends State<CustomDrawer> {
                             );
                 },
                 child: const Text(
-                  'Delete',
-                  style: TextStyle(color: Colors.red),
+                  'Logout',
+                  style: TextStyle(color: Colors.red, fontSize: 15, fontWeight: FontWeight.bold),
                 ),
               ),
             ],

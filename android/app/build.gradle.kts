@@ -19,10 +19,11 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "com.innovation.innovator"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 35
     ndkVersion = "27.0.12077973"
 
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true  // Corrected property name
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
@@ -40,6 +41,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        multiDexEnabled = true  // Corrected property name
     }
 
     signingConfigs {
@@ -60,6 +62,12 @@ android {
             signingConfig = signingConfigs.getByName("release")
         }
     }
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4") // Add desugaring library
+    implementation("androidx.multidex:multidex:2.0.1") // Add multidex support
+    implementation("androidx.core:core:1.12.0") // Ensure recent androidx.core
 }
 
 flutter {

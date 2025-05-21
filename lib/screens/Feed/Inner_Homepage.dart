@@ -719,12 +719,25 @@ class _FeedItemState extends State<FeedItem>
                               ),
                           ],
                         ),
-                        Text(
-                          '${widget.content.type} • $formattedTimeAgo',
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 12.0,
-                          ),
+                        Row(
+                          children: [
+                            Text(
+                              '${widget.content.type} • ',
+                              style: TextStyle(
+                                color: Colors.grey[700],
+                                fontSize: 13.0,
+                                fontWeight: FontWeight.bold,
+                                
+                              ),
+                            ),
+                            Text(
+                              '$formattedTimeAgo',
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontSize: 12.0,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),

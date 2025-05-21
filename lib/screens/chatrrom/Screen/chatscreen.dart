@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:developer';
+import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
@@ -11,6 +12,7 @@ import 'package:innovator/screens/chatrrom/Services/mqtt_services.dart';
 import 'package:innovator/screens/chatrrom/sound/soundplayer.dart';
 import 'package:innovator/screens/chatrrom/utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class ChatScreen extends StatefulWidget {
   final String currentUserId;
@@ -39,6 +41,7 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
+  late FlutterLocalNotificationsPlugin _notificationsPlugin;
   final TextEditingController _messageController = TextEditingController();
   final List<ChatMessage> _messages = [];
   final MQTTService _mqttService = MQTTService();
@@ -54,8 +57,10 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
     log('ChatScreen: Initializing with currentUserId=${widget.currentUserId}, receiverId=${widget.receiverId}');
-    _loadCachedMessages();
+    //_loadCachedMessages();
     _fetchMessages();
+    _initializeNotifications();
+    _validateAndSetupMQTT();
   }
 
   @override
@@ -97,15 +102,70 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  // Initialize the notifications plugin
+  Future<void> _initializeNotifications() async {
+    _notificationsPlugin = FlutterLocalNotificationsPlugin();
+
+    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const iosSettings = DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+    );
+    const initializationSettings = InitializationSettings(
+      android: androidSettings,
+      iOS: iosSettings,
+    );
+
+    await _notificationsPlugin.initialize(initializationSettings);
+
+    // Request permissions for iOS
+    await _notificationsPlugin
+        .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
+        ?.requestPermissions(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+  }
+
+  // Function to show system notification
+  Future<void> _showSystemNotification(String title, String body) async {
+    const androidDetails = AndroidNotificationDetails(
+      'chat_channel',
+      'Chat Notifications',
+      channelDescription: 'Notifications for new chat messages',
+      importance: Importance.max,
+      priority: Priority.high,
+      showWhen: true,
+    );
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+    const notificationDetails = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    await _notificationsPlugin.show(
+      DateTime.now().millisecondsSinceEpoch % 10000, // Unique ID
+      title,
+      body,
+      notificationDetails,
+    );
+  }
+
   Future<void> _validateAndSetupMQTT() async {
     if (_mqttInitialized) {
-      log('ChatScreen: MQTT already initialized, skipping setup');
+      developer.log('ChatScreen: MQTT already initialized, skipping setup');
       return;
     }
 
     try {
       if (widget.currentUserId.isEmpty) {
-        log('ChatScreen: Cannot setup MQTT: currentUserId is empty');
+        developer.log('ChatScreen: Cannot setup MQTT: currentUserId is empty');
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Invalid user ID. Please log in again.')),
         );
@@ -115,7 +175,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
       final token = AppData().authToken;
       if (token == null) {
-        log('ChatScreen: Cannot setup MQTT: No auth token available');
+        developer.log('ChatScreen: Cannot setup MQTT: No auth token available');
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('No auth token. Please log in again.')),
         );
@@ -125,20 +185,19 @@ class _ChatScreenState extends State<ChatScreen> {
 
       await _mqttService.connect(token, widget.currentUserId);
       _chatTopic = _mqttService.getChatTopic(widget.currentUserId, widget.receiverId);
-      log('ChatScreen: Initialized chat topic: $_chatTopic');
+      developer.log('ChatScreen: Initialized chat topic: $_chatTopic');
 
       // Subscribe to chat topic for real-time messages
       _mqttService.subscribe(_chatTopic!, (String payload) async {
         try {
-          log('ChatScreen: Received MQTT message on chat topic: $payload');
+          developer.log('ChatScreen: Received MQTT message on chat topic: $payload');
           final message = ChatMessage.fromJson(jsonDecode(payload));
-          log('ChatScreen: Parsed message: senderId=${message.senderId}, receiverId=${message.receiverId}, content=${message.content}');
+          developer.log('ChatScreen: Parsed message: senderId=${message.senderId}, receiverId=${message.receiverId}, content=${message.content}');
           if ((message.senderId == widget.currentUserId && message.receiverId == widget.receiverId) ||
               (message.senderId == widget.receiverId && message.receiverId == widget.currentUserId)) {
             bool isDuplicate = _messages.any((m) => m.id == message.id);
             if (!isDuplicate) {
               setState(() {
-                // Replace temporary message if it exists
                 final tempIndex = _messages.indexWhere((m) =>
                     m.id.startsWith('temp_') &&
                     m.senderId == message.senderId &&
@@ -146,33 +205,39 @@ class _ChatScreenState extends State<ChatScreen> {
                     m.timestamp.difference(message.timestamp).inSeconds.abs() < 5);
                 if (tempIndex != -1) {
                   _messages[tempIndex] = message;
-                  log('ChatScreen: Replaced temporary message with server Confirmed message: ${message.id}');
+                  developer.log('ChatScreen: Replaced temporary message with server Confirmed message: ${message.id}');
                 } else {
                   _messages.add(message);
-                  log('ChatScreen: Added new message to UI: ${message.content}');
+                  developer.log('ChatScreen: Added new message to UI: ${message.content}');
+                  // Show system notification for new message from receiver
+                  if (message.senderId == widget.receiverId) {
+                    _showSystemNotification(
+                      'New Message from ${widget.receiverId}',
+                      message.content,
+                    );
+                  }
                 }
               });
               await _cacheMessages();
               _scrollToBottom();
-              // Mark message as read if received from the other user and screen is active
               if (message.senderId == widget.receiverId && !message.read && mounted) {
                 await _markMessageAsRead(message.id);
               }
             } else {
-              log('ChatScreen: Ignored duplicate message with id: ${message.id}');
+              developer.log('ChatScreen: Ignored duplicate message with id: ${message.id}');
             }
           } else {
-            log('ChatScreen: Ignored message with mismatched sender/receiver IDs');
+            developer.log('ChatScreen: Ignored message with mismatched sender/receiver IDs');
           }
         } catch (e) {
-          log('ChatScreen: Error processing MQTT message: $e');
+          developer.log('ChatScreen: Error processing MQTT message: $e');
         }
       });
 
-      // Subscribe to user-specific messages topic for read receipts and additional updates
+      // Subscribe to user-specific messages topic
       _mqttService.subscribe('user/${widget.currentUserId}/messages', (String payload) async {
         try {
-          log('ChatScreen: Received MQTT message on user messages topic: $payload');
+          developer.log('ChatScreen: Received MQTT message on user messages topic: $payload');
           final data = jsonDecode(payload);
           if (data['type'] == 'new_message') {
             final message = ChatMessage.fromJson(data['message']);
@@ -188,10 +253,17 @@ class _ChatScreenState extends State<ChatScreen> {
                       m.timestamp.difference(message.timestamp).inSeconds.abs() < 5);
                   if (tempIndex != -1) {
                     _messages[tempIndex] = message;
-                    log('ChatScreen: Replaced temporary message with server message: ${message.id}');
+                    developer.log('ChatScreen: Replaced temporary message with server message: ${message.id}');
                   } else {
                     _messages.add(message);
-                    log('ChatScreen: Added new message from user topic: ${message.content}');
+                    developer.log('ChatScreen: Added new message from user topic: ${message.content}');
+                    // Show system notification for new message from receiver
+                    if (message.senderId == widget.receiverId) {
+                      _showSystemNotification(
+                        'New Message from ${widget.receiverId}',
+                        message.content,
+                      );
+                    }
                   }
                 });
                 await _cacheMessages();
@@ -210,18 +282,18 @@ class _ChatScreenState extends State<ChatScreen> {
                   final message = _messages[messageIndex];
                   message.read = true;
                   message.readAt = DateTime.parse(data['readAt'] ?? DateTime.now().toIso8601String());
-                  log('ChatScreen: Updated read receipt for message: $messageId');
+                  developer.log('ChatScreen: Updated read receipt for message: $messageId');
                 } else {
-                  log('ChatScreen: No message found for read receipt: $messageId');
+                  developer.log('ChatScreen: No message found for read receipt: $messageId');
                 }
               });
               await _cacheMessages();
             } else {
-              log('ChatScreen: Invalid read receipt: messageId is null');
+              developer.log('ChatScreen: Invalid read receipt: messageId is null');
             }
           }
         } catch (e) {
-          log('ChatScreen: Error processing user messages: $e');
+          developer.log('ChatScreen: Error processing user messages: $e');
         }
       });
 
@@ -229,19 +301,20 @@ class _ChatScreenState extends State<ChatScreen> {
       _mqttService.subscribe('user/${widget.currentUserId}/notifications', (String payload) {
         try {
           final notification = jsonDecode(payload);
-          log('ChatScreen: Received notification: $notification');
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(notification['content'] ?? 'New notification')),
+          developer.log('ChatScreen: Received notification: $notification');
+          _showSystemNotification(
+            notification['title'] ?? 'New Notification',
+            notification['content'] ?? 'You have a new notification',
           );
         } catch (e) {
-          log('ChatScreen: Error processing notification: $e');
+          developer.log('ChatScreen: Error processing notification: $e');
         }
       });
 
       _mqttInitialized = true;
-      log('ChatScreen: MQTT setup completed');
+      developer.log('ChatScreen: MQTT setup completed');
     } catch (e) {
-      log('ChatScreen: Error setting up MQTT: $e');
+      developer.log('ChatScreen: Error setting up MQTT: $e');
       setState(() {
         _errorMessage = 'Failed to connect to chat service. Please try again.';
       });

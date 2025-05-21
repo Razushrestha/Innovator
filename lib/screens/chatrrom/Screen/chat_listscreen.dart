@@ -246,26 +246,26 @@ class _ChatListScreenState extends State<ChatListScreen> with SingleTickerProvid
                   ),
                 ),
                 // Connection Status Indicator
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  child: Row(
-                    children: [
-                      Icon(
-                        _isMqttConnected ? Icons.wifi : Icons.wifi_off,
-                        color: _isMqttConnected ? Colors.green : Colors.red,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        _isMqttConnected ? 'Connected to real-time updates' : 'Disconnected from real-time updates',
-                        style: TextStyle(
-                          color: _isMqttConnected ? Colors.green : Colors.red,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                // Padding(
+                //   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                //   child: Row(
+                //     children: [
+                //       Icon(
+                //         _isMqttConnected ? Icons.wifi : Icons.wifi_off,
+                //         color: _isMqttConnected ? Colors.green : Colors.red,
+                //         size: 20,
+                //       ),
+                //       const SizedBox(width: 8),
+                //       Text(
+                //         _isMqttConnected ? 'Connected to real-time updates' : 'Disconnected from real-time updates',
+                //         style: TextStyle(
+                //           color: _isMqttConnected ? Colors.green : Colors.red,
+                //           fontSize: 12,
+                //         ),
+                //       ),
+                //     ],
+                //   ),
+                // ),
                 // Chat List
                 Expanded(
                   child: _filteredChats.isEmpty
