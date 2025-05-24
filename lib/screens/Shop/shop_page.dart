@@ -21,9 +21,9 @@ class ShopPage extends StatefulWidget {
 class _ShopPageState extends State<ShopPage>
     with SingleTickerProviderStateMixin {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-
   final AppData _appData = AppData();
   List<dynamic> _products = [];
+  List<dynamic> _categories = [];
   int _currentPage = 0;
   bool _isLoading = false;
   bool _hasMore = true;
@@ -31,25 +31,127 @@ class _ShopPageState extends State<ShopPage>
   String? _errorMessage;
   final ScrollController _scrollController = ScrollController();
   final String _baseUrl = "http://182.93.94.210:3064";
-  // Control how far from the bottom to trigger loading (in pixels)
   final double _scrollThreshold = 200.0;
-  // Number of items per page to request
   final int _pageSize = 10;
-  // Track products being added to cart
   Map<String, bool> _addingToCart = {};
-  
-  // Add flag to check if widget is mounted
   bool _isMounted = true;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  String? _selectedCategoryId;
+  String _selectedCategoryName = 'All Categories';
+  DateTime? _lastSearchTime;
 
   @override
   void initState() {
     super.initState();
     _initializeData();
     _scrollController.addListener(_scrollListener);
+    _searchController.addListener(_onSearchChanged);
   }
 
   Future<void> _initializeData() async {
     await _appData.initialize();
+    await _loadCategories();
+    _loadProducts();
+  }
+
+  Future<void> _loadCategories() async {
+    try {
+      final headers = {
+        'Content-Type': 'application/json',
+        if (_appData.authToken != null)
+          'authorization': 'Bearer ${_appData.authToken}',
+      };
+
+      developer.log('Loading categories from: $_baseUrl/api/v1/categories');
+
+      final response = await http
+          .get(
+            Uri.parse('$_baseUrl/api/v1/categories'),
+            headers: headers,
+          )
+          .timeout(
+            const Duration(seconds: 10),
+          );
+
+      developer.log('Categories response status: ${response.statusCode}');
+      developer.log('Categories response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        try {
+          final data = json.decode(response.body);
+          
+          // Handle different possible response structures
+          List<dynamic> categoryList = [];
+          
+          if (data is Map<String, dynamic>) {
+            if (data['data'] != null) {
+              if (data['data']['categories'] is List) {
+                categoryList = data['data']['categories'] as List;
+              } else if (data['data'] is List) {
+                categoryList = data['data'] as List;
+              }
+            } else if (data['categories'] is List) {
+              categoryList = data['categories'] as List;
+            } else if (data is List) {
+              categoryList = data as List;
+            }
+          } else if (data is List) {
+            categoryList = data as List;
+          }
+
+          if (_isMounted && categoryList.isNotEmpty) {
+            setState(() {
+              _categories = categoryList;
+            });
+            developer.log('Loaded ${categoryList.length} categories');
+          } else {
+            developer.log('No categories found in response');
+          }
+        } catch (jsonError) {
+          developer.log('JSON parsing error for categories: $jsonError');
+          developer.log('Response body: ${response.body}');
+        }
+      } else {
+        developer.log('Categories API returned status: ${response.statusCode}');
+        developer.log('Response body: ${response.body}');
+      }
+    } catch (e) {
+      developer.log('Error loading categories: $e');
+      // Don't show error to user for categories as it's not critical
+      // Categories filter will just be hidden if not available
+    }
+  }
+
+  void _onSearchChanged() {
+    // Debounce search to avoid excessive API calls
+    final now = DateTime.now();
+    if (_lastSearchTime == null ||
+        now.difference(_lastSearchTime!).inMilliseconds > 500) {
+      _lastSearchTime = now;
+      final newSearchQuery = _searchController.text.trim();
+      
+      // Check if search query changed or if search box is now empty
+      if (newSearchQuery != _searchQuery) {
+        setState(() {
+          _products.clear();
+          _currentPage = 0;
+          _hasMore = true;
+          _searchQuery = newSearchQuery;
+        });
+        _loadProducts();
+      }
+    }
+  }
+
+  void _onCategorySelected(String? categoryId, String categoryName) {
+    setState(() {
+      _selectedCategoryId = categoryId;
+      _selectedCategoryName = categoryName;
+      _products.clear();
+      _currentPage = 0;
+      _hasMore = true;
+    });
     _loadProducts();
   }
 
@@ -72,14 +174,30 @@ class _ShopPageState extends State<ShopPage>
       };
 
       developer.log(
-        'Loading products from page $_currentPage (limit: $_pageSize)',
+        'Loading products from page $_currentPage (limit: $_pageSize, search: $_searchQuery, category: $_selectedCategoryId)',
+      );
+
+      // Build query parameters
+      final queryParams = <String, String>{
+        'page': _currentPage.toString(),
+        'limit': _pageSize.toString(),
+      };
+      
+      if (_searchQuery.isNotEmpty) {
+        queryParams['search'] = _searchQuery;
+      }
+      
+      if (_selectedCategoryId != null && _selectedCategoryId!.isNotEmpty) {
+        queryParams['category'] = _selectedCategoryId!;
+      }
+
+      final uri = Uri.parse('$_baseUrl/api/v1/products').replace(
+        queryParameters: queryParams,
       );
 
       final response = await http
           .get(
-            Uri.parse(
-              '$_baseUrl/api/v1/list-shops/$_currentPage?limit=$_pageSize',
-            ),
+            uri,
             headers: headers,
           )
           .timeout(
@@ -95,9 +213,10 @@ class _ShopPageState extends State<ShopPage>
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
+        developer.log('API Response: ${response.body}');
 
-        if (data['data'] != null && data['data'] is List) {
-          final newProducts = data['data'] as List;
+        if (data['data'] != null && data['data']['products'] is List) {
+          final newProducts = data['data']['products'] as List;
           developer.log('Received ${newProducts.length} products');
 
           if (!_isMounted) return;
@@ -105,9 +224,8 @@ class _ShopPageState extends State<ShopPage>
           setState(() {
             _products.addAll(newProducts);
             _currentPage++;
-            _hasMore =
-                newProducts.length >=
-                _pageSize; // If we got fewer items than requested, we've reached the end
+            // Use the hasMore field from the API response
+            _hasMore = data['data']['hasMore'] ?? false;
           });
         } else {
           if (!_isMounted) return;
@@ -143,29 +261,24 @@ class _ShopPageState extends State<ShopPage>
     }
   }
 
-  // Add to cart function - Fixed to handle deactivated widget issue
   Future<void> _addToCart(
     String productId,
     double price, {
     int quantity = 1,
   }) async {
-    // Store context reference locally before async operations
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     
-    // Validate authentication
     if (_appData.authToken == null) {
       _showErrorSnackbar('Please log in to add items to your cart');
       return;
     }
 
-    // Get product details from local cache
     final product = _products.firstWhere(
       (p) => p['_id'] == productId,
       orElse: () => {'name': 'Unknown Product'},
     );
     final String productName = product['name'] ?? 'Unknown Product';
 
-    // Set loading state for this product
     if (!_isMounted) return;
     
     setState(() {
@@ -186,7 +299,7 @@ class _ShopPageState extends State<ShopPage>
             headers: headers,
             body: json.encode({
               'product': productId,
-              'productName': productName, // Include product name
+              'productName': productName,
               'quantity': quantity,
               'price': price,
             }),
@@ -200,14 +313,12 @@ class _ShopPageState extends State<ShopPage>
             },
           );
 
-      // Check if widget is still mounted before updating UI
       if (!_isMounted) return;
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = json.decode(response.body);
 
         if (data['success'] == true) {
-          // Use safely stored context reference
           if (_isMounted) {
             scaffoldMessenger.showSnackBar(
               SnackBar(
@@ -237,7 +348,6 @@ class _ShopPageState extends State<ShopPage>
         _showErrorSnackbar('Error adding $productName: ${e.toString()}');
       }
     } finally {
-      // Clear loading state if widget is still mounted
       if (_isMounted) {
         setState(() {
           _addingToCart.remove(productId);
@@ -247,7 +357,6 @@ class _ShopPageState extends State<ShopPage>
   }
 
   void _scrollListener() {
-    // Load more when user gets close to the bottom
     if (_scrollController.position.extentAfter < _scrollThreshold &&
         !_isLoading) {
       _loadProducts();
@@ -278,14 +387,81 @@ class _ShopPageState extends State<ShopPage>
       _products.clear();
       _currentPage = 0;
       _hasMore = true;
+      _searchQuery = '';
+      _searchController.clear();
+      _selectedCategoryId = null;
+      _selectedCategoryName = 'All Categories';
     });
     await _loadProducts();
+  }
+
+  void _showCategoryBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Select Category',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              leading: const Icon(Icons.all_inclusive),
+              title: const Text('All Categories'),
+              trailing: _selectedCategoryId == null
+                  ? const Icon(Icons.check, color: Colors.blue)
+                  : null,
+              onTap: () {
+                _onCategorySelected(null, 'All Categories');
+                Navigator.pop(context);
+              },
+            ),
+            const Divider(),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: _categories.length,
+                itemBuilder: (context, index) {
+                  final category = _categories[index];
+                  final categoryId = category['_id'] ?? '';
+                  final categoryName = category['name'] ?? 'Unknown Category';
+                  final isSelected = _selectedCategoryId == categoryId;
+                  
+                  return ListTile(
+                    leading: const Icon(Icons.category),
+                    title: Text(categoryName),
+                    trailing: isSelected
+                        ? const Icon(Icons.check, color: Colors.blue)
+                        : null,
+                    onTap: () {
+                      _onCategorySelected(categoryId, categoryName);
+                      Navigator.pop(context);
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
   void dispose() {
     _isMounted = false;
     _scrollController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -298,21 +474,109 @@ class _ShopPageState extends State<ShopPage>
           _buildBody(),
           FloatingMenuWidget(scaffoldKey: _scaffoldKey),
           Positioned(
-            top: MediaQuery.of(context).size.height * 0.01,
+            top: MediaQuery.of(context).size.height * 0.03,
+            left: MediaQuery.of(context).size.width * 0.05,
             right: MediaQuery.of(context).size.width * 0.05,
-            child: ShoppingCartBadge(
-              onPressed: () {
-                Navigator.push(
-                  context, 
-                  MaterialPageRoute(builder: (_) => CartScreen())
-                ).then((_) {
-                  if (_isMounted) {
-                    setState(() {});
-                  }
-                });
-              },
-              badgeColor: Colors.red,
-              iconColor: Colors.black,
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    // Search bar
+                    Expanded(
+                      child: Container(
+                        margin: const EdgeInsets.only(right: 8),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: TextFormField(
+                          controller: _searchController,
+                          decoration: InputDecoration(
+                            hintText: 'Search products...',
+                            prefixIcon: const Icon(Icons.search),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(20),
+                              borderSide: BorderSide(color: Colors.grey.shade400),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                            filled: true,
+                            fillColor: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Shopping cart badge
+                    ShoppingCartBadge(
+                      onPressed: () {
+                        Navigator.push(
+                          context, 
+                          MaterialPageRoute(builder: (_) => CartScreen())
+                        ).then((_) {
+                          if (_isMounted) {
+                            setState(() {});
+                          }
+                        });
+                      },
+                      badgeColor: Colors.red,
+                      iconColor: Colors.black,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                // Category filter row
+                Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: _showCategoryBottomSheet,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: Colors.grey.shade400),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.category, color: Colors.grey),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _selectedCategoryName,
+                                  style: const TextStyle(fontSize: 16),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const Icon(Icons.arrow_drop_down, color: Colors.grey),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (_selectedCategoryId != null)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 8),
+                        child: GestureDetector(
+                          onTap: () => _onCategorySelected(null, 'All Categories'),
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: const BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.clear,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
             ),
           ),
         ],
@@ -354,7 +618,11 @@ class _ShopPageState extends State<ShopPage>
               color: Colors.grey,
             ),
             const SizedBox(height: 16),
-            const Text('No products available'),
+            Text(
+              _searchQuery.isNotEmpty || _selectedCategoryId != null
+                  ? 'No products found for current filters'
+                  : 'No products available',
+            ),
             const SizedBox(height: 8),
             TextButton(onPressed: _loadProducts, child: const Text('Retry')),
           ],
@@ -366,7 +634,7 @@ class _ShopPageState extends State<ShopPage>
       onRefresh: _refreshProducts,
       child: Column(
         children: [
-          SizedBox(height: 50),
+          const SizedBox(height: 130), // Increased to account for search bar and category filter
           Expanded(
             child: GridView.builder(
               controller: _scrollController,
@@ -410,6 +678,7 @@ class _ShopPageState extends State<ShopPage>
     final List<dynamic> images = product['images'] ?? [];
     final String imageUrl = images.isNotEmpty ? '$_baseUrl${images[0]}' : '';
     final bool isAddingToCart = _addingToCart[id] ?? false;
+    final String category = product['category']?['name'] ?? 'Uncategorized';
 
     return GestureDetector(
       onTap: () {
@@ -431,12 +700,10 @@ class _ShopPageState extends State<ShopPage>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Stack for product image and add to cart button
             Expanded(
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // Product Image
                   ClipRRect(
                     borderRadius: const BorderRadius.vertical(
                       top: Radius.circular(12),
@@ -470,8 +737,6 @@ class _ShopPageState extends State<ShopPage>
                               ),
                     ),
                   ),
-
-                  // Out of stock overlay
                   if (stock <= 0)
                     Container(
                       decoration: BoxDecoration(
@@ -491,8 +756,6 @@ class _ShopPageState extends State<ShopPage>
                         ),
                       ),
                     ),
-
-                  // Add to cart button (top-right corner)
                   Positioned(
                     top: 8,
                     right: 8,
@@ -552,6 +815,11 @@ class _ShopPageState extends State<ShopPage>
                     style: TextStyle(color: Colors.grey[600], fontSize: 14),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Category: $category',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
                   ),
                   const SizedBox(height: 8),
                   Row(

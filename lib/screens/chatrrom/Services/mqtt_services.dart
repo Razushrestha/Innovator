@@ -1,10 +1,9 @@
+import 'dart:collection';
 import 'dart:developer' as developer;
-
 import 'package:mqtt_client/mqtt_client.dart';
 import 'package:mqtt_client/mqtt_server_client.dart';
 import 'dart:convert';
 import 'dart:async';
-import 'dart:developer';
 import 'dart:math';
 
 class MQTTService {
@@ -16,6 +15,7 @@ class MQTTService {
   final String _host = '182.93.94.210';
   final int _port = 1883;
   final String _identifier = DateTime.now().millisecondsSinceEpoch.toString();
+  final Queue<Map<String, dynamic>> _messageQueue = Queue();
   String? _currentUserId;
   String? _token;
   final Map<String, Function(String)> _topicCallbacks = {};
@@ -24,6 +24,9 @@ class MQTTService {
   int _reconnectAttempts = 0;
   final int _maxReconnectAttempts = 5;
   final Duration _baseReconnectInterval = const Duration(seconds: 5);
+  final StreamController<Map<String, dynamic>> _messageStreamController = StreamController.broadcast();
+
+  Stream<Map<String, dynamic>> get messageStream => _messageStreamController.stream;
 
   Future<void> connect(String token, String userId) async {
     if (_client?.connectionStatus?.state == MqttConnectionState.connected) {
@@ -35,7 +38,7 @@ class MQTTService {
     _token = token;
     _client = MqttServerClient(_host, _identifier);
     _client!.port = _port;
-    _client!.logging(on: false); // Disable logging to reduce overhead
+    _client!.logging(on: false);
     _client!.keepAlivePeriod = 60;
     _client!.autoReconnect = true;
     _client!.resubscribeOnAutoReconnect = true;
@@ -73,6 +76,7 @@ class MQTTService {
       await _client!.connect();
       _reconnectAttempts = 0;
       _subscribeToPersonalTopics();
+      _processMessageQueue();
       _reconnectTimer?.cancel();
     } catch (e) {
       developer.log('MQTTService: Connection Exception: $e');
@@ -83,6 +87,14 @@ class MQTTService {
     }
   }
 
+  void _processMessageQueue() {
+    while (_messageQueue.isNotEmpty) {
+      final message = _messageQueue.removeFirst();
+      _messageStreamController.add(message);
+      developer.log('MQTTService: Processed queued message: $message');
+    }
+  }
+
   void _scheduleReconnect() {
     if (_reconnectAttempts >= _maxReconnectAttempts) {
       developer.log('MQTTService: Maximum reconnect attempts reached');
@@ -90,7 +102,6 @@ class MQTTService {
     }
 
     _reconnectTimer?.cancel();
-    // Exponential backoff: 5s, 10s, 20s, 40s, etc.
     final delay = _baseReconnectInterval * pow(2, _reconnectAttempts);
     _reconnectTimer = Timer(delay, () async {
       if (_client?.connectionStatus?.state != MqttConnectionState.connected &&
@@ -103,12 +114,12 @@ class MQTTService {
 
   void _subscribeToPersonalTopics() {
     if (_currentUserId == null) {
-     developer.log('MQTTService: Cannot subscribe: currentUserId is null');
+      developer.log('MQTTService: Cannot subscribe: currentUserId is null');
       return;
     }
 
     final topics = [
-      'user/$_currentUserId/messages', // Only subscribe to messages topic
+      'user/$_currentUserId/messages',
     ];
 
     for (var topic in topics) {
@@ -122,9 +133,26 @@ class MQTTService {
       final topic = c[0].topic;
       developer.log('MQTTService: Received message on topic: $topic, payload: $payload');
       _topicCallbacks[topic]?.call(payload);
+
+      try {
+        final data = jsonDecode(payload);
+        if (data is Map<String, dynamic> && data['type'] == 'new_message' && data['message'] != null) {
+          if (_client?.connectionStatus?.state == MqttConnectionState.connected) {
+            _messageStreamController.add(data);
+            developer.log('MQTTService: Added new_message to stream: $data');
+          } else {
+            _messageQueue.add(data);
+            developer.log('MQTTService: Queued new_message for topic: $topic');
+          }
+          _topicCallbacks[topic]?.call(payload);
+        } else {
+          developer.log('MQTTService: Ignored message: not a valid new_message format');
+        }
+      } catch (e) {
+        developer.log('MQTTService: Error processing message: $e');
+      }
     });
 
-    // Publish presence only once on connect
     publish('user/$_currentUserId/presence', {
       'userId': _currentUserId,
       'status': 'online',
@@ -146,7 +174,6 @@ class MQTTService {
     }
     final chatTopic = getChatTopic(_currentUserId!, receiverId);
     subscribe(chatTopic, onMessage);
-    // Avoid publishing chat init unless necessary (handled by first message)
   }
 
   void subscribe(String topic, Function(String) onMessage) {
@@ -194,12 +221,14 @@ class MQTTService {
     _reconnectAttempts = 0;
     _reconnectTimer?.cancel();
     _subscribeToPersonalTopics();
+    _processMessageQueue();
   }
 
   void _onAutoReconnected() {
     developer.log('MQTTService: Auto-reconnected to MQTT broker');
     _reconnectAttempts = 0;
     _subscribeToPersonalTopics();
+    _processMessageQueue();
   }
 
   void _onDisconnected() {

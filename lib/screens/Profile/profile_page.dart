@@ -560,7 +560,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                             backgroundColor: Color.fromRGBO(235, 111, 70, 0.2),
                             backgroundImage: follower.picture != null
                                 ? NetworkImage('http://182.93.94.210:3064${follower.picture}')
-                                : null,
+                                : NetworkImage(''),
                             child: follower.picture == null
                                 ? Icon(Icons.person, color: Color.fromRGBO(235, 111, 70, 1))
                                 : null,

@@ -18,6 +18,7 @@ import 'package:innovator/screens/comment/comment_section.dart';
 import 'package:innovator/widget/CustomizeFAB.dart';
 import 'dart:io';
 import 'package:lottie/lottie.dart';
+import 'package:video_player/video_player.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
 import 'dart:typed_data';
 import 'dart:developer' as developer;
@@ -1195,50 +1196,119 @@ class _FeedItemState extends State<FeedItem>
   }
 
   void _showReportLinkButton(BuildContext context) {
-    final TextEditingController controller = TextEditingController();
+  final TextEditingController reasonController = TextEditingController();
+  final TextEditingController descriptionController = TextEditingController();
 
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Report Content'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Please tell us why you are reporting this content:',
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: controller,
-                  decoration: const InputDecoration(
-                    labelText: 'Reason',
-                    border: OutlineInputBorder(),
-                  ),
-                  maxLines: 3,
-                ),
-              ],
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Report Content'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Please tell us why you are reporting this content:',
+              style: TextStyle(fontSize: 16.0),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Cancel'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: reasonController,
+              decoration: const InputDecoration(
+                labelText: 'Reason',
+                border: OutlineInputBorder(),
+                hintText: 'Enter the reason for reporting',
               ),
-              TextButton(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Your report has been submitted'),
-                    ),
-                  );
-                  Navigator.of(context).pop();
+              maxLines: 2,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: descriptionController,
+              decoration: const InputDecoration(
+                labelText: 'Description (Optional)',
+                border: OutlineInputBorder(),
+                hintText: 'Provide additional details (optional)',
+              ),
+              maxLines: 3,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () async {
+            final reason = reasonController.text.trim();
+            final description = descriptionController.text.trim();
+
+            // Validate input
+            if (reason.isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Please provide a reason for reporting.'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+              return;
+            }
+
+            try {
+              // Prepare API request
+              final response = await http.post(
+                Uri.parse('http://182.93.94.210:3064/api/v1/report'),
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Accept': 'application/json',
+                  'authorization': 'Bearer ${AppData().authToken}',
                 },
-                child: const Text('Submit'),
-              ),
-            ],
-          ),
-    );
-  }
+                body: jsonEncode({
+                  'reportedUserId': widget.content.author.id,
+                  'reason': reason,
+                  'description': description.isEmpty ? reason : description,
+                }),
+              );
+
+              // Handle API response
+              if (response.statusCode == 200) {
+                final data = json.decode(response.body);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      data['message'] ?? 'Your report has been submitted successfully.',
+                    ),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+                Navigator.of(context).pop();
+              } else {
+                final data = json.decode(response.body);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Failed to submit report: ${data['message'] ?? 'Error ${response.statusCode}'}',
+                    ),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            } catch (e) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Error submitting report: ${e.toString()}'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          },
+          child: const Text('Submit'),
+        ),
+      ],
+    ),
+  );
+}
 
   Widget _buildAuthorAvatar() {
     if (widget.content.author.picture.isEmpty) {
@@ -1288,13 +1358,13 @@ class _FeedItemState extends State<FeedItem>
           ),
         );
       } else if (FileTypeHelper.isVideo(fileUrl)) {
-        return LimitedBox(
-          maxHeight: 250.0,
-          child: GestureDetector(
-            onTap: () => _showMediaGallery(context, mediaUrls, 0),
-            child: VideoThumbnailWidget(url: fileUrl, height: 250.0),
-          ),
-        );
+         return LimitedBox(
+    maxHeight: 250.0,
+    child: GestureDetector(
+      onTap: () => _showMediaGallery(context, mediaUrls, 0),
+      child: AutoPlayVideoWidget(url: fileUrl, height: 250.0),
+    ),
+  );
       } else if (FileTypeHelper.isPdf(fileUrl)) {
         return _buildDocumentPreview(
           fileUrl,
@@ -1353,10 +1423,10 @@ class _FeedItemState extends State<FeedItem>
                   child: _OptimizedNetworkImage(url: fileUrl),
                 );
               } else if (FileTypeHelper.isVideo(fileUrl)) {
-                return GestureDetector(
-                  onTap: () => _showMediaGallery(context, mediaUrls, index),
-                  child: VideoThumbnailWidget(url: fileUrl),
-                );
+                 return GestureDetector(
+    onTap: () => _showMediaGallery(context, mediaUrls, index),
+    child: AutoPlayVideoWidget(url: fileUrl),
+  );
               } else if (FileTypeHelper.isPdf(fileUrl)) {
                 return GestureDetector(
                   onTap: () => _showMediaGallery(context, mediaUrls, index),
@@ -1579,71 +1649,83 @@ extension DateTimeExtension on DateTime {
   }
 }
 
-class VideoThumbnailWidget extends StatelessWidget {
+class AutoPlayVideoWidget extends StatefulWidget {
   final String url;
   final double? height;
   final double? width;
 
-  static final Map<String, Uint8List> _thumbnailCache = {};
+  const AutoPlayVideoWidget({required this.url, this.height, this.width, Key? key}) : super(key: key);
 
-  const VideoThumbnailWidget({required this.url, this.height, this.width});
+  @override
+  State<AutoPlayVideoWidget> createState() => _AutoPlayVideoWidgetState();
+}
 
-  Future<Uint8List?> _generateThumbnail() async {
-    if (_thumbnailCache.containsKey(url)) {
-      return _thumbnailCache[url];
-    }
+class _AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget> {
+  late VideoPlayerController _controller;
+  bool _initialized = false;
+    bool _isMuted = false;
 
-    final thumbnail = await VideoThumbnail.thumbnailData(
-      video: url,
-      imageFormat: ImageFormat.PNG,
-      maxWidth: 300,
-      quality: 25,
-    );
 
-    if (thumbnail != null) {
-      _thumbnailCache[url] = thumbnail;
-    }
-    return thumbnail;
+  @override
+  void initState() {
+    super.initState();
+    _controller = VideoPlayerController.network(widget.url)
+      ..setLooping(true)
+      ..setVolume(1.0)
+      ..initialize().then((_) {
+        setState(() {
+          _initialized = true;
+          _controller.play();
+        });
+      });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _toggleMute() {
+    setState(() {
+      _isMuted = !_isMuted;
+      _controller.setVolume(_isMuted ? 0.0 : 1.0);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<Uint8List?>(
-      future: _generateThumbnail(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return Container(
-            color: Colors.black,
-            child: const Center(child: CircularProgressIndicator()),
-          );
-        }
-        if (snapshot.hasData && snapshot.data != null) {
-          return Stack(
-            fit: StackFit.expand,
-            children: [
-              Image.memory(
-                snapshot.data!,
-                fit: BoxFit.cover,
-                height: height,
-                width: width,
+   if (!_initialized) {
+      return Container(
+        height: widget.height,
+        width: widget.width ?? double.infinity,
+        color: Colors.black,
+        child: const Center(child: CircularProgressIndicator()),
+      );
+    }
+    return Stack(
+      alignment: Alignment.bottomRight,
+      children: [
+        AspectRatio(
+          aspectRatio: _controller.value.aspectRatio,
+          child: VideoPlayer(_controller),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: GestureDetector(
+            onTap: _toggleMute,
+            child: CircleAvatar(
+              backgroundColor: Colors.black54,
+              radius: 18,
+              child: Icon(
+                _isMuted ? Icons.volume_off : Icons.volume_up,
+                color: Colors.white,
+                size: 20,
               ),
-              const Center(
-                child: Icon(
-                  Icons.play_circle_fill,
-                  color: Colors.black,
-                  size: 38,
-                ),
-              ),
-            ],
-          );
-        }
-        return Container(
-          color: Colors.black,
-          child: const Center(
-            child: Icon(Icons.play_circle_fill, color: Colors.white, size: 32),
+            ),
           ),
-        );
-      },
+        ),
+      ],
     );
   }
 }

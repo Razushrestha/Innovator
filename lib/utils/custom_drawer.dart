@@ -4,10 +4,12 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:innovator/App_data/App_data.dart';
 import 'package:innovator/Authorization/Login.dart';
-import 'package:innovator/screens/Course/homepage.dart';
+import 'package:innovator/Notification/FCM_Services.dart';
+import 'package:innovator/screens/Course/home.dart';
 import 'package:innovator/screens/F&Q/F&Qscreen.dart';
 import 'package:innovator/screens/Privacy_Policy/privacy_screen.dart';
 import 'package:innovator/screens/Profile/profile_page.dart';
+import 'package:innovator/screens/Report/Report_screen.dart';
 import 'package:innovator/screens/chatrrom/Screen/chat_listscreen.dart';
 
 class CustomDrawer extends StatefulWidget {
@@ -123,12 +125,16 @@ class _CustomDrawerState extends State<CustomDrawer> {
             ),
           ),
           const SizedBox(height: 12),
-          _buildDrawerTile(Icons.book, 'Courses', () {Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => ProviderScope(child: Course_Homepage())), (route) => false);}), // Navigate to Course_Homepage
+          _buildDrawerTile(Icons.book, 'Courses', () {Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => ProviderScope(child: HomeScreen())), (route) => false);}), // Navigate to Course_Homepage
           _buildDrawerTile(Icons.star, 'Messages', () {Navigator.push(context, MaterialPageRoute(builder: (_) => ChatListScreen(currentUserId: AppData().currentUserId ?? '', currentUserName: AppData().currentUserName ?? '', currentUserPicture: AppData().currentUserProfilePicture ?? '', currentUserEmail: AppData().currentUserEmail ?? '')));}),
           _buildDrawerTile(Icons.message, 'Profile', () {Navigator.push(context, MaterialPageRoute(builder: (_) => ProviderScope(child: UserProfileScreen())));}),
           _buildDrawerTile(Icons.settings, 'Settings', () {}),
+                    _buildDrawerTile(Icons.question_answer_rounded, 'F&Q', () {Navigator.push(context, MaterialPageRoute(builder: (_) => ReportsScreen()));}),
+
           _buildDrawerTile(Icons.privacy_tip_rounded, 'Privacy&Policy', () {Navigator.push(context, MaterialPageRoute(builder: (_) => ProviderScope(child: PrivacyPolicy())));}),
           _buildDrawerTile(Icons.question_answer_rounded, 'F&Q', () {Navigator.push(context, MaterialPageRoute(builder: (_) => FAQScreen()));}),
+                 //   _buildDrawerTile(Icons.question_answer_rounded, 'Notification', () {Navigator.push(context, MaterialPageRoute(builder: (_) => FCMHomeScreen()));}),
+
           const Divider(thickness: 1, indent: 20, endIndent: 20),
           _buildDrawerTile(
             Icons.logout, 
@@ -153,10 +159,7 @@ class _CustomDrawerState extends State<CustomDrawer> {
                 onPressed: () async {
                   Navigator.of(context).pop(true);
                   await AppData().clearAuthToken();
-                            Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(builder: (_) => LoginPage()),
-                            );
+                  Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => LoginPage()), (route) => false);
                 },
                 child: const Text(
                   'Logout',

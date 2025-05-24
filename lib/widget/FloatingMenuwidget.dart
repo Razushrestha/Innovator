@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:innovator/innovator_home.dart';
 import 'package:innovator/screens/Add_Content/Create_post.dart';
-import 'package:innovator/screens/Course/homepage.dart';
+import 'package:innovator/screens/Course/home.dart';
 import 'package:innovator/screens/Search/Searchpage.dart';
 import 'package:innovator/screens/Shop/Shop_Page.dart';
 import 'package:innovator/utils/custom_drawer.dart';
@@ -102,7 +102,7 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => ProviderScope(child: Course_Homepage()),
+            builder: (_) => ProviderScope(child: HomeScreen()),
           ),
 
         );

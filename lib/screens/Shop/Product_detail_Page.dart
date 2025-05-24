@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:http/http.dart' as http;
+import 'package:carousel_slider/carousel_slider.dart';
 import 'dart:convert';
 
 class ProductDetailPage extends StatefulWidget {
@@ -29,6 +30,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
   Map<String, dynamic>? _product;
   bool _addingToCart = false;
   int _quantity = 1;
+  bool _isMounted = true;
+  int _currentImageIndex = 0; // Track current image in carousel
 
   @override
   void initState() {
@@ -37,6 +40,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
   }
 
   Future<void> _loadProductDetails() async {
+    if (!_isMounted) return;
+
     setState(() {
       _isLoading = true;
       _isError = false;
@@ -46,12 +51,12 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     try {
       final headers = {
         'Content-Type': 'application/json',
-        'Accept': 'application/json',  // Explicitly request JSON response
+        'Accept': 'application/json',
         if (widget.authToken != null) 'authorization': 'Bearer ${widget.authToken}',
       };
 
       developer.log('Loading product details for ID: ${widget.productId}');
-      final requestUrl = '${widget.baseUrl}/api/v1/get-shop/${widget.productId}';
+      final requestUrl = '${widget.baseUrl}/api/v1/products/${widget.productId}';
       developer.log('Request URL: $requestUrl');
       
       final response = await http.get(
@@ -64,9 +69,10 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
         },
       );
 
+      if (!_isMounted) return;
+
       developer.log('Response status code: ${response.statusCode}');
       
-      // Check if response contains HTML instead of JSON
       if (response.body.trim().startsWith('<!DOCTYPE') || 
           response.body.trim().startsWith('<html')) {
         developer.log('Received HTML response instead of JSON');
@@ -107,19 +113,24 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
         });
       }
     } catch (e) {
+      if (!_isMounted) return;
       setState(() {
         _isError = true;
         _errorMessage = e.toString();
       });
       developer.log('Error loading product details: $e');
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (_isMounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
   Future<void> _addToCart() async {
+    if (!_isMounted) return;
+
     // Validate auth token
     if (widget.authToken == null) {
       _showMessage('Please log in to add items to your cart', isError: true);
@@ -135,6 +146,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     final String productId = _product!['_id'] ?? '';
     final double price = (_product!['price'] ?? 0.0).toDouble();
     final int stock = _product!['stock'] ?? 0;
+    final String productName = _product!['name'] ?? 'Unknown Product';
 
     // Check stock
     if (stock < _quantity) {
@@ -159,6 +171,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
         headers: headers,
         body: json.encode({
           'product': productId,
+          'productName': productName,
           'quantity': _quantity,
           'price': price,
         }),
@@ -169,11 +182,13 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
         },
       );
 
+      if (!_isMounted) return;
+
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = json.decode(response.body);
         
         if (data['success'] == true) {
-          _showMessage('Item added to cart successfully');
+          _showMessage('$productName added to cart successfully');
         } else {
           _showMessage(data['message'] ?? 'Failed to add item to cart', isError: true);
         }
@@ -182,19 +197,24 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
       }
     } catch (e) {
       developer.log('Error adding to cart: $e');
-      _showMessage('Error: ${e.toString()}', isError: true);
+      if (_isMounted) {
+        _showMessage('Error: ${e.toString()}', isError: true);
+      }
     } finally {
-      setState(() {
-        _addingToCart = false;
-      });
+      if (_isMounted) {
+        setState(() {
+          _addingToCart = false;
+        });
+      }
     }
   }
 
   void _showMessage(String message, {bool isError = false}) {
+    if (!_isMounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError ? Colors.green : Colors.red,
+        backgroundColor: isError ? Colors.red : Colors.green,
         duration: const Duration(seconds: 3),
       ),
     );
@@ -220,10 +240,17 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
   }
 
   @override
+  void dispose() {
+    _isMounted = false;
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_product != null ? _product!['name'] ?? 'Product Detail' : 'Product Detail'),
+        backgroundColor: Color.fromRGBO(244, 135, 6, 1),
+        title: Text(_product != null ? _product!['name'] ?? 'Product Detail' : 'Product Detail', style: TextStyle(color: Colors.white),),
         centerTitle: true,
         actions: [
           IconButton(
@@ -270,6 +297,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     final double price = (_product!['price'] ?? 0.0).toDouble();
     final int stock = _product!['stock'] ?? 0;
     final List<dynamic> images = _product!['images'] ?? [];
+    final String category = _product!['category']?['name'] ?? 'Uncategorized';
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -286,6 +314,16 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
             style: const TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          
+          // Category
+          Text(
+            'Category: $category',
+            style: TextStyle(
+              fontSize: 16,
+              color: Colors.grey[700],
             ),
           ),
           const SizedBox(height: 8),
@@ -360,30 +398,68 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
         ),
       );
     }
-    
-    // For simplicity, just showing the first image
-    // In a real app, you might want to implement a proper image carousel
-    final String imageUrl = '${widget.baseUrl}${images[0]}';
-    
-    return Hero(
-      tag: 'product-${widget.productId}',
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: CachedNetworkImage(
-          imageUrl: imageUrl,
-          fit: BoxFit.cover,
-          width: double.infinity,
-          height: 250,
-          placeholder: (context, url) => Container(
-            color: Colors.grey[200],
-            child: const Center(child: CircularProgressIndicator()),
+
+    return Column(
+      children: [
+        CarouselSlider(
+          options: CarouselOptions(
+            height: 250,
+            viewportFraction: 1.0,
+            enlargeCenterPage: false,
+            enableInfiniteScroll: images.length > 1,
+            autoPlay: images.length > 1,
+            autoPlayInterval: const Duration(seconds: 3),
+            onPageChanged: (index, reason) {
+              if (_isMounted) {
+                setState(() {
+                  _currentImageIndex = index;
+                });
+              }
+            },
           ),
-          errorWidget: (context, url, error) => Container(
-            color: Colors.grey[200],
-            child: const Icon(Icons.error),
-          ),
+          items: images.map((image) {
+            final String imageUrl = '${widget.baseUrl}$image';
+            return Hero(
+              tag: 'product-${widget.productId}-${images.indexOf(image)}',
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: CachedNetworkImage(
+                  imageUrl: imageUrl,
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  placeholder: (context, url) => Container(
+                    color: Colors.grey[200],
+                    child: const Center(child: CircularProgressIndicator()),
+                  ),
+                  errorWidget: (context, url, error) => Container(
+                    color: Colors.grey[200],
+                    child: const Icon(Icons.error),
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
         ),
-      ),
+        if (images.length > 1) ...[
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: images.asMap().entries.map((entry) {
+              return Container(
+                width: 8.0,
+                height: 8.0,
+                margin: const EdgeInsets.symmetric(horizontal: 4.0),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _currentImageIndex == entry.key
+                      ? Colors.blue
+                      : Colors.grey.withOpacity(0.5),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ],
     );
   }
 
@@ -392,11 +468,10 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     final Map<String, dynamic> specs = {};
     
     // Add any details from the product data
-    if (_product!.containsKey('brand')) specs['Brand'] = _product!['brand'];
-    if (_product!.containsKey('color')) specs['Color'] = _product!['color'];
-    if (_product!.containsKey('size')) specs['Size'] = _product!['size'];
-    if (_product!.containsKey('material')) specs['Material'] = _product!['material'];
-    if (_product!.containsKey('weight')) specs['Weight'] = '${_product!['weight']} kg';
+    if (_product!.containsKey('content')) specs['Content'] = _product!['content'];
+    if (_product!.containsKey('vendor') && _product!['vendor'] != null) {
+      specs['Business'] = _product!['vendor']['businessName'] ?? 'Unknown Vendor';
+    }
     
     if (specs.isEmpty) {
       return const SizedBox.shrink();
@@ -424,12 +499,14 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                   fontSize: 16,
                 ),
               ),
-              const SizedBox(width: 8),
-              Text(
-                '${entry.value}',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey[700],
+              const SizedBox(width: 8), 
+              Expanded(
+                child: Text(
+                  '${entry.value}',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey[700],
+                  ),
                 ),
               ),
             ],

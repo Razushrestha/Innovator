@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:developer' as developer;
 import 'package:http/http.dart' as http;
-import 'package:innovator/screens/comment/JWT_Helper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:innovator/screens/comment/JWT_Helper.dart';
 
 class AppData {
   // Singleton instance
@@ -22,16 +22,13 @@ class AppData {
   String? get authToken => _authToken;
   Map<String, dynamic>? get currentUser => _currentUser;
   
-  // Enhanced getter with debug logging
   String? get currentUserEmail {
     final email = _currentUser?['email'];
     developer.log('Getting current user email: ${email ?? "null"}');
     return email;
   }
   
-  // Modified to use JWT helper
   String? get currentUserId {
-    // Use the JWT helper to extract the user ID from the token
     final id = JwtHelper.extractUserId(_authToken);
     developer.log('Getting current user ID from JWT: ${id ?? "null"}');
     return id;
@@ -39,19 +36,19 @@ class AppData {
   
   String? get currentUserName => _currentUser?['name'];
   
-  // New getter for profile picture
   String? get currentUserProfilePicture => _currentUser?['profilePicture'];
   
-  // Initialize app data (call this at app startup)
+  // New getter for fcmTokens
+  List<String>? get fcmTokens => _currentUser?['fcmTokens']?.cast<String>();
+  
+  // Initialize app data
   Future<void> initialize() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       
-      // Load auth token
       _authToken = prefs.getString(_tokenKey);
       developer.log('Auth token: ${_authToken ?? "null"}');
       
-      // Load current user data
       final userJson = prefs.getString(_currentUserKey);
       if (userJson != null) {
         try {
@@ -74,7 +71,7 @@ class AppData {
     }
   }
   
-  // Set token (both in memory and SharedPreferences)
+  // Set token
   Future<void> setAuthToken(String token) async {
     _authToken = token;
     try {
@@ -86,7 +83,7 @@ class AppData {
     }
   }
   
-  // Clear token (both from memory and SharedPreferences)
+  // Clear token
   Future<void> clearAuthToken() async {
     _authToken = null;
     try {
@@ -146,22 +143,74 @@ class AppData {
     }
   }
   
-  // New method to update profile picture
+  // Update profile picture
   Future<void> updateProfilePicture(String pictureUrl) async {
     await updateCurrentUserField('profilePicture', pictureUrl);
     developer.log('Profile picture updated: $pictureUrl');
   }
   
-  // Enhanced helper to check if this is the current user with debug logging
+  // New method to save or update FCM token
+  Future<void> saveFcmToken(String fcmToken) async {
+    if (_currentUser == null) {
+      developer.log('Cannot save FCM token - current user is null');
+      return;
+    }
+    
+    // Initialize fcmTokens if it doesn't exist
+    _currentUser!['fcmTokens'] ??= [];
+    
+    // Avoid duplicates
+    if (!_currentUser!['fcmTokens'].contains(fcmToken)) {
+      _currentUser!['fcmTokens'].add(fcmToken);
+      developer.log('FCM token added: $fcmToken');
+      
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final userJson = jsonEncode(_currentUser);
+        await prefs.setString(_currentUserKey, userJson);
+        developer.log('FCM token saved successfully in SharedPreferences');
+        
+        // Optionally, update the backend
+        await _updateFcmTokenOnBackend(fcmToken);
+      } catch (e) {
+        developer.log('Error saving FCM token to SharedPreferences: $e');
+      }
+    } else {
+      developer.log('FCM token already exists: $fcmToken');
+    }
+  }
+  
+  // Helper method to update FCM token on the backend
+  Future<void> _updateFcmTokenOnBackend(String fcmToken) async {
+    try {
+      final url = Uri.parse('http://182.93.94.210:3064/api/v1/update-fcm-token');
+      final body = jsonEncode({
+        'userId': currentUserId,
+        'fcmToken': fcmToken,
+      });
+      final headers = {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $_authToken',
+      };
+      
+      final response = await http.post(url, headers: headers, body: body);
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        developer.log('FCM token updated successfully on backend');
+      } else {
+        developer.log('Failed to update FCM token on backend: ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      developer.log('Error updating FCM token on backend: $e');
+    }
+  }
+  
   bool isCurrentUser(String userId) {
-    // Updated to use JWT helper for consistency with currentUserId getter
     final currentId = JwtHelper.extractUserId(_authToken);
     final result = currentId != null && currentId == userId;
     developer.log('isCurrentUser check - Current user ID from JWT: ${currentId ?? "null"}, Comparing with: $userId, Result: $result');
     return result;
   }
   
-  // Enhanced helper to check if this is the current user by email with debug logging
   bool isCurrentUserByEmail(String email) {
     if (_currentUser == null || _currentUser!['email'] == null) {
       developer.log('isCurrentUserByEmail - Current user is null or has no email');
@@ -176,10 +225,8 @@ class AppData {
     return result;
   }
   
-  // Check if user is authenticated
   bool get isAuthenticated => _authToken != null && _authToken!.isNotEmpty;
   
-  // Logout - clear all user data
   Future<void> logout() async {
     await clearAuthToken();
     await clearCurrentUser();
@@ -188,5 +235,3 @@ class AppData {
     developer.log('User logged out - all data cleared');
   }
 }
-
-

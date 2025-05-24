@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:innovator/App_data/App_data.dart';
+import 'package:innovator/screens/Follow/follow-Service.dart';
+import 'package:innovator/screens/Follow/follow_Button.dart';
 import 'package:innovator/screens/show_Specific_Profile/Show_Specific_Profile.dart';
 import 'package:innovator/widget/FloatingMenuwidget.dart';
 
@@ -29,13 +31,25 @@ class _SearchPageState extends State<SearchPage>
     _fetchSuggestedUsers();
   }
 
+  List<dynamic> _filterUniqueUsers(List<dynamic> users) {
+    final uniqueEmails = <String>{};
+    return users.where((user) {
+      final email = user['email'] ?? '';
+      if (email.isEmpty || uniqueEmails.contains(email)) {
+        return false;
+      }
+      uniqueEmails.add(email);
+      return true;
+    }).toList();
+  }
+
   Future<void> _fetchSuggestedUsers() async {
     setState(() {
       _isLoading = true;
     });
     try {
       final response = await http.get(
-        Uri.parse('http://182.93.94.210:3064/api/v1/list-contents?name='),
+        Uri.parse('http://182.93.94.210:3064/api/v1/users'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -44,7 +58,7 @@ class _SearchPageState extends State<SearchPage>
       );
 
       if (response.statusCode == 200) {
-        final data = json.decode(response.body)['data']['contents'];
+        final data = _filterUniqueUsers(json.decode(response.body)['data']);
         setState(() {
           _suggestedUsers = data.take(5).toList();
           _isLoading = false;
@@ -56,9 +70,8 @@ class _SearchPageState extends State<SearchPage>
       setState(() {
         _isLoading = false;
       });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error loading suggestions: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading suggestions: $e')));
     }
   }
 
@@ -78,7 +91,7 @@ class _SearchPageState extends State<SearchPage>
 
     try {
       final response = await http.get(
-        Uri.parse('http://182.93.94.210:3064/api/v1/list-contents?name=$query'),
+        Uri.parse('http://182.93.94.210:3064/api/v1/users'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -87,9 +100,15 @@ class _SearchPageState extends State<SearchPage>
       );
 
       if (response.statusCode == 200) {
-        final data = json.decode(response.body)['data']['contents'];
+        final data = _filterUniqueUsers(json.decode(response.body)['data']);
         setState(() {
-          _searchResults = data;
+          _searchResults = data
+              .where((user) =>
+                  user['name']
+                      ?.toLowerCase()
+                      .contains(query.toLowerCase()) ??
+                  false)
+              .toList();
           _isLoading = false;
         });
       } else {
@@ -99,9 +118,8 @@ class _SearchPageState extends State<SearchPage>
       setState(() {
         _isLoading = false;
       });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error searching users: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error searching users: $e')));
     }
   }
 
@@ -112,13 +130,11 @@ class _SearchPageState extends State<SearchPage>
 
     return Scaffold(
       key: _scaffoldKey,
-
       body: Stack(
         children: [
           Column(
             children: [
               SizedBox(height: 50),
-
               // Search box in body
               Padding(
                 padding: const EdgeInsets.symmetric(
@@ -153,85 +169,81 @@ class _SearchPageState extends State<SearchPage>
               ),
               // Content
               Expanded(
-                child:
-                    _isLoading
-                        ? const Center(child: CircularProgressIndicator())
-                        : CustomScrollView(
-                          slivers: [
-                            if (_isSearching && _searchResults.isNotEmpty)
-                              SliverToBoxAdapter(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(16.0),
-                                  child: Text(
-                                    'Search Results',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      color:
-                                          isDarkMode
-                                              ? Colors.white
-                                              : Colors.black87,
-                                    ),
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : CustomScrollView(
+                        slivers: [
+                          if (_isSearching && _searchResults.isNotEmpty)
+                            SliverToBoxAdapter(
+                              child: Padding(
+                                padding: const EdgeInsets.all(16.0),
+                                child: Text(
+                                  'Search Results',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: isDarkMode
+                                        ? Colors.white
+                                        : Colors.black87,
                                   ),
                                 ),
                               ),
-                            if (_isSearching)
-                              SliverList(
-                                delegate: SliverChildBuilderDelegate((
-                                  context,
-                                  index,
-                                ) {
-                                  final user = _searchResults[index]['author'];
+                            ),
+                          if (_isSearching)
+                            SliverList(
+                              delegate: SliverChildBuilderDelegate(
+                                (context, index) {
+                                  final user = _searchResults[index];
                                   return _buildUserTile(user, context);
-                                }, childCount: _searchResults.length),
+                                },
+                                childCount: _searchResults.length,
                               ),
-                            if (!_isSearching)
-                              SliverToBoxAdapter(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(16.0),
-                                  child: Text(
-                                    'Suggested People',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      color:
-                                          isDarkMode
-                                              ? Colors.white
-                                              : Colors.black87,
-                                    ),
+                            ),
+                          if (!_isSearching)
+                            SliverToBoxAdapter(
+                              child: Padding(
+                                padding: const EdgeInsets.all(16.0),
+                                child: Text(
+                                  'Suggested People',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: isDarkMode
+                                        ? Colors.white
+                                        : Colors.black87,
                                   ),
                                 ),
                               ),
-                            if (!_isSearching)
-                              SliverList(
-                                delegate: SliverChildBuilderDelegate((
-                                  context,
-                                  index,
-                                ) {
-                                  final user = _suggestedUsers[index]['author'];
+                            ),
+                          if (!_isSearching)
+                            SliverList(
+                              delegate: SliverChildBuilderDelegate(
+                                (context, index) {
+                                  final user = _suggestedUsers[index];
                                   return _buildUserTile(user, context);
-                                }, childCount: _suggestedUsers.length),
+                                },
+                                childCount: _suggestedUsers.length,
                               ),
-                            if (_isSearching && _searchResults.isEmpty)
-                              SliverToBoxAdapter(
-                                child: Center(
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(20.0),
-                                    child: Text(
-                                      'No results found',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        color:
-                                            isDarkMode
-                                                ? Colors.grey[400]
-                                                : Colors.grey[600],
-                                      ),
+                            ),
+                          if (_isSearching && _searchResults.isEmpty)
+                            SliverToBoxAdapter(
+                              child: Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(20.0),
+                                  child: Text(
+                                    'No results found',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      color: isDarkMode
+                                          ? Colors.grey[400]
+                                          : Colors.grey[600],
                                     ),
                                   ),
                                 ),
                               ),
-                          ],
-                        ),
+                            ),
+                        ],
+                      ),
               ),
             ],
           ),
@@ -272,19 +284,17 @@ class _SearchPageState extends State<SearchPage>
             CircleAvatar(
               radius: 30,
               backgroundColor: isDarkMode ? Colors.grey[700] : Colors.grey[300],
-              backgroundImage:
-                  user['picture'] != null && user['picture'].isNotEmpty
-                      ? CachedNetworkImageProvider(
-                        'http://182.93.94.210:3064${user['picture']}',
-                      )
-                      : null,
-              child:
-                  user['picture'] == null || user['picture'].isEmpty
-                      ? Text(
-                        user['name']?[0] ?? '?',
-                        style: const TextStyle(fontSize: 24),
-                      )
-                      : null,
+              backgroundImage: user['picture'] != null && user['picture'].isNotEmpty
+                  ? CachedNetworkImageProvider(
+                      'http://182.93.94.210:3064${user['picture']}',
+                    )
+                  : null,
+              child: user['picture'] == null || user['picture'].isEmpty
+                  ? Text(
+                      user['name']?[0] ?? '?',
+                      style: const TextStyle(fontSize: 24),
+                    )
+                  : null,
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -310,14 +320,28 @@ class _SearchPageState extends State<SearchPage>
                 ],
               ),
             ),
-            IconButton(
-              icon: Icon(
-                Icons.add_circle_outline,
-                color: Theme.of(context).primaryColor,
-              ),
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Follow ${user['name']}')),
+            FutureBuilder<bool>(
+              future: FollowService.checkFollowStatus(user['email'] ?? ''),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const SizedBox(
+                    width: 36,
+                    height: 36,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  );
+                }
+
+                final isFollowing = snapshot.data ?? false;
+                return FollowButton(
+                  targetUserEmail: user['email'] ?? '',
+                  initialFollowStatus: isFollowing,
+                  onFollowSuccess: () {
+                    setState(() {});
+                  },
+                  onUnfollowSuccess: () {
+                    setState(() {});
+                  },
+                  size: 36,
                 );
               },
             ),
@@ -326,4 +350,4 @@ class _SearchPageState extends State<SearchPage>
       ),
     );
   }
-}
+} 
