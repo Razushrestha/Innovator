@@ -136,7 +136,7 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
         break;
 
       case 'drawer':
-        _showLeftSideDrawer(context);
+        SmoothDrawerService.showLeftDrawer(context);
         break;
 
       default:
@@ -218,6 +218,8 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
       },
     );
   }
+
+  
 
   // Get shape of menu button based on position
   BorderRadius _getButtonBorderRadius() {
@@ -472,3 +474,136 @@ class CustomSearchDelegate extends SearchDelegate {
     );
   }
 }
+
+
+class SmoothDrawerService {
+  static void showLeftDrawer(BuildContext context) {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        opaque: false,
+        barrierDismissible: true,
+        barrierColor: Colors.black54,
+        transitionDuration: const Duration(milliseconds: 350),
+        reverseTransitionDuration: const Duration(milliseconds: 250),
+        pageBuilder: (context, animation, _) {
+          final drawerWidth = math.min(
+            MediaQuery.of(context).size.width * 0.8,
+            300.0,
+          );
+
+          return _SmoothDrawerOverlay(
+            animation: animation,
+            drawerWidth: drawerWidth,
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _SmoothDrawerOverlay extends StatelessWidget {
+  final Animation<double> animation;
+  final double drawerWidth;
+
+  const _SmoothDrawerOverlay({
+    required this.animation,
+    required this.drawerWidth,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Create multiple animation curves for different elements
+    final slideAnimation = CurvedAnimation(
+      parent: animation,
+      curve: const Cubic(0.25, 0.1, 0.25, 1.0), // Custom bezier curve
+    );
+
+    final fadeAnimation = CurvedAnimation(
+      parent: animation,
+      curve: const Interval(0.0, 0.8, curve: Curves.easeOut),
+    );
+
+    final scaleAnimation = CurvedAnimation(
+      parent: animation,
+      curve: const ElasticOutCurve(0.8),
+    );
+
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: Stack(
+        children: [
+          // Background overlay with tap to dismiss
+          GestureDetector(
+            onTap: () => Navigator.of(context).pop(),
+            child: AnimatedBuilder(
+              animation: animation,
+              builder: (context, child) {
+                return Container(
+                  color: Colors.black.withOpacity(0.5 * animation.value),
+                  width: double.infinity,
+                  height: double.infinity,
+                );
+              },
+            ),
+          ),
+
+          // Drawer with smooth animations
+          AnimatedBuilder(
+            animation: animation,
+            builder: (context, child) {
+              return Transform.translate(
+                offset: Offset(
+                  -drawerWidth * (1 - slideAnimation.value),
+                  0,
+                ),
+                child: Opacity(
+                  opacity: fadeAnimation.value,
+                  child: Transform.scale(
+                    scale: 0.95 + (0.05 * scaleAnimation.value),
+                    alignment: Alignment.centerLeft,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Container(
+                        width: drawerWidth,
+                        height: double.infinity,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).scaffoldBackgroundColor,
+                          borderRadius: const BorderRadius.only(
+                            topRight: Radius.circular(28),
+                            bottomRight: Radius.circular(28),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.15),
+                              blurRadius: 20.0,
+                              offset: const Offset(0, 4),
+                              spreadRadius: 2,
+                            ),
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 40.0,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: const BorderRadius.only(
+                            topRight: Radius.circular(28),
+                            bottomRight: Radius.circular(28),
+                          ),
+                          child: const CustomDrawer(),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+

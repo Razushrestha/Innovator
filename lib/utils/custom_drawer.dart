@@ -509,116 +509,95 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
   final String? picturePath = userData?['picture'];
   const String baseUrl = 'http://182.93.94.210:3064';
 
-  return Column(
-    mainAxisAlignment: MainAxisAlignment.center,
-    children: [
-      // Animated profile picture with glow effect
-      TweenAnimationBuilder<double>(
-        duration: const Duration(milliseconds: 1500),
-        tween: Tween(begin: 0.0, end: 1.0),
-        builder: (context, value, child) {
-          return Transform.scale(
-            scale: value,
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [
-                    Colors.white.withOpacity(0.8),
-                    Colors.white.withOpacity(0.3),
-                  ],
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.white.withOpacity(0.5),
-                    blurRadius: 20 * value,
-                    spreadRadius: 5 * value,
-                  ),
-                ],
+  return DefaultTextStyle(
+    style: const TextStyle(
+      decoration: TextDecoration.none,
+      fontFamily: 'Roboto', // or your app's default font
+    ),
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        // Animated profile picture with glow effect
+        Container(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.white.withAlpha(30),
+                blurRadius: 20,
+                spreadRadius: 2,
               ),
-              child: CircleAvatar(
-                radius: 35, // Reduced size for better fit
-                backgroundColor: Colors.white.withOpacity(0.2),
-                backgroundImage: picturePath != null
-                    ? NetworkImage('$baseUrl$picturePath')
-                    : null,
-                child: picturePath == null
-                    ? const Icon(
-                        Icons.person,
-                        size: 35, // Reduced size
-                        color: Colors.white,
-                      )
-                    : null,
+            ],
+          ),
+          child: CircleAvatar(
+            radius: 35,
+            backgroundColor: Colors.white.withAlpha(20),
+            backgroundImage: picturePath != null
+                ? NetworkImage('$baseUrl$picturePath')
+                : null,
+            child: picturePath == null
+                ? const Icon(
+                    Icons.person,
+                    size: 35,
+                    color: Colors.white,
+                  )
+                : null,
+          ),
+        ),
+        const SizedBox(height: 20),
+        // Animated welcome text
+        Text(
+          'Welcome Back',
+          style: const TextStyle(
+            fontSize: 16,
+            color: Colors.white70,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 1.5,
+            decoration: TextDecoration.none,
+            fontFamily: 'Roboto', // Specify font family
+          ),
+        ),
+        const SizedBox(height: 8),
+        // Name text with proper styling
+        Text(
+          name,
+          style: const TextStyle(
+            fontSize: 24,
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.2,
+            decoration: TextDecoration.none,
+            fontFamily: 'Roboto', // Specify font family
+          ),
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        if (email.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 4,
+            ),
+            decoration: BoxDecoration(
+              color: Colors.white.withAlpha(20),
+              borderRadius: BorderRadius.circular(15),
+            ),
+            child: Text(
+              email,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w400,
+                decoration: TextDecoration.none,
+                fontFamily: 'Roboto', // Specify font family
               ),
             ),
-          );
-        },
-      ),
-      const SizedBox(height: 20),
-      // Animated welcome text
-      TweenAnimationBuilder<double>(
-        duration: const Duration(milliseconds: 2000),
-        tween: Tween(begin: 0.0, end: 1.0),
-        builder: (context, value, child) {
-          return Opacity(
-            opacity: value,
-            child: Transform.translate(
-              offset: Offset(0, 30 * (1 - value)),
-              child: Column(
-                children: [
-                  // Fixed: Removed const from TextStyle since it's in a dynamic context
-                  Text(
-                    'Welcome Back',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.white70,
-                      fontWeight: FontWeight.w300,
-                      letterSpacing: 1.5,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  // Fixed: Removed const from TextStyle since it's in a dynamic context
-                  Text(
-                    name,
-                    style: TextStyle(
-                      fontSize: 24, // Reduced font size
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2,
-                    ),
-                    textAlign: TextAlign.center,
-                    maxLines: 1, // Prevent overflow
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (email.isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(15),
-                      ),
-                      child: Text(
-                        email,
-                        style: TextStyle( // Fixed: Removed const
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w400,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    ],
+          ),
+        ],
+      ],
+    ),
   );
 }
 
@@ -667,8 +646,8 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
                             color: isLogout
-                                ? Colors.red.withOpacity(0.1)
-                                : const Color(0xFFEB6B46).withOpacity(0.1),
+                                ? Colors.red.withAlpha(10)
+                                : const Color(0xFFEB6B46).withAlpha(10),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Icon(
