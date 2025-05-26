@@ -5,6 +5,7 @@ import 'package:innovator/innovator_home.dart';
 import 'package:innovator/screens/Add_Content/Create_post.dart';
 import 'package:innovator/screens/Course/home.dart';
 import 'package:innovator/screens/Search/Searchpage.dart';
+import 'package:innovator/screens/Search/Searchpage.dart';
 import 'package:innovator/screens/Shop/Shop_Page.dart';
 import 'package:innovator/utils/custom_drawer.dart';
 

@@ -19,9 +19,10 @@ import 'package:innovator/widget/CustomizeFAB.dart';
 import 'dart:io';
 import 'package:lottie/lottie.dart';
 import 'package:video_player/video_player.dart';
-import 'package:video_thumbnail/video_thumbnail.dart';
 import 'dart:typed_data';
 import 'dart:developer' as developer;
+import 'package:share_plus/share_plus.dart'; // <-- Add this import
+
 
 // Enhanced Author model
 class Author {
@@ -883,7 +884,9 @@ class _FeedItemState extends State<FeedItem>
                 ),
                 IconButton(
                   icon: const Icon(Icons.share_outlined),
-                  onPressed: () {},
+                  onPressed: () {
+                     _showShareOptions(context);
+                  },
                 ),
               ],
             ),
@@ -904,6 +907,320 @@ class _FeedItemState extends State<FeedItem>
       ),
     );
   }
+
+
+  void _showShareOptions(BuildContext context) {
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: true,
+    builder: (context) => Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle bar
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            
+            const Text(
+              'Share Post',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 20),
+            
+            // Share options
+            _buildShareOption(
+              icon: Icons.link,
+              title: 'Copy Link',
+              subtitle: 'Copy post link to clipboard',
+              color: Colors.blue,
+              onTap: () {
+                Navigator.pop(context);
+                _copyPostLink();
+              },
+            ),
+            
+            _buildShareOption(
+              icon: Icons.share,
+              title: 'Share via Apps',
+              subtitle: 'Share using other apps',
+              color: Colors.green,
+              onTap: () {
+                Navigator.pop(context);
+                _shareViaApps();
+              },
+            ),
+            
+            _buildShareOption(
+              icon: Icons.text_snippet,
+              title: 'Share Text Only',
+              subtitle: 'Share post content as text',
+              color: Colors.orange,
+              onTap: () {
+                Navigator.pop(context);
+                _shareTextOnly();
+              },
+            ),
+            
+            if (widget.content.files.isNotEmpty)
+              _buildShareOption(
+                icon: Icons.photo,
+                title: 'Share with Media',
+                subtitle: 'Include images/videos',
+                color: Colors.purple,
+                onTap: () {
+                  Navigator.pop(context);
+                  _shareWithMedia();
+                },
+              ),
+            
+            const SizedBox(height: 10),
+            
+            // Cancel button
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+Widget _buildShareOption({
+  required IconData icon,
+  required String title,
+  required String subtitle,
+  required Color color,
+  required VoidCallback onTap,
+}) {
+  return ListTile(
+    leading: CircleAvatar(
+      backgroundColor: color.withOpacity(0.1),
+      child: Icon(icon, color: color),
+    ),
+    title: Text(
+      title,
+      style: const TextStyle(fontWeight: FontWeight.w500),
+    ),
+    subtitle: Text(
+      subtitle,
+      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+    ),
+    onTap: onTap,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
+  );
+}
+
+// Share implementation methods:
+
+void _copyPostLink() {
+  // Generate a shareable link for the post
+  final postLink = _generatePostLink();
+  
+  Clipboard.setData(ClipboardData(text: postLink));
+  
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(
+      content: Row(
+        children: [
+          Icon(Icons.check_circle, color: Colors.white),
+          SizedBox(width: 8),
+          Text('Post link copied to clipboard!'),
+        ],
+      ),
+      backgroundColor: Colors.green,
+      duration: Duration(seconds: 2),
+    ),
+  );
+}
+
+void _shareViaApps() async {
+  try {
+    final shareText = _buildShareText();
+    
+    if (widget.content.files.isNotEmpty && widget.content.hasImages) {
+      // If there are images, try to share with the first image
+      final firstImageUrl = widget.content.mediaUrls
+          .firstWhere((url) => FileTypeHelper.isImage(url), orElse: () => '');
+      
+      if (firstImageUrl.isNotEmpty) {
+        // For sharing with image, you might need to download it first
+        await Share.share(
+          shareText,
+          subject: 'Check out this post by ${widget.content.author.name}',
+        );
+      } else {
+        await Share.share(
+          shareText,
+          subject: 'Check out this post by ${widget.content.author.name}',
+        );
+      }
+    } else {
+      await Share.share(
+        shareText,
+        subject: 'Check out this post by ${widget.content.author.name}',
+      );
+    }
+  } catch (e) {
+    _showShareError('Failed to share post');
+  }
+}
+
+void _shareTextOnly() async {
+  try {
+    final textContent = widget.content.status.isNotEmpty 
+        ? widget.content.status 
+        : 'Check out this ${widget.content.type.toLowerCase()} by ${widget.content.author.name}';
+    
+    await Share.share(
+      textContent,
+      subject: 'Shared from App',
+    );
+  } catch (e) {
+    _showShareError('Failed to share text');
+  }
+}
+
+void _shareWithMedia() async {
+  try {
+    if (widget.content.files.isEmpty) {
+      _shareTextOnly();
+      return;
+    }
+    
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 16),
+            Text('Preparing media...'),
+          ],
+        ),
+      ),
+    );
+    
+    try {
+      // For now, share text with media URLs
+      // In a full implementation, you'd download and share actual files
+      final shareText = _buildShareTextWithMedia();
+      
+      Navigator.pop(context); // Close loading dialog
+      
+      await Share.share(
+        shareText,
+        subject: 'Check out this post with media by ${widget.content.author.name}',
+      );
+    } catch (e) {
+      Navigator.pop(context); // Close loading dialog
+      throw e;
+    }
+  } catch (e) {
+    _showShareError('Failed to share media');
+  }
+}
+
+// Helper methods:
+
+String _generatePostLink() {
+  // Generate a deep link or web link to the post
+  // This would typically be your app's URL scheme or web URL
+  return 'https://innovator.com/post/${widget.content.id}';
+}
+
+String _buildShareText() {
+  final StringBuffer shareText = StringBuffer();
+  
+  shareText.writeln('📱 Shared from ${widget.content.author.name}');
+  shareText.writeln();
+  
+  if (widget.content.status.isNotEmpty) {
+    shareText.writeln(widget.content.status);
+    shareText.writeln();
+  }
+  
+  shareText.writeln('📅 ${_formatTimeAgo(widget.content.createdAt)}');
+  shareText.writeln('❤️ ${widget.content.likes} likes • 💬 ${widget.content.comments} comments');
+  shareText.writeln();
+  shareText.writeln('View full post: ${_generatePostLink()}');
+  
+  return shareText.toString();
+}
+
+String _buildShareTextWithMedia() {
+  final StringBuffer shareText = StringBuffer();
+  
+  shareText.writeln('📱 Shared from ${widget.content.author.name}');
+  shareText.writeln();
+  
+  if (widget.content.status.isNotEmpty) {
+    shareText.writeln(widget.content.status);
+    shareText.writeln();
+  }
+  
+  // Add media info
+  if (widget.content.hasImages) {
+    shareText.writeln('📸 Contains ${widget.content.files.where((f) => FileTypeHelper.isImage(f)).length} image(s)');
+  }
+  if (widget.content.hasVideos) {
+    shareText.writeln('🎥 Contains ${widget.content.files.where((f) => FileTypeHelper.isVideo(f)).length} video(s)');
+  }
+  if (widget.content.hasPdfs) {
+    shareText.writeln('📄 Contains PDF document(s)');
+  }
+  if (widget.content.hasWordDocs) {
+    shareText.writeln('📝 Contains Word document(s)');
+  }
+  
+  shareText.writeln();
+  shareText.writeln('📅 ${_formatTimeAgo(widget.content.createdAt)}');
+  shareText.writeln('❤️ ${widget.content.likes} likes • 💬 ${widget.content.comments} comments');
+  shareText.writeln();
+  shareText.writeln('View full post with media: ${_generatePostLink()}');
+  
+  return shareText.toString();
+}
+
+void _showShareError(String message) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Row(
+        children: [
+          const Icon(Icons.error_outline, color: Colors.white),
+          const SizedBox(width: 8),
+          Text(message),
+        ],
+      ),
+      backgroundColor: Colors.red,
+      duration: const Duration(seconds: 3),
+    ),
+  );
+}
+
 
   void _showQuickspecificSuggestions(BuildContext context) {
     final RenderBox button = context.findRenderObject() as RenderBox;

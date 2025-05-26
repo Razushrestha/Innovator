@@ -11,6 +11,7 @@ import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 import 'package:innovator/App_data/App_data.dart';
 import 'package:innovator/firebase_options.dart';
+import 'package:innovator/innovator_home.dart';
 import 'package:innovator/screens/Splash_Screen/splash_screen.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -29,7 +30,7 @@ void main() async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await AppData().initialize();
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-  await FCMService.initialize();
+ await FCMService.initialize();
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
@@ -58,7 +59,7 @@ class _InnovatorHomePageState extends ConsumerState<InnovatorHomePage> {
   void initState() {
     super.initState();
     _requestNotificationPermission();
-    _loadNotifications();
+   // _loadNotifications();
     _setupFCMListeners();
     developer.log('Current user data on InnovatorHomePage init: ${AppData().currentUser}');
     developer.log('Current fcmTokens: ${AppData().fcmTokens}');
@@ -126,7 +127,7 @@ class _InnovatorHomePageState extends ConsumerState<InnovatorHomePage> {
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       developer.log('Foreground message received: ${message.messageId}');
       FCMService.showNotification(message);
-      _loadNotifications();
+      //_loadNotifications();
     });
 
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
@@ -137,7 +138,7 @@ class _InnovatorHomePageState extends ConsumerState<InnovatorHomePage> {
           builder: (context) => NotificationScreen(notification: message),
         ),
       );
-      _loadNotifications();
+      //_loadNotifications();
     });
 
     FirebaseMessaging.instance.getInitialMessage().then((RemoteMessage? message) {
@@ -231,66 +232,73 @@ class FCMService {
 
   static Future<void> initialize() async {
     try {
-      // Create notification channel
+      // Create notification channel FIRST
       const AndroidNotificationChannel channel = AndroidNotificationChannel(
-        'default_channel', // Must match AndroidManifest.xml
+        'default_channel',
         'Default Notifications',
         description: 'Channel for default notifications',
         importance: Importance.max,
         playSound: true,
-        showBadge: true, // For MIUI badge support
-        enableVibration: true, // For MIUI vibration
+        showBadge: true,
+        enableVibration: true,
       );
 
-      await _notificationsPlugin
-          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-          ?.createNotificationChannel(channel);
-
-      // Request notification permissions
-      await _firebaseMessaging.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
+      final androidPlugin = _notificationsPlugin
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+      
+      if (androidPlugin != null) {
+        await androidPlugin.createNotificationChannel(channel);
+      }
 
       // Initialize local notifications
-      const AndroidInitializationSettings androidSettings = AndroidInitializationSettings('@mipmap/launcher_icon');
+      const AndroidInitializationSettings androidSettings = 
+          AndroidInitializationSettings('@mipmap/launcher_icon');
       const DarwinInitializationSettings iosSettings = DarwinInitializationSettings();
       const InitializationSettings initializationSettings = InitializationSettings(
         android: androidSettings,
         iOS: iosSettings,
       );
+
       await _notificationsPlugin.initialize(
         initializationSettings,
         onDidReceiveNotificationResponse: (NotificationResponse response) async {
-          // Handle notification tap
           final payload = response.payload;
           if (payload != null) {
             developer.log('Notification tapped with payload: $payload');
-            // Navigate to NotificationScreen
+            // Handle notification tap
           }
         },
       );
 
-      // Handle foreground messages
+      // Request permissions
+      NotificationSettings settings = await _firebaseMessaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+        provisional: false,
+      );
+
+      developer.log('FCM permission status: ${settings.authorizationStatus}');
+
+      // Handle foreground messages only here
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
         developer.log('Foreground message received: ${message.messageId}');
         showNotification(message);
       });
 
-      // Handle background messages
-      FirebaseMessaging.onBackgroundMessage(_backgroundMessageHandler);
-
       // Get and save FCM token
       await _updateFCMToken();
+
+      // Listen for token refresh
+      _firebaseMessaging.onTokenRefresh.listen((newToken) {
+        developer.log('FCM token refreshed: $newToken');
+        AppData().saveFcmToken(newToken);
+        _updateTokenOnServer(newToken);
+      });
+
     } catch (e) {
       developer.log('Error initializing FCM: $e');
     }
-  }
-
-  static Future<void> _backgroundMessageHandler(RemoteMessage message) async {
-    developer.log('Handling background message: ${message.messageId}');
-    await showNotification(message);
   }
 
   static Future<void> showNotification(RemoteMessage message) async {
@@ -298,6 +306,9 @@ class FCMService {
       developer.log('Processing notification: ${message.messageId}');
       final notification = message.notification;
       final data = message.data;
+
+      // Create a unique notification ID
+      int notificationId = DateTime.now().millisecondsSinceEpoch ~/ 1000;
 
       AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
         'default_channel',
@@ -311,6 +322,8 @@ class FCMService {
         showWhen: true,
         enableVibration: true,
         channelShowBadge: true,
+        autoCancel: true,
+        fullScreenIntent: true, // For heads-up notification
       );
 
       DarwinNotificationDetails iosDetails = const DarwinNotificationDetails(
@@ -325,12 +338,13 @@ class FCMService {
       );
 
       await _notificationsPlugin.show(
-        DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        notificationId,
         notification?.title ?? data['title'] ?? 'New Notification',
         notification?.body ?? data['body'] ?? 'You have a new notification',
         notificationDetails,
         payload: json.encode(data),
       );
+      
       developer.log('Notification shown successfully: ${message.messageId}');
     } catch (e, stackTrace) {
       developer.log('Error showing notification: $e', stackTrace: stackTrace);
@@ -343,29 +357,7 @@ class FCMService {
       if (token != null) {
         await AppData().saveFcmToken(token);
         developer.log('FCM token saved: $token');
-
-        final userId = AppData().currentUser?['_id'] ?? '';
-        if (userId.isEmpty) {
-          developer.log('User ID not found, skipping FCM token update');
-          return;
-        }
-
-        final response = await http.post(
-          Uri.parse('http://182.93.94.210:3064/api/v1/update-fcm-token'),
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ${AppData().authToken}',
-          },
-          body: json.encode({
-            'token': token,
-          }),
-        );
-
-        if (response.statusCode == 200) {
-          developer.log('FCM token updated on backend: ${response.body}');
-        } else {
-          developer.log('Failed to update FCM token on backend: ${response.statusCode} - ${response.body}');
-        }
+        await _updateTokenOnServer(token);
       } else {
         developer.log('Failed to retrieve FCM token');
       }
@@ -373,8 +365,34 @@ class FCMService {
       developer.log('Error updating FCM token: $e');
     }
   }
-}
 
+  static Future<void> _updateTokenOnServer(String token) async {
+    try {
+      final userId = AppData().currentUser?['_id'] ?? '';
+      if (userId.isEmpty) {
+        developer.log('User ID not found, skipping FCM token update');
+        return;
+      }
+
+      final response = await http.post(
+        Uri.parse('http://182.93.94.210:3064/api/v1/update-fcm-token'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${AppData().authToken}',
+        },
+        body: json.encode({'token': token}),
+      );
+
+      if (response.statusCode == 200) {
+        developer.log('FCM token updated on backend: ${response.body}');
+      } else {
+        developer.log('Failed to update FCM token on backend: ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      developer.log('Error updating FCM token on server: $e');
+    }
+  }
+}
 class NotificationListScreen extends StatelessWidget {
   final List<NotificationModel> notifications;
 
@@ -383,7 +401,15 @@ class NotificationListScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('All Notifications')),
+      appBar: AppBar(
+        
+        title: const Text('All Notifications', style: TextStyle(backgroundColor: Colors.orange),),
+leading: 
+  IconButton(onPressed: (){
+  Navigator.push(context, MaterialPageRoute(builder: (_) => Homepage()));
+}, icon: Icon(Icons.arrow_back)),
+backgroundColor: Colors.orange,
+      ),
       body: ListView.builder(
         itemCount: notifications.length,
         itemBuilder: (context, index) {

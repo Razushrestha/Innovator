@@ -195,7 +195,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildHeader(),
-              _buildSearchBar(),
+             // _buildSearchBar(),
               _buildFilterChips(),
               Expanded(
                 child: SingleChildScrollView(child: _buildCategoriesSection()),
@@ -231,11 +231,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               Text(AppData().currentUserName ?? '', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),)
             ],
           ),
-          IconButton(
-            icon: const Icon(Icons.notifications_outlined),
-            onPressed: () {},
-            iconSize: 28,
-          ),
+          // IconButton(
+          //   icon: const Icon(Icons.notifications_outlined),
+          //   onPressed: () {},
+          //   iconSize: 28,
+          // ),
         ],
       ),
     );

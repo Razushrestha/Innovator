@@ -93,12 +93,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
         ),
         backgroundColor: Colors.indigo[600],
         elevation: 0,
-        actions: [
+        
+        leading: IconButton(onPressed: (){Navigator.pop(context);}, icon: Icon(Icons.arrow_back), color: Colors.white,),
+         actions: [
           IconButton(
             icon: Icon(Icons.refresh, color: Colors.white),
             onPressed: fetchReports,
           ),
-        ],
+         ]
+        
       ),
       body: _buildBody(),
     );

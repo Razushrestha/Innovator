@@ -10,6 +10,8 @@
     <uses-permission android:name="android.permission.VIBRATE"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Add this for better notification handling -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
 
     <application
         android:label="Innovator"
@@ -41,14 +43,16 @@
             </intent-filter>
         </activity>
 
-        <!-- Firebase Messaging Service -->
+        <!-- FIXED: Flutter Firebase Messaging Service (not the generic one) -->
         <service
-            android:name="com.google.firebase.messaging.FirebaseMessagingService"
+            android:name="io.flutter.plugins.firebase.messaging.FlutterFirebaseMessagingService"
             android:exported="false">
             <intent-filter>
                 <action android:name="com.google.firebase.MESSAGING_EVENT"/>
             </intent-filter>
         </service>
+
+        <!-- Note: FlutterFirebaseMessagingReceiver is automatically included by the plugin -->
 
         <!-- Flutter Local Notifications Receivers -->
         <receiver
@@ -67,9 +71,18 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2"/>
+        
+        <!-- FIXED: Default notification channel -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="default_channel"/>
+        
+        <!-- ADDED: Default notification icon -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@mipmap/launcher_icon"/>
+        
+        <!-- Firebase auto-init -->
         <meta-data
             android:name="firebase_messaging_auto_init_enabled"
             android:value="true"/>

@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:innovator/App_data/App_data.dart';
+import 'package:innovator/models/chat_model.dart';
+import 'package:innovator/screens/show_Specific_Profile/Show_Specific_Profile.dart';
 
 // Import your existing AppData class
 // import 'path_to_your_app_data.dart';
@@ -52,7 +54,7 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
 
     try {
       final response = await http.get(
-        Uri.parse('http://182.93.94.210:3064/api/v1/user-followers/${widget.userId}'),
+        Uri.parse('http://182.93.94.210:3064/api/v1/followers/${widget.userId}'),
         headers: {
           'authorization': 'Bearer ${appData.authToken}',
           'Content-Type': 'application/json',
@@ -88,7 +90,7 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
 
     try {
       final response = await http.get(
-        Uri.parse('http://182.93.94.210:3064/api/v1/user-following/${widget.userId}'),
+        Uri.parse('http://182.93.94.210:3064/api/v1/following/${widget.userId}'),
         headers: {
           'authorization': 'Bearer ${appData.authToken}',
           'Content-Type': 'application/json',
@@ -279,7 +281,7 @@ class _FollowersFollowingContentState extends State<FollowersFollowingContent> w
 
     try {
       final response = await http.get(
-        Uri.parse('http://182.93.94.210:3064/api/v1/user-followers/${widget.userId}'),
+        Uri.parse('http://182.93.94.210:3064/api/v1/followers/${widget.userId}'),
         headers: {
           'authorization': 'Bearer ${appData.authToken}',
           'Content-Type': 'application/json',
@@ -315,7 +317,7 @@ class _FollowersFollowingContentState extends State<FollowersFollowingContent> w
 
     try {
       final response = await http.get(
-        Uri.parse('http://182.93.94.210:3064/api/v1/user-following/${widget.userId}'),
+        Uri.parse('http://182.93.94.210:3064/api/v1/following/${widget.userId}'),
         headers: {
           'authorization': 'Bearer ${appData.authToken}',
           'Content-Type': 'application/json',
@@ -405,7 +407,9 @@ class _FollowersFollowingContentState extends State<FollowersFollowingContent> w
                 ? NetworkImage('http://182.93.94.210:3064${user['picture']}')
                 : const AssetImage('assets/default_avatar.png') as ImageProvider,
           ),
-          title: Text(user['name'] ?? 'User'),
+          title: GestureDetector(
+            onTap: () {Navigator.push(context, MaterialPageRoute(builder: (_) => SpecificUserProfilePage(userId: widget.userId)));},
+            child: Text(user['name'] ?? 'User')),
           subtitle: Text(user['email'] ?? ''),
           trailing: isCurrentUser 
               ? const Text('ME', style: TextStyle(color: Colors.grey))

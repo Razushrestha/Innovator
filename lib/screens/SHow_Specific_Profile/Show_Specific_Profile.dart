@@ -7,6 +7,7 @@ import 'package:innovator/screens/Follow/follow_Button.dart';
 import 'package:flutter/services.dart';
 import 'package:innovator/screens/show_Specific_Profile/User_Image_Gallery.dart';
 import 'package:innovator/screens/show_Specific_Profile/show_Specific_followers.dart';
+import 'package:innovator/widget/FloatingMenuwidget.dart';
 
 class SpecificUserProfilePage extends StatefulWidget {
   final String userId;
@@ -21,6 +22,8 @@ class SpecificUserProfilePage extends StatefulWidget {
 
 class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
     with SingleTickerProviderStateMixin {
+        final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
   late Future<Map<String, dynamic>> _profileFuture;
   final AppData _appData = AppData();
   bool _isRefreshing = false;
@@ -90,6 +93,7 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
     final isDarkMode = theme.brightness == Brightness.dark;
 
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: isDarkMode ? Colors.black : Colors.grey[50],
       extendBodyBehindAppBar: true,
       appBar: AppBar(
@@ -118,75 +122,80 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
           onPressed: () => Navigator.of(context).pop(),
         ),
         actions: [
-          IconButton(
-            icon: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color:
-                    isDarkMode
-                        ? Colors.grey[800]!.withOpacity(0.7)
-                        : Colors.white.withOpacity(0.7),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.more_vert,
-                color: isDarkMode ? Colors.white : Colors.black,
-              ),
-            ),
-            onPressed: () {
-              showModalBottomSheet(
-                context: context,
-                shape: const RoundedRectangleBorder(
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                ),
-                builder: (context) => _buildOptionsSheet(),
+          // IconButton(
+          //   icon: Container(
+          //     padding: const EdgeInsets.all(8),
+          //     decoration: BoxDecoration(
+          //       color:
+          //           isDarkMode
+          //               ? Colors.grey[800]!.withOpacity(0.7)
+          //               : Colors.white.withOpacity(0.7),
+          //       shape: BoxShape.circle,
+          //     ),
+          //     child: Icon(
+          //       Icons.more_vert,
+          //       color: isDarkMode ? Colors.white : Colors.black,
+          //     ),
+          //   ),
+          //   onPressed: () {
+          //     showModalBottomSheet(
+          //       context: context,
+          //       shape: const RoundedRectangleBorder(
+          //         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          //       ),
+          //       builder: (context) => _buildOptionsSheet(),
+          //     );
+          //   },
+          // ),
+          // const SizedBox(width: 8),
+        ],
+      ),
+      body: Stack(
+        children: [
+        RefreshIndicator(
+          onRefresh: _refreshProfile,
+          color: Theme.of(context).primaryColor,
+          child: FutureBuilder<Map<String, dynamic>>(
+            future: _profileFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting &&
+                  !_isRefreshing) {
+                return const Center(child: CircularProgressIndicator());
+              } else if (snapshot.hasError) {
+                return _buildErrorView(snapshot.error.toString());
+              } else if (!snapshot.hasData) {
+                return const Center(child: Text('No profile data available'));
+              }
+        
+              final profileData = snapshot.data!;
+              return CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: _buildProfileHeader(profileData, context),
+                  ),
+                  SliverToBoxAdapter(
+                    child: _buildProfileInfo(profileData, context),
+                  ),
+                  SliverToBoxAdapter(
+                    child: _buildActionButtons(profileData, context),
+                  ),
+                  SliverToBoxAdapter(
+                    child: _buildAdditionalInfo(profileData, context),
+                  ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 30)),
+                  SliverToBoxAdapter(
+                    child: UserImageGallery(
+                      userEmail: profileData['email'] ?? widget.userId,
+                    ),
+                  ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 30)),
+                ],
               );
             },
           ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: _refreshProfile,
-        color: Theme.of(context).primaryColor,
-        child: FutureBuilder<Map<String, dynamic>>(
-          future: _profileFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting &&
-                !_isRefreshing) {
-              return const Center(child: CircularProgressIndicator());
-            } else if (snapshot.hasError) {
-              return _buildErrorView(snapshot.error.toString());
-            } else if (!snapshot.hasData) {
-              return const Center(child: Text('No profile data available'));
-            }
-
-            final profileData = snapshot.data!;
-            return CustomScrollView(
-              slivers: [
-                SliverToBoxAdapter(
-                  child: _buildProfileHeader(profileData, context),
-                ),
-                SliverToBoxAdapter(
-                  child: _buildProfileInfo(profileData, context),
-                ),
-                SliverToBoxAdapter(
-                  child: _buildActionButtons(profileData, context),
-                ),
-                SliverToBoxAdapter(
-                  child: _buildAdditionalInfo(profileData, context),
-                ),
-                const SliverToBoxAdapter(child: SizedBox(height: 30)),
-                SliverToBoxAdapter(
-                  child: UserImageGallery(
-                    userEmail: profileData['email'] ?? widget.userId,
-                  ),
-                ),
-                const SliverToBoxAdapter(child: SizedBox(height: 30)),
-              ],
-            );
-          },
         ),
+        FloatingMenuWidget(),
+        ]
       ),
     );
   }
@@ -553,27 +562,27 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
           const SizedBox(height: 16),
 
           // Message Button
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: OutlinedButton.icon(
-              icon: const Icon(Icons.message),
-              label: const Text('Message'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Theme.of(context).primaryColor,
-                side: BorderSide(color: Theme.of(context).primaryColor),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              onPressed: () {
-                // Implement message functionality
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Message feature coming soon')),
-                );
-              },
-            ),
-          ),
+          // SizedBox(
+          //   width: double.infinity,
+          //   height: 50,
+          //   child: OutlinedButton.icon(
+          //     icon: const Icon(Icons.message),
+          //     label: const Text('Message'),
+          //     style: OutlinedButton.styleFrom(
+          //       foregroundColor: Theme.of(context).primaryColor,
+          //       side: BorderSide(color: Theme.of(context).primaryColor),
+          //       shape: RoundedRectangleBorder(
+          //         borderRadius: BorderRadius.circular(12),
+          //       ),
+          //     ),
+          //     onPressed: () {
+          //       // Implement message functionality
+          //       ScaffoldMessenger.of(context).showSnackBar(
+          //         const SnackBar(content: Text('Message feature coming soon')),
+          //       );
+          //     },
+          //   ),
+          // ),
         ],
       ),
     );

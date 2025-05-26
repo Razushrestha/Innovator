@@ -245,11 +245,10 @@ class _LoginPageState extends State<LoginPage> {
             developer.log('Error saving FCM token for Google user: $e');
           }
 
+          Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => Homepage()), (route) => false,);
+
           // Navigate to home page
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => Homepage()),
-          );
+          
 
           Dialogs.showSnackbar(context, 'Welcome back! Signed in with Google.');
           return true;

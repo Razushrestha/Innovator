@@ -291,22 +291,28 @@ class _CartScreenState extends State<CartScreen>
                                     children: [
                                       // Product image placeholder
                                       Container(
-  width: 80,
-  height: 80,
-  decoration: BoxDecoration(
-    color: _primaryColor.withOpacity(0.1),
-    borderRadius: BorderRadius.circular(8),
-  ),
-  child: ClipRRect(
-    borderRadius: BorderRadius.circular(8),
-    child: SafeImage(
-      imageUrl: item.imageUrl, // Assuming you've added an imageUrl field to CartItem
-      placeholderIcon: Icons.image,
-      placeholderColor: _primaryColor.withOpacity(0.5),
-      iconSize: 40,
-    ),
-  ),
-),
+                                        width: 80,
+                                        height: 80,
+                                        decoration: BoxDecoration(
+                                          color: _primaryColor.withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          child: SafeImage(
+                                            imageUrl:
+                                                item.imageUrl, // Assuming you've added an imageUrl field to CartItem
+                                            placeholderIcon: Icons.image,
+                                            placeholderColor: _primaryColor
+                                                .withOpacity(0.5),
+                                            iconSize: 40,
+                                          ),
+                                        ),
+                                      ),
                                       const SizedBox(width: 16),
                                       // Product details
                                       Expanded(
@@ -398,6 +404,28 @@ class _CartScreenState extends State<CartScreen>
                         padding: const EdgeInsets.all(16),
                         child: ElevatedButton(
                           onPressed: () {
+                            showDialog(
+    context: context,
+    builder: (BuildContext context) {
+      return AlertDialog(
+        title: const Text('Checkout'),
+        content: const Text('Proceed to checkout?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('CANCEL'),
+          ),
+          TextButton(
+            onPressed: () {
+              // Add your checkout logic here
+              Navigator.of(context).pop();
+            },
+            child: const Text('OK'),
+          ),
+        ],
+      );
+    },
+  );
                             // Navigate to checkout
                           },
                           style: ElevatedButton.styleFrom(
@@ -450,11 +478,7 @@ class SafeImage extends StatelessWidget {
     // If no image URL or empty URL, show placeholder
     if (imageUrl == null || imageUrl!.isEmpty) {
       return Center(
-        child: Icon(
-          placeholderIcon,
-          color: placeholderColor,
-          size: iconSize,
-        ),
+        child: Icon(placeholderIcon, color: placeholderColor, size: iconSize),
       );
     }
 
@@ -467,11 +491,7 @@ class SafeImage extends StatelessWidget {
       errorBuilder: (context, error, stackTrace) {
         print('Error loading image: $error');
         return Center(
-          child: Icon(
-            placeholderIcon,
-            color: placeholderColor,
-            size: iconSize,
-          ),
+          child: Icon(placeholderIcon, color: placeholderColor, size: iconSize),
         );
       },
       loadingBuilder: (context, child, loadingProgress) {
@@ -480,10 +500,11 @@ class SafeImage extends StatelessWidget {
         }
         return Center(
           child: CircularProgressIndicator(
-            value: loadingProgress.expectedTotalBytes != null
-                ? loadingProgress.cumulativeBytesLoaded / 
-                  loadingProgress.expectedTotalBytes!
-                : null,
+            value:
+                loadingProgress.expectedTotalBytes != null
+                    ? loadingProgress.cumulativeBytesLoaded /
+                        loadingProgress.expectedTotalBytes!
+                    : null,
             valueColor: AlwaysStoppedAnimation<Color>(placeholderColor),
             strokeWidth: 2,
           ),

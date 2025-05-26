@@ -1,20 +1,12 @@
-import 'dart:convert';
-import 'dart:developer';
-import 'dart:developer' as developer;
+// screens/chatrrom/chat_screen.dart
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:http/http.dart' as http;
-import 'package:innovator/App_data/App_data.dart';
-import 'package:innovator/Authorization/Login.dart';
-import 'package:innovator/helper/dialogs.dart';
 import 'package:innovator/screens/chatrrom/Model/chatMessage.dart';
-import 'package:innovator/screens/chatrrom/Services/mqtt_services.dart';
-import 'package:innovator/screens/chatrrom/sound/soundplayer.dart';
+import 'package:innovator/screens/chatrrom/Screen/chat_controller.dart';
 import 'package:innovator/screens/chatrrom/utils.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
-class ChatScreen extends StatefulWidget {
+class ChatScreen extends StatelessWidget {
   final String currentUserId;
   final String currentUserName;
   final String currentUserPicture;
@@ -37,617 +29,260 @@ class ChatScreen extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  _ChatScreenState createState() => _ChatScreenState();
-}
+  Widget build(BuildContext context) {
+    final ChatController controller = Get.put(ChatController(
+      currentUserId: currentUserId,
+      currentUserName: currentUserName,
+      currentUserPicture: currentUserPicture,
+      currentUserEmail: currentUserEmail,
+      receiverId: receiverId,
+      receiverName: receiverName,
+      receiverPicture: receiverPicture,
+      receiverEmail: receiverEmail,
+    ));
 
-class _ChatScreenState extends State<ChatScreen> {
-  late FlutterLocalNotificationsPlugin _notificationsPlugin;
-  final TextEditingController _messageController = TextEditingController();
-  final List<ChatMessage> _messages = [];
-  final MQTTService _mqttService = MQTTService();
-  final ScrollController _scrollController = ScrollController();
-  bool _isLoading = true;
-  String _errorMessage = '';
-  bool _isInitialized = false;
-  String? _chatTopic;
-  bool _isSendingMessage = false;
-  bool _mqttInitialized = false;
+    final displayName = receiverName.isNotEmpty ? receiverName : 'Unknown';
+    final profilePicture = Utils.isValidImageUrl(receiverPicture) ? receiverPicture : '';
 
-  @override
-  void initState() {
-    super.initState();
-    log('ChatScreen: Initializing with currentUserId=${widget.currentUserId}, receiverId=${widget.receiverId}');
-    //_loadCachedMessages();
-    _fetchMessages();
-    _initializeNotifications();
-    _validateAndSetupMQTT();
-  }
+    return Scaffold(
+      backgroundColor: Colors.grey[100],
+      appBar: AppBar(
+        backgroundColor: const Color.fromRGBO(244, 135, 6, 1),
+        elevation: 0,
+        leading: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () => Get.back(),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
+            const SizedBox(width: 2),
+            CircleAvatar(
+              radius: 14,
+              backgroundColor: Colors.grey[200],
+              child: Utils.isValidImageUrl(profilePicture)
+                  ? ClipOval(
+                      child: Image.network(
+                        Utils.getImageUrl(profilePicture),
+                        fit: BoxFit.cover,
+                        width: 28,
+                        height: 28,
+                        errorBuilder: (context, error, stackTrace) => Text(
+                          displayName[0].toUpperCase(),
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                      ),
+                    )
+                  : Text(
+                      displayName[0].toUpperCase(),
+                      style: const TextStyle(fontSize: 14),
+                    ),
+            ),
+          ],
+        ),
+        leadingWidth: 80,
+        title: Text(
+          displayName,
+          style: const TextStyle(color: Colors.white, fontSize: 18),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_forever, color: Colors.white),
+            onPressed: () => _showDeleteConversationDialog(controller),
+            tooltip: 'Delete conversation',
+          ),
+        ],
+      ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color.fromRGBO(244, 135, 6, 0.2),
+              Color.fromRGBO(244, 135, 6, 0.1),
+              Colors.grey,
+            ],
+          ),
+        ),
+        child: Column(
+          children: [
+            Obx(() => controller.errorMessage.isNotEmpty
+                ? Container(
+                    padding: const EdgeInsets.all(8),
+                    color: Colors.amber[100],
+                    width: double.infinity,
+                    child: Text(
+                      controller.errorMessage.value,
+                      style: TextStyle(color: Colors.amber[900]),
+                      textAlign: TextAlign.center,
+                    ),
+                  )
+                : const SizedBox.shrink()),
+            Expanded(
+              child: Obx(() {
+                if (controller.isLoading.value) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (controller.messages.isEmpty) {
+                  return const Center(
+                    child: Text(
+                      'No messages yet. Start the conversation!',
+                      style: TextStyle(color: Colors.black54),
+                    ),
+                  );
+                }
+                return ListView.builder(
+                  controller: controller.scrollController,
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                  itemCount: controller.messages.length,
+                  itemBuilder: (context, index) {
+                    final message = controller.messages[index];
+                    final isMe = message.senderId == currentUserId;
+                    final messageTime =
+                        '${message.timestamp.hour.toString().padLeft(2, '0')}:${message.timestamp.minute.toString().padLeft(2, '0')}';
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (!_isInitialized) {
-      _validateAndSetupMQTT();
-      _isInitialized = true;
-    }
-  }
-
-  Future<void> _loadCachedMessages() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final cacheKey = 'messages_${widget.currentUserId}_${widget.receiverId}';
-      final cachedMessages = prefs.getString(cacheKey);
-      if (cachedMessages != null) {
-        final List<dynamic> jsonMessages = jsonDecode(cachedMessages);
-        setState(() {
-          _messages.addAll(jsonMessages.map((m) => ChatMessage.fromJson(m)).toList());
-        });
-        _scrollToBottom();
-        log('ChatScreen: Loaded ${_messages.length} cached messages');
-      }
-    } catch (e) {
-      log('ChatScreen: Error loading cached messages: $e');
-    }
-  }
-
-  Future<void> _cacheMessages() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final cacheKey = 'messages_${widget.currentUserId}_${widget.receiverId}';
-      final jsonMessages = _messages.map((m) => m.toJson()).toList();
-      await prefs.setString(cacheKey, jsonEncode(jsonMessages));
-      log('ChatScreen: Cached ${_messages.length} messages');
-    } catch (e) {
-      log('ChatScreen: Error caching messages: $e');
-    }
-  }
-
-  // Initialize the notifications plugin
-  Future<void> _initializeNotifications() async {
-    _notificationsPlugin = FlutterLocalNotificationsPlugin();
-
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const iosSettings = DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
-    );
-    const initializationSettings = InitializationSettings(
-      android: androidSettings,
-      iOS: iosSettings,
-    );
-
-    await _notificationsPlugin.initialize(initializationSettings);
-
-    // Request permissions for iOS
-    await _notificationsPlugin
-        .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
-        ?.requestPermissions(
-          alert: true,
-          badge: true,
-          sound: true,
-        );
-  }
-
-  // Function to show system notification
-  Future<void> _showSystemNotification(String title, String body) async {
-    const androidDetails = AndroidNotificationDetails(
-      'chat_channel',
-      'Chat Notifications',
-      channelDescription: 'Notifications for new chat messages',
-      importance: Importance.max,
-      priority: Priority.high,
-      showWhen: true,
-    );
-    const iosDetails = DarwinNotificationDetails(
-      presentAlert: true,
-      presentBadge: true,
-      presentSound: true,
-    );
-    const notificationDetails = NotificationDetails(
-      android: androidDetails,
-      iOS: iosDetails,
-    );
-
-    await _notificationsPlugin.show(
-      DateTime.now().millisecondsSinceEpoch % 10000, // Unique ID
-      title,
-      body,
-      notificationDetails,
-    );
-  }
-
-  Future<void> _validateAndSetupMQTT() async {
-    if (_mqttInitialized) {
-      developer.log('ChatScreen: MQTT already initialized, skipping setup');
-      return;
-    }
-
-    try {
-      if (widget.currentUserId.isEmpty) {
-        developer.log('ChatScreen: Cannot setup MQTT: currentUserId is empty');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Invalid user ID. Please log in again.')),
-        );
-        Get.offAll(() => const LoginPage());
-        return;
-      }
-
-      final token = AppData().authToken;
-      if (token == null) {
-        developer.log('ChatScreen: Cannot setup MQTT: No auth token available');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No auth token. Please log in again.')),
-        );
-        Get.offAll(() => const LoginPage());
-        return;
-      }
-
-      await _mqttService.connect(token, widget.currentUserId);
-      _chatTopic = _mqttService.getChatTopic(widget.currentUserId, widget.receiverId);
-      developer.log('ChatScreen: Initialized chat topic: $_chatTopic');
-
-      // Subscribe to chat topic for real-time messages
-      _mqttService.subscribe(_chatTopic!, (String payload) async {
-        try {
-          developer.log('ChatScreen: Received MQTT message on chat topic: $payload');
-          final message = ChatMessage.fromJson(jsonDecode(payload));
-          developer.log('ChatScreen: Parsed message: senderId=${message.senderId}, receiverId=${message.receiverId}, content=${message.content}');
-          if ((message.senderId == widget.currentUserId && message.receiverId == widget.receiverId) ||
-              (message.senderId == widget.receiverId && message.receiverId == widget.currentUserId)) {
-            bool isDuplicate = _messages.any((m) => m.id == message.id);
-            if (!isDuplicate) {
-              setState(() {
-                final tempIndex = _messages.indexWhere((m) =>
-                    m.id.startsWith('temp_') &&
-                    m.senderId == message.senderId &&
-                    m.content == message.content &&
-                    m.timestamp.difference(message.timestamp).inSeconds.abs() < 5);
-                if (tempIndex != -1) {
-                  _messages[tempIndex] = message;
-                  developer.log('ChatScreen: Replaced temporary message with server Confirmed message: ${message.id}');
-                } else {
-                  _messages.add(message);
-                  developer.log('ChatScreen: Added new message to UI: ${message.content}');
-                  // Show system notification for new message from receiver
-                  if (message.senderId == widget.receiverId) {
-                    _showSystemNotification(
-                      'New Message from ${widget.receiverId}',
-                      message.content,
+                    return GestureDetector(
+                      onLongPress: () => _showDeleteOptions(context, controller, message),
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                        child: Row(
+                          mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+                          children: [
+                            Flexible(
+                              child: Container(
+                                constraints: BoxConstraints(
+                                  maxWidth: MediaQuery.of(context).size.width * 0.75,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isMe
+                                      ? const Color.fromRGBO(220, 248, 198, 1)
+                                      : Colors.white,
+                                  borderRadius: BorderRadius.only(
+                                    topLeft: const Radius.circular(12),
+                                    topRight: const Radius.circular(12),
+                                    bottomLeft: Radius.circular(isMe ? 12 : 0),
+                                    bottomRight: Radius.circular(isMe ? 0 : 12),
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.1),
+                                      blurRadius: 2,
+                                      offset: const Offset(0, 1),
+                                    ),
+                                  ],
+                                ),
+                                child: Stack(
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.fromLTRB(12, 15, 60, 15),
+                                      child: Text(
+                                        message.content,
+                                        style: const TextStyle(color: Colors.black, fontSize: 16),
+                                      ),
+                                    ),
+                                    Positioned(
+                                      bottom: 4,
+                                      right: 8,
+                                      child: Row(
+                                        children: [
+                                          Text(
+                                            messageTime,
+                                            style: const TextStyle(fontSize: 12, color: Colors.black54),
+                                          ),
+                                          if (isMe) ...[
+                                            const SizedBox(width: 4),
+                                            Icon(
+                                              message.read ? Icons.done_all : Icons.done,
+                                              size: 16,
+                                              color: message.read ? Colors.blue : Colors.grey,
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     );
-                  }
-                }
-              });
-              await _cacheMessages();
-              _scrollToBottom();
-              if (message.senderId == widget.receiverId && !message.read && mounted) {
-                await _markMessageAsRead(message.id);
-              }
-            } else {
-              developer.log('ChatScreen: Ignored duplicate message with id: ${message.id}');
-            }
-          } else {
-            developer.log('ChatScreen: Ignored message with mismatched sender/receiver IDs');
-          }
-        } catch (e) {
-          developer.log('ChatScreen: Error processing MQTT message: $e');
-        }
-      });
-
-      // Subscribe to user-specific messages topic
-      _mqttService.subscribe('user/${widget.currentUserId}/messages', (String payload) async {
-        try {
-          developer.log('ChatScreen: Received MQTT message on user messages topic: $payload');
-          final data = jsonDecode(payload);
-          if (data['type'] == 'new_message') {
-            final message = ChatMessage.fromJson(data['message']);
-            if ((message.senderId == widget.currentUserId && message.receiverId == widget.receiverId) ||
-                (message.senderId == widget.receiverId && message.receiverId == widget.currentUserId)) {
-              bool isDuplicate = _messages.any((m) => m.id == message.id);
-              if (!isDuplicate) {
-                setState(() {
-                  final tempIndex = _messages.indexWhere((m) =>
-                      m.id.startsWith('temp_') &&
-                      m.senderId == message.senderId &&
-                      m.content == message.content &&
-                      m.timestamp.difference(message.timestamp).inSeconds.abs() < 5);
-                  if (tempIndex != -1) {
-                    _messages[tempIndex] = message;
-                    developer.log('ChatScreen: Replaced temporary message with server message: ${message.id}');
-                  } else {
-                    _messages.add(message);
-                    developer.log('ChatScreen: Added new message from user topic: ${message.content}');
-                    // Show system notification for new message from receiver
-                    if (message.senderId == widget.receiverId) {
-                      _showSystemNotification(
-                        'New Message from ${widget.receiverId}',
-                        message.content,
-                      );
-                    }
-                  }
-                });
-                await _cacheMessages();
-                _scrollToBottom();
-                if (message.senderId == widget.receiverId && !message.read && mounted) {
-                  await _markMessageAsRead(message.id);
-                }
-              }
-            }
-          } else if (data['type'] == 'read_receipt') {
-            final messageId = data['messageId'] as String?;
-            if (messageId != null) {
-              setState(() {
-                final messageIndex = _messages.indexWhere((m) => m.id == messageId);
-                if (messageIndex != -1) {
-                  final message = _messages[messageIndex];
-                  message.read = true;
-                  message.readAt = DateTime.parse(data['readAt'] ?? DateTime.now().toIso8601String());
-                  developer.log('ChatScreen: Updated read receipt for message: $messageId');
-                } else {
-                  developer.log('ChatScreen: No message found for read receipt: $messageId');
-                }
-              });
-              await _cacheMessages();
-            } else {
-              developer.log('ChatScreen: Invalid read receipt: messageId is null');
-            }
-          }
-        } catch (e) {
-          developer.log('ChatScreen: Error processing user messages: $e');
-        }
-      });
-
-      // Subscribe to notifications
-      _mqttService.subscribe('user/${widget.currentUserId}/notifications', (String payload) {
-        try {
-          final notification = jsonDecode(payload);
-          developer.log('ChatScreen: Received notification: $notification');
-          _showSystemNotification(
-            notification['title'] ?? 'New Notification',
-            notification['content'] ?? 'You have a new notification',
-          );
-        } catch (e) {
-          developer.log('ChatScreen: Error processing notification: $e');
-        }
-      });
-
-      _mqttInitialized = true;
-      developer.log('ChatScreen: MQTT setup completed');
-    } catch (e) {
-      developer.log('ChatScreen: Error setting up MQTT: $e');
-      setState(() {
-        _errorMessage = 'Failed to connect to chat service. Please try again.';
-      });
-    }
-  }
-
-  Future<void> _fetchMessages() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = '';
-    });
-
-    try {
-      final token = AppData().authToken;
-      if (token == null) {
-        log('ChatScreen: No auth token, redirecting to login');
-        Get.offAll(() => const LoginPage());
-        throw Exception('No auth token available');
-      }
-
-      const String baseUrl = 'http://182.93.94.210:3064/api/v1';
-      final url = '$baseUrl/messages/${widget.receiverId}';
-      log('ChatScreen: Fetching messages from: $url');
-
-      final response = await http.get(
-        Uri.parse(url),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-      );
-
-      log('ChatScreen: Messages API response status: ${response.statusCode}');
-      if (response.statusCode == 401) {
-        log('ChatScreen: Unauthorized, redirecting to login');
-        Get.offAll(() => const LoginPage());
-        throw Exception('Session expired. Please log in again.');
-      }
-
-      if (response.statusCode == 200) {
-        if (response.body.isEmpty) {
-          log('ChatScreen: Empty response body');
-          setState(() {
-            _isLoading = false;
-          });
-          return;
-        }
-
-        final responseData = jsonDecode(response.body);
-        log('ChatScreen: Decoded response data: $responseData');
-
-        if (responseData is Map<String, dynamic> && responseData.containsKey('data')) {
-          final messagesList = responseData['data'];
-          if (messagesList is List) {
-            setState(() {
-              _messages.clear();
-              for (var item in messagesList) {
-                try {
-                  final message = ChatMessage.fromJson(item);
-                  if ((message.senderId == widget.currentUserId && message.receiverId == widget.receiverId) ||
-                      (message.senderId == widget.receiverId && message.receiverId == widget.currentUserId)) {
-                    _messages.add(message);
-                  }
-                } catch (e) {
-                  log('ChatScreen: Error processing message item: $e');
-                }
-              }
-              _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-              _isLoading = false;
-            });
-            await _cacheMessages();
-            _scrollToBottom();
-            // Mark unread messages as read if screen is active
-            for (var message in _messages) {
-              if (message.senderId == widget.receiverId && !message.read && mounted) {
-                await _markMessageAsRead(message.id);
-              }
-            }
-          } else {
-            throw Exception('Invalid response format: data not a list');
-          }
-        } else {
-          throw Exception('Invalid response format: data not found');
-        }
-      } else {
-        throw Exception('Failed to fetch messages: ${response.statusCode}');
-      }
-    } catch (e) {
-      log('ChatScreen: Error fetching messages: $e');
-      setState(() {
-        _isLoading = false;
-        _errorMessage = 'Failed to load messages. Showing cached messages.';
-      });
-      if (_messages.isNotEmpty) {
-        _scrollToBottom();
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${e.toString()}')),
-        );
-      }
-    }
-  }
-
-  Future<void> _markMessageAsRead(String messageId) async {
-    try {
-      final token = AppData().authToken;
-      if (token == null) return;
-
-      final url = 'http://182.93.94.210:3064/api/v1/message/$messageId/read';
-      final response = await http.patch(
-        Uri.parse(url),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          'readAt': DateTime.now().toIso8601String(),
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        setState(() {
-          final messageIndex = _messages.indexWhere((m) => m.id == messageId);
-          if (messageIndex != -1) {
-            final message = _messages[messageIndex];
-            message.read = true;
-            message.readAt = DateTime.now();
-            log('ChatScreen: Marked message as read: $messageId');
-          }
-        });
-        await _cacheMessages();
-        await _mqttService.publish('user/${widget.receiverId}/messages', {
-          'type': 'read_receipt',
-          'messageId': messageId,
-          'chatTopic': _chatTopic,
-          'readAt': DateTime.now().toIso8601String(),
-        });
-      } else {
-        log('ChatScreen: Failed to mark message as read, status: ${response.statusCode}');
-      }
-    } catch (e) {
-      log('ChatScreen: Error marking message as read: $e');
-    }
-  }
-
-  Future<bool> _deleteMessageForMe(String messageId) async {
-    try {
-      final token = AppData().authToken;
-      if (token == null) {
-        Get.offAll(() => const LoginPage());
-        return false;
-      }
-
-      final url = 'http://182.93.94.210:3064/api/v1/message/$messageId/me';
-      final response = await http.delete(
-        Uri.parse(url),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-      );
-
-      if (response.statusCode == 200 || response.statusCode == 204) {
-        setState(() {
-          _messages.removeWhere((msg) => msg.id == messageId);
-        });
-        await _cacheMessages();
-        log('ChatScreen: Deleted message for me: $messageId');
-        return true;
-      }
-      return false;
-    } catch (e) {
-      log('ChatScreen: Error deleting message for me: $e');
-      return false;
-    }
-  }
-
-  Future<bool> _deleteMessageForEveryone(String messageId) async {
-    try {
-      final token = AppData().authToken;
-      if (token == null) {
-        Get.offAll(() => const LoginPage());
-        return false;
-      }
-
-      final url = 'http://182.93.94.210:3064/api/v1/message/$messageId/everyone';
-      final response = await http.delete(
-        Uri.parse(url),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-      );
-
-      if (response.statusCode == 200 || response.statusCode == 204) {
-        setState(() {
-          _messages.removeWhere((msg) => msg.id == messageId);
-        });
-        await _cacheMessages();
-        log('ChatScreen: Deleted message for everyone: $messageId');
-        await _mqttService.publish('user/${widget.receiverId}/messages', {
-          'type': 'message_deleted',
-          'messageId': messageId,
-          'chatTopic': _chatTopic,
-        });
-        return true;
-      }
-      return false;
-    } catch (e) {
-      log('ChatScreen: Error deleting message for everyone: $e');
-      return false;
-    }
-  }
-
-  Future<bool> _deleteConversation() async {
-    try {
-      final token = AppData().authToken;
-      if (token == null) {
-        Get.offAll(() => const LoginPage());
-        return false;
-      }
-
-      final url =
-          'http://182.93.94.210:3064/api/v1/conversation/${widget.currentUserId}?otherUserId=${widget.receiverId}';
-      final response = await http.delete(
-        Uri.parse(url),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-      );
-
-      if (response.statusCode == 200 || response.statusCode == 204) {
-        setState(() {
-          _messages.clear();
-        });
-        await _cacheMessages();
-        log('ChatScreen: Deleted conversation');
-        await _mqttService.publish('user/${widget.receiverId}/messages', {
-          'type': 'conversation_deleted',
-          'chatTopic': _chatTopic,
-        });
-        return true;
-      }
-      return false;
-    } catch (e) {
-      log('ChatScreen: Error deleting conversation: $e');
-      return false;
-    }
-  }
-
-  Future<void> _sendMessage() async {
-  if (_isSendingMessage || _messageController.text.trim().isEmpty || _chatTopic == null) {
-    log('ChatScreen: Cannot send message: ' +
-        (_isSendingMessage
-            ? 'Already sending'
-            : _messageController.text.trim().isEmpty
-                ? 'Empty message'
-                : 'Null chat topic'));
-    return;
-  }
-
-  _isSendingMessage = true;
-  try {
-    final messageContent = _messageController.text.trim();
-    _messageController.clear();
-
-    final tempId = 'temp_${DateTime.now().millisecondsSinceEpoch}_${widget.currentUserId}';
-    final message = ChatMessage(
-      id: tempId,
-      senderId: widget.currentUserId,
-      senderName: widget.currentUserName,
-      senderPicture: widget.currentUserPicture,
-      senderEmail: widget.currentUserEmail,
-      receiverId: widget.receiverId,
-      receiverName: widget.receiverName,
-      receiverPicture: widget.receiverPicture,
-      receiverEmail: widget.receiverEmail,
-      content: messageContent,
-      timestamp: DateTime.now(),
-      read: false,
-      readAt: null,
+                  },
+                );
+              }),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              color: Colors.grey[100],
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 2,
+                            offset: const Offset(0, 1),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: controller.messageController,
+                              decoration: const InputDecoration(
+                                hintText: 'Type a message...',
+                                border: InputBorder.none,
+                                contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              ),
+                              textInputAction: TextInputAction.send,
+                              onSubmitted: (_) {
+                                if (!controller.isSendingMessage.value) {
+                                  controller.sendMessage();
+                                }
+                              },
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.emoji_emotions_outlined, color: Colors.grey),
+                            onPressed: () {},
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.attach_file, color: Colors.grey),
+                            onPressed: () {},
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Obx(() => CircleAvatar(
+                    radius: 24,
+                    backgroundColor: const Color.fromRGBO(244, 135, 6, 1),
+                    child: IconButton(
+                      icon: const Icon(Icons.send, color: Colors.white),
+                      onPressed: controller.isSendingMessage.value ? null : () => controller.sendMessage(),
+                    ),
+                  )),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
-
-    setState(() {
-      _messages.add(message);
-      log('ChatScreen: Added temporary message to UI: $tempId');
-    });
-    await _cacheMessages();
-    _scrollToBottom();
-
-    // Use the old payload structure
-    final payload = {
-      'sender': {
-        '_id': widget.currentUserId,
-        'email': widget.currentUserEmail,
-        'name': widget.currentUserName.isNotEmpty ? widget.currentUserName : 'Unknown', // Ensure name is not empty
-        'picture': widget.currentUserPicture,
-      },
-      'receiver': {
-        '_id': widget.receiverId,
-        'email': widget.receiverEmail,
-        'name': widget.receiverName.isNotEmpty ? widget.receiverName : 'Unknown',
-        'picture': widget.receiverPicture,
-      },
-      'message': messageContent,
-      'timestamp': message.timestamp.toIso8601String(),
-    };
-
-    log('ChatScreen: Sending message to topic: $_chatTopic');
-    await _mqttService.publish(_chatTopic!, payload);
-    SoundPlayer().playSound();
-  } catch (e) {
-    log('ChatScreen: Error sending message: $e');
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Failed to send message. Please try again.')),
-    );
-    setState(() {
-      _messages.removeWhere((m) => m.id.startsWith('temp_'));
-    });
-    await _cacheMessages();
-  } finally {
-    _isSendingMessage = false;
   }
-}
 
-  void _showDeleteOptions(BuildContext context, ChatMessage message) {
-    final isMe = message.senderId == widget.currentUserId;
+  void _showDeleteOptions(BuildContext context, ChatController controller, ChatMessage message) {
+    final isMe = message.senderId == controller.currentUserId;
 
     showModalBottomSheet(
       context: context,
@@ -669,11 +304,10 @@ class _ChatScreenState extends State<ChatScreen> {
                   'Are you sure you want to delete this message for yourself?',
                 );
                 if (confirmed) {
-                  final success = await _deleteMessageForMe(message.id);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(success ? 'Message deleted successfully' : 'Failed to delete message'),
-                    ),
+                  final success = await controller.deleteMessageForMe(message.id);
+                  Get.snackbar(
+                    success ? 'Success' : 'Error',
+                    success ? 'Message deleted successfully' : 'Failed to delete message',
                   );
                 }
               },
@@ -690,11 +324,10 @@ class _ChatScreenState extends State<ChatScreen> {
                     'Are you sure you want to delete this message for everyone?',
                   );
                   if (confirmed) {
-                    final success = await _deleteMessageForEveryone(message.id);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(success ? 'Message deleted for everyone' : 'Failed to delete message'),
-                      ),
+                    final success = await controller.deleteMessageForEveryone(message.id);
+                    Get.snackbar(
+                      success ? 'Success' : 'Error',
+                      success ? 'Message deleted for everyone' : 'Failed to delete message',
                     );
                   }
                 },
@@ -733,281 +366,21 @@ class _ChatScreenState extends State<ChatScreen> {
         false;
   }
 
-  void _scrollToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-        log('ChatScreen: Scrolled to bottom');
-      }
-    });
-  }
-
-  bool _isValidImageUrl(String? url) {
-    if (url == null || url.isEmpty) return false;
-    return url.startsWith('http://') || url.startsWith('https://');
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final displayName = widget.receiverName.isNotEmpty ? widget.receiverName : 'Unknown';
-    final profilePicture = _isValidImageUrl(widget.receiverPicture) ? widget.receiverPicture : '';
-
-    return Scaffold(
-      backgroundColor: Colors.grey[100],
-      appBar: AppBar(
-        backgroundColor: const Color.fromRGBO(244, 135, 6, 1),
-        elevation: 0,
-        leading: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white),
-              onPressed: () => Navigator.pop(context),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-            ),
-            const SizedBox(width: 2),
-            CircleAvatar(
-              radius: 14,
-              backgroundColor: Colors.grey[200],
-              child: Utils.isValidImageUrl(profilePicture)
-                  ? ClipOval(
-                      child: Image.network(
-                        Utils.getImageUrl(profilePicture),
-                        fit: BoxFit.cover,
-                        width: 28,
-                        height: 28,
-                        errorBuilder: (context, error, stackTrace) => Text(
-                          displayName[0].toUpperCase(),
-                          style: const TextStyle(fontSize: 14),
-                        ),
-                      ),
-                    )
-                  : Text(
-                      displayName[0].toUpperCase(),
-                      style: const TextStyle(fontSize: 14),
-                    ),
-            ),
-          ],
-        ),
-        leadingWidth: 80,
-        title: Text(
-          displayName,
-          style: const TextStyle(color: Colors.white, fontSize: 18),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.delete_forever, color: Colors.white),
-            onPressed: () async {
-              final confirmed = await _showConfirmationDialog(
-                context,
-                'Delete Conversation',
-                'Are you sure you want to delete this entire conversation? This action cannot be undone.',
-              );
-              if (confirmed) {
-                final success = await _deleteConversation();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(success ? 'Conversation deleted successfully' : 'Failed to delete conversation'),
-                  ),
-                );
-                if (success) {
-                  Navigator.pop(context);
-                }
-              }
-            },
-            tooltip: 'Delete conversation',
-          ),
-        ],
-      ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color.fromRGBO(244, 135, 6, 0.2),
-              Color.fromRGBO(244, 135, 6, 0.1),
-              Colors.grey,
-            ],
-          ),
-        ),
-        child: Column(
-          children: [
-            if (_errorMessage.isNotEmpty)
-              Container(
-                padding: const EdgeInsets.all(8),
-                color: Colors.amber[100],
-                width: double.infinity,
-                child: Text(
-                  _errorMessage,
-                  style: TextStyle(color: Colors.amber[900]),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            Expanded(
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _messages.isEmpty
-                      ? const Center(
-                          child: Text(
-                            'No messages yet. Start the conversation!',
-                            style: TextStyle(color: Colors.black54),
-                          ),
-                        )
-                      : ListView.builder(
-                          controller: _scrollController,
-                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-                          itemCount: _messages.length,
-                          itemBuilder: (context, index) {
-                            final message = _messages[index];
-                            final isMe = message.senderId == widget.currentUserId;
-                            final messageTime =
-                                '${message.timestamp.hour.toString().padLeft(2, '0')}:${message.timestamp.minute.toString().padLeft(2, '0')}';
-
-                            return GestureDetector(
-                              onLongPress: () => _showDeleteOptions(context, message),
-                              child: Container(
-                                margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-                                child: Row(
-                                  mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
-                                  children: [
-                                    Flexible(
-                                      child: Container(
-                                        constraints: BoxConstraints(
-                                          maxWidth: MediaQuery.of(context).size.width * 0.75,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: isMe
-                                              ? const Color.fromRGBO(220, 248, 198, 1)
-                                              : Colors.white,
-                                          borderRadius: BorderRadius.only(
-                                            topLeft: const Radius.circular(12),
-                                            topRight: const Radius.circular(12),
-                                            bottomLeft: Radius.circular(isMe ? 12 : 0),
-                                            bottomRight: Radius.circular(isMe ? 0 : 12),
-                                          ),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Colors.black.withOpacity(0.1),
-                                              blurRadius: 2,
-                                              offset: const Offset(0, 1),
-                                            ),
-                                          ],
-                                        ),
-                                        child: Stack(
-                                          children: [
-                                            Padding(
-                                              padding: const EdgeInsets.fromLTRB(12, 15, 60, 15),
-                                              child: Text(
-                                                message.content,
-                                                style: const TextStyle(color: Colors.black, fontSize: 16),
-                                              ),
-                                            ),
-                                            Positioned(
-                                              bottom: 4,
-                                              right: 8,
-                                              child: Row(
-                                                children: [
-                                                  Text(
-                                                    messageTime,
-                                                    style: const TextStyle(fontSize: 12, color: Colors.black54),
-                                                  ),
-                                                  if (isMe) ...[
-                                                    const SizedBox(width: 4),
-                                                    Icon(
-                                                      message.read ? Icons.done_all : Icons.done,
-                                                      size: 16,
-                                                      color: message.read ? Colors.blue : Colors.grey,
-                                                    ),
-                                                  ],
-                                                ],
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-              color: Colors.grey[100],
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(24),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 2,
-                            offset: const Offset(0, 1),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _messageController,
-                              decoration: const InputDecoration(
-                                hintText: 'Type a message...',
-                                border: InputBorder.none,
-                                contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                              ),
-                              textInputAction: TextInputAction.send,
-                              onSubmitted: (_) {
-                                if (!_isSendingMessage) _sendMessage();
-                              },
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.emoji_emotions_outlined, color: Colors.grey),
-                            onPressed: () {},
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.attach_file, color: Colors.grey),
-                            onPressed: () {},
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  CircleAvatar(
-                    radius: 24,
-                    backgroundColor: const Color.fromRGBO(244, 135, 6, 1),
-                    child: IconButton(
-                      icon: const Icon(Icons.send, color: Colors.white),
-                      onPressed: _isSendingMessage ? null : _sendMessage,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
+  Future<void> _showDeleteConversationDialog(ChatController controller) async {
+    final confirmed = await _showConfirmationDialog(
+      Get.context!,
+      'Delete Conversation',
+      'Are you sure you want to delete this entire conversation? This action cannot be undone.',
     );
-  }
-
-  @override
-  void dispose() {
-    _messageController.dispose();
-    _scrollController.dispose();
-    _mqttService.disconnect();
-    super.dispose();
+    if (confirmed) {
+      final success = await controller.deleteConversation();
+      Get.snackbar(
+        success ? 'Success' : 'Error',
+        success ? 'Conversation deleted successfully' : 'Failed to delete conversation',
+      );
+      if (success) {
+        Get.back();
+      }
+    }
   }
 }

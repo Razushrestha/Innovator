@@ -535,12 +535,12 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                               label: 'Files',
                               onTap: _pickFiles,
                             ),
-                            _mediaButton(
-                              icon: Icons.location_on,
-                              color: Colors.red.shade700,
-                              label: 'Location',
-                              onTap: () {},
-                            ),
+                            // _mediaButton(
+                            //   icon: Icons.location_on,
+                            //   color: Colors.red.shade700,
+                            //   label: 'Location',
+                            //   onTap: () {},
+                            // ),
                           ],
                         ),
                       ),

@@ -23,16 +23,18 @@ class _PrivacyPolicyState extends State<PrivacyPolicy> with SingleTickerProvider
     return Scaffold(
             key: _scaffoldKey, // Add the scaffold key here
 
-      // backgroundColor: const Color(0xffEDF4FE),
-      // backgroundColor: AppColors.background,
-      // appBar: AppBar(
-      //   automaticallyImplyLeading: false,
-      //   centerTitle: true,
-      //   title: Text(
-      //     'Privacy Policy',
-      //     style: TextStyle(fontWeight: FontWeight.bold),
-      //   ),
-      // ),
+     backgroundColor: const Color(0xffEDF4FE),
+     // backgroundColor: AppColors.background,
+      appBar: AppBar(
+        
+        automaticallyImplyLeading: true,
+        centerTitle: true,
+        title: Text(
+          'Privacy Policy',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        
+      ),
       body: Stack(
         children: [
          Padding(
