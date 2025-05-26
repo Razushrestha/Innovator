@@ -20,13 +20,27 @@ class ChatListController extends GetxController {
   final RxBool isMqttConnected = false.obs;
   final RxString searchText = ''.obs; // Make search text reactive
   final Set<String> processedMessageIds = {};
-
+  static ChatListController? _instance;
+  static ChatListController get instance {
+    _instance ??= Get.find<ChatListController>();
+    return _instance!;
+  }
+  
+  // Method to get total unread count (optional helper)
+  int get totalUnreadCount {
+    return unreadMessageCounts.values.fold(0, (sum, count) => sum + count);
+  }
+  
+  void resetAllUnreadCounts() {
+    unreadMessageCounts.clear();
+    newMessageTimestamps.clear();
+  }
   @override
   void onInit() {
     super.onInit();
     _initializeNotifications();
     fetchChats();
-    _initializeMQTT();
+    initializeMQTT();
     
     // Set up reactive search listener
     searchController.addListener(() {
@@ -142,13 +156,15 @@ class ChatListController extends GetxController {
     }
   }
 
-  Future<void> _initializeMQTT() async {
+  Future<void> initializeMQTT() async {
     try {
       final token = AppData().authToken;
       if (token == null) throw Exception('No auth token available for MQTT');
       
+      if (!mqttService.isConnected()) {
       await mqttService.connect(token, AppData().currentUserId ?? '');
-      isMqttConnected.value = true;
+    }
+    isMqttConnected.value = mqttService.isConnected();
       
       mqttService.subscribe('user/${AppData().currentUserId}/messages', (payload) {
         log('Received message on user topic: $payload');
@@ -158,6 +174,7 @@ class ChatListController extends GetxController {
         log('Error in message stream: $e');
         isMqttConnected.value = false;
       });
+      _subscribeToChatTopics();
     } catch (e) {
       log('Error initializing MQTT: $e');
       Get.snackbar('Error', 'Error connecting to MQTT: $e');
@@ -249,6 +266,7 @@ class ChatListController extends GetxController {
               final chatId = chat['_id']?.toString();
               if (chatId != null && unreadMessageCounts[chatId] != null && unreadMessageCounts[chatId]! > 0) {
                 unreadMessageCounts[chatId] = unreadMessageCounts[chatId]! - 1;
+                unreadMessageCounts.refresh();
               }
             }
           }

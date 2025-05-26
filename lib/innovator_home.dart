@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:innovator/screens/Feed/Inner_Homepage.dart';
+import 'package:innovator/screens/chatrrom/controller/chatlist_controller.dart';
 import 'package:innovator/utils/custom_drawer.dart';
 import 'package:innovator/widget/FloatingMenuwidget.dart';
 
@@ -12,6 +14,9 @@ class Homepage extends StatefulWidget {
 }
 
 class _HomepageState extends State<Homepage> with SingleTickerProviderStateMixin{
+  final ChatListController chatController = Get.put(ChatListController());
+
+
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override

@@ -329,6 +329,12 @@ class ChatController extends GetxController {
             'chatTopic': chatTopic,
             'readAt': DateTime.now().toIso8601String(),
           });
+          await _mqttService.publish('user/$currentUserId/messages', {
+          'type': 'read_receipt',
+          'messageId': messageId,
+          'chatTopic': chatTopic,
+          'readAt': DateTime.now().toIso8601String(),
+        });
         }
       }
     } catch (e) {

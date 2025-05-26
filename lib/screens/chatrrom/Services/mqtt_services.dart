@@ -28,6 +28,12 @@ class MQTTService {
 
   Stream<Map<String, dynamic>> get messageStream => _messageStreamController.stream;
 
+
+bool isConnected() {
+  return _client?.connectionStatus?.state == MqttConnectionState.connected;
+}
+
+
   Future<void> connect(String token, String userId) async {
     if (_client?.connectionStatus?.state == MqttConnectionState.connected) {
       developer.log('MQTTService: Already connected, skipping connect');

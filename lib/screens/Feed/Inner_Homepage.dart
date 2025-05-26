@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:get/get.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:innovator/App_data/App_data.dart';
@@ -12,6 +13,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart';
 import 'package:innovator/screens/SHow_Specific_Profile/Show_Specific_Profile.dart';
 import 'package:innovator/screens/chatrrom/Screen/chat_listscreen.dart';
+import 'package:innovator/screens/chatrrom/controller/chatlist_controller.dart';
 import 'package:innovator/screens/chatrrom/sound/soundplayer.dart';
 import 'package:innovator/screens/comment/JWT_Helper.dart';
 import 'package:innovator/screens/comment/comment_section.dart';
@@ -213,6 +215,8 @@ class Inner_HomePage extends StatefulWidget {
 }
 
 class _Inner_HomePageState extends State<Inner_HomePage> {
+      final ChatListController chatController = Get.put(ChatListController());
+
   final List<FeedContent> _contents = [];
   final ScrollController _scrollController = ScrollController();
   bool _isLoading = false;
@@ -438,31 +442,35 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
         ),
       ),
       
-       floatingActionButton: CustomFAB(
-        gifAsset: 'animation/chaticon.gif',
-  onPressed: () {
-    Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder:
-                  (_) => ChatListScreen(
-                    currentUserId: AppData().currentUserId ?? '',
-                    currentUserName: AppData().currentUserName ?? '',
-                    currentUserPicture:
-                        AppData().currentUserProfilePicture ?? '',
-                    currentUserEmail: AppData().currentUserEmail ?? '',
-                  ),
-            ),
-          );
-    // Handle button press
-    print('FAB pressed!');
-  },
-  backgroundColor: Colors.transparent,
-  showBadge: true,
-  badgeText: '3',
-  badgeColor: Colors.red,
-  
-)
+       floatingActionButton: Obx(() {
+  final chatController = Get.find<ChatListController>();
+  final unreadCount = chatController.totalUnreadCount;
+  return CustomFAB(
+    gifAsset: 'animation/chaticon.gif',
+    onPressed: () {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChatListScreen(
+            currentUserId: AppData().currentUserId ?? '',
+            currentUserName: AppData().currentUserName ?? '',
+            currentUserPicture: AppData().currentUserProfilePicture ?? '',
+            currentUserEmail: AppData().currentUserEmail ?? '',
+          ),
+        ),
+      ).then((_) {
+        chatController.initializeMQTT();
+        // Refresh chat data when returning from chat screen
+        chatController.fetchChats();
+      });
+      print('FAB pressed!');
+    },
+    backgroundColor: Colors.transparent,
+    showBadge: unreadCount > 0, // Show badge only if there are unread messages
+    badgeText: unreadCount > 99 ? '99+' : '$unreadCount', // Cap at 99+
+    badgeColor: Colors.red,
+  );
+}),
        //FloatingActionButton(
       //   onPressed: () {
       //     Navigator.push(

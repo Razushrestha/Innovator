@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:innovator/screens/chatrrom/Model/chatMessage.dart';
 import 'package:innovator/screens/chatrrom/Screen/chat_controller.dart';
+import 'package:innovator/screens/chatrrom/Screen/chat_listscreen.dart';
+import 'package:innovator/screens/chatrrom/controller/chatlist_controller.dart';
 import 'package:innovator/screens/chatrrom/utils.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
@@ -40,6 +42,7 @@ class ChatScreen extends StatelessWidget {
       receiverPicture: receiverPicture,
       receiverEmail: receiverEmail,
     ));
+      final ChatListController chatController = Get.put(ChatListController());
 
     final displayName = receiverName.isNotEmpty ? receiverName : 'Unknown';
     final profilePicture = Utils.isValidImageUrl(receiverPicture) ? receiverPicture : '';
@@ -54,7 +57,9 @@ class ChatScreen extends StatelessWidget {
           children: [
             IconButton(
               icon: const Icon(Icons.arrow_back, color: Colors.white),
-              onPressed: () => Get.back(),
+              onPressed: () { 
+              Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => ChatListScreen(currentUserId: currentUserId, currentUserName: currentUserName, currentUserPicture: currentUserPicture, currentUserEmail: currentUserEmail)), (route) => false);
+              },
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
             ),
