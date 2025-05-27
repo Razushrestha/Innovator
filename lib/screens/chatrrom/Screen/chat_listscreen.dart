@@ -6,7 +6,7 @@ import 'package:innovator/screens/chatrrom/utils.dart';
 import 'package:innovator/widget/FloatingMenuwidget.dart';
 import 'package:badges/badges.dart' as badges;
 
-class ChatListScreen extends StatelessWidget {
+class ChatListScreen extends StatefulWidget {
   final String currentUserId;
   final String currentUserName;
   final String currentUserPicture;
@@ -21,9 +21,15 @@ class ChatListScreen extends StatelessWidget {
   }) : super(key: key);
 
   @override
+  State<ChatListScreen> createState() => _ChatListScreenState();
+}
+
+class _ChatListScreenState extends State<ChatListScreen> with SingleTickerProviderStateMixin{
+    final GlobalKey<ScaffoldState> scaffoldKey = GlobalKey<ScaffoldState>();
+
+  @override
   Widget build(BuildContext context) {
     final controller = Get.put(ChatListController());
-    final GlobalKey<ScaffoldState> scaffoldKey = GlobalKey<ScaffoldState>();
 
     return Scaffold(
       key: scaffoldKey,
@@ -309,11 +315,11 @@ class ChatListScreen extends StatelessWidget {
                                         controller.markChatAsRead(chatId);
                                         Get.to(
                                           () => ChatScreen(
-                                            currentUserId: currentUserId,
-                                            currentUserName: currentUserName,
+                                            currentUserId: widget.currentUserId,
+                                            currentUserName: widget.currentUserName,
                                             currentUserPicture:
-                                                currentUserPicture,
-                                            currentUserEmail: currentUserEmail,
+                                                widget.currentUserPicture,
+                                            currentUserEmail: widget.currentUserEmail,
                                             receiverId: userId,
                                             receiverName: displayName,
                                             receiverPicture: profilePicture,

@@ -1996,7 +1996,7 @@ class _AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget> {
     super.initState();
     _controller = VideoPlayerController.network(widget.url)
       ..setLooping(true)
-      ..setVolume(1.0)
+      ..setVolume(0.0)
       ..initialize().then((_) {
         setState(() {
           _initialized = true;
