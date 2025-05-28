@@ -139,6 +139,7 @@ class FeedContent {
             json['updatedAt'] != null
                 ? DateTime.parse(json['updatedAt'])
                 : DateTime.now(),
+        
         likes: json['likes'] ?? 0,
         comments: json['comments'] ?? 0,
         isLiked: json['liked'] ?? false,
@@ -442,35 +443,89 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
         ),
       ),
       
-       floatingActionButton: Obx(() {
-  final chatController = Get.find<ChatListController>();
-  final unreadCount = chatController.totalUnreadCount;
-  return CustomFAB(
-    gifAsset: 'animation/chaticon.gif',
-    onPressed: () {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ChatListScreen(
-            currentUserId: AppData().currentUserId ?? '',
-            currentUserName: AppData().currentUserName ?? '',
-            currentUserPicture: AppData().currentUserProfilePicture ?? '',
-            currentUserEmail: AppData().currentUserEmail ?? '',
-          ),
+   floatingActionButton: GetBuilder<ChatListController>(
+  init: () {
+    // Ensure ChatListController is initialized
+    if (!Get.isRegistered<ChatListController>()) {
+      Get.put(ChatListController());
+    }
+    return Get.find<ChatListController>();
+  }(),
+  builder: (chatController) {
+    return Obx(() {
+      final unreadCount = chatController.totalUnreadCount;
+      final isLoading = chatController.isLoading.value;
+      final isMqttConnected = chatController.isMqttConnected.value;
+      
+      return CustomFAB(
+        gifAsset: 'animation/chaticon.gif',
+        onPressed: isLoading ? () {} : () async {
+          try {
+            print('FAB pressed! Current unread count: $unreadCount');
+
+
+            if(unreadCount > 0)
+            {
+              chatController.resetAllUnreadCounts();
+            }
+            
+            // Navigate to ChatListScreen
+            final result = await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ChatListScreen(
+                  currentUserId: AppData().currentUserId ?? '',
+                  currentUserName: AppData().currentUserName ?? '',
+                  currentUserPicture: AppData().currentUserProfilePicture ?? '',
+                  currentUserEmail: AppData().currentUserEmail ?? '',
+                ),
+              ),
+            );
+            
+            // Refresh data when returning from chat screen
+            print('Returned from ChatListScreen, refreshing data...');
+            
+            // Ensure controller is still available
+            if (Get.isRegistered<ChatListController>()) {
+              final controller = Get.find<ChatListController>();
+              
+              // Initialize MQTT if not connected
+              if (!controller.isMqttConnected.value) {
+                await controller.initializeMQTT();
+              }
+              
+              // Fetch latest chats
+              await controller.fetchChats();
+              
+              print('Chat data refreshed. New unread count: ${controller.totalUnreadCount}');
+            }
+          } catch (e) {
+            print('Error in FAB onPressed: $e');
+            Get.snackbar(
+              'Error', 
+              'Failed to open chat: $e',
+              snackPosition: SnackPosition.BOTTOM,
+            );
+          }
+        },
+        backgroundColor: Colors.transparent,
+        elevation: 100.0,
+        size: 56.0,
+        showBadge: unreadCount > 0,
+        badgeText: unreadCount > 99 ? '99+' : '$unreadCount',
+        badgeColor: Colors.red,
+        badgeTextColor: Colors.white,
+        badgeSize: 24.0,
+        badgeTextSize: 12.0,
+        // Add subtle animation based on connection status
+        animationDuration: Duration(
+          milliseconds: isMqttConnected ? 300 : 500,
         ),
-      ).then((_) {
-        chatController.initializeMQTT();
-        // Refresh chat data when returning from chat screen
-        chatController.fetchChats();
-      });
-      print('FAB pressed!');
-    },
-    backgroundColor: Colors.transparent,
-    showBadge: unreadCount > 0, // Show badge only if there are unread messages
-    badgeText: unreadCount > 99 ? '99+' : '$unreadCount', // Cap at 99+
-    badgeColor: Colors.red,
-  );
-}),
+      );
+    });
+  },
+),
+
        //FloatingActionButton(
       //   onPressed: () {
       //     Navigator.push(
@@ -615,6 +670,7 @@ class _FeedItemState extends State<FeedItem>
     with SingleTickerProviderStateMixin {
   bool _isExpanded = false;
   static const int _maxLinesCollapsed = 3;
+  bool _hasRecordedView = false; // Flag to prevent duplicate view API calls
 
   late AnimationController _controller;
   bool isChecked = false;
@@ -651,12 +707,83 @@ class _FeedItemState extends State<FeedItem>
       duration: Duration(milliseconds: 300),
     );
     formattedTimeAgo = _formatTimeAgo(widget.content.createdAt);
+        _recordView(); // Call the view API when the widget is initialized
   }
 
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  Future<void> _recordView() async {
+    if (_hasRecordedView) return; // Prevent multiple calls
+    _hasRecordedView = true;
+
+    try {
+      final String? authToken = AppData().authToken;
+      if (authToken == null || authToken.isEmpty) {
+        Get.snackbar(
+          'Error',
+          'Authentication required to record view.',
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 3),
+        );
+        return;
+      }
+
+      final response = await http.post(
+        Uri.parse('http://182.93.94.210:3064/api/v1/content/${widget.content.id}/view'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'authorization': 'Bearer $authToken',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 200 && data['message'] == 'View recorded') {
+          developer.log('View recorded for content ID: ${widget.content.id}, Views: ${data['data']['views']}');
+          // Optionally, update local state if view count is needed in UI
+        } else {
+          Get.snackbar(
+            'Error',
+            'Failed to record view: Invalid response',
+            backgroundColor: Colors.red,
+            colorText: Colors.white,
+            duration: const Duration(seconds: 3),
+          );
+        }
+      } else if (response.statusCode == 401) {
+        Get.snackbar(
+          'Error',
+          'Session expired. Please login again.',
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 3),
+        );
+        Navigator.of(context).pushReplacementNamed('/login');
+      } else {
+        Get.snackbar(
+          'Error',
+          'Failed to record view: ${response.statusCode}',
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 3),
+        );
+      }
+    } catch (e) {
+      Get.snackbar(
+        'Error',
+        'Error recording view: ${e.toString()}',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 3),
+      );
+      developer.log('Error recording view for content ID: ${widget.content.id}, Error: $e');
+    }
   }
 
   bool _isAuthorCurrentUser() {
@@ -701,7 +828,7 @@ class _FeedItemState extends State<FeedItem>
         borderRadius: BorderRadius.circular(12.0),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withAlpha(10),
             blurRadius: 8.0,
             offset: const Offset(0, 2),
           ),
@@ -1047,20 +1174,21 @@ void _copyPostLink() {
   final postLink = _generatePostLink();
   
   Clipboard.setData(ClipboardData(text: postLink));
-  
-  ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(
-      content: Row(
-        children: [
-          Icon(Icons.check_circle, color: Colors.white),
-          SizedBox(width: 8),
-          Text('Post link copied to clipboard!'),
-        ],
-      ),
-      backgroundColor: Colors.green,
-      duration: Duration(seconds: 2),
-    ),
-  );
+  Get.snackbar('Success', 'Post link copied to clipboard!', backgroundColor: Colors.green, colorText: Colors.white);
+
+  // ScaffoldMessenger.of(context).showSnackBar(
+  //   const SnackBar(
+  //     content: Row(
+  //       children: [
+  //         Icon(Icons.check_circle, color: Colors.white),
+  //         SizedBox(width: 8),
+  //         Text('Post link copied to clipboard!'),
+  //       ],
+  //     ),
+  //     backgroundColor: Colors.green,
+  //     duration: Duration(seconds: 2),
+  //   ),
+  // );
 }
 
 void _shareViaApps() async {
@@ -1214,19 +1342,21 @@ String _buildShareTextWithMedia() {
 }
 
 void _showShareError(String message) {
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: Row(
-        children: [
-          const Icon(Icons.error_outline, color: Colors.white),
-          const SizedBox(width: 8),
-          Text(message),
-        ],
-      ),
-      backgroundColor: Colors.red,
-      duration: const Duration(seconds: 3),
-    ),
-  );
+                Get.snackbar('Error', message, backgroundColor: Colors.red, colorText: Colors.white,       duration: const Duration(seconds: 3),);
+
+  // ScaffoldMessenger.of(context).showSnackBar(
+  //   SnackBar(
+  //     content: Row(
+  //       children: [
+  //         const Icon(Icons.error_outline, color: Colors.white),
+  //         const SizedBox(width: 8),
+  //         Text(message),
+  //       ],
+  //     ),
+  //     backgroundColor: Colors.red,
+  //     duration: const Duration(seconds: 3),
+  //   ),
+  // );
 }
 
 
@@ -1379,20 +1509,25 @@ void _showShareError(String message) {
         setState(() {
           widget.content.status = newStatus;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Content updated successfully')),
-        );
+              Get.snackbar('Success', 'Content Updated Successfully', backgroundColor: Colors.green, colorText: Colors.white);
+
+        // ScaffoldMessenger.of(context).showSnackBar(
+        //   const SnackBar(content: Text('Content updated successfully')),
+        // );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to update content: ${response.statusCode}'),
-          ),
-        );
+              Get.snackbar('Error', 'Failed to update content: ${response.statusCode}', backgroundColor: Colors.red, colorText: Colors.white);
+
+        // ScaffoldMessenger.of(context).showSnackBar(
+        //   SnackBar(
+        //     content: Text('Failed to update content: ${response.statusCode}'),
+        //   ),
+        // );
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+      Get.snackbar('Error', e.toString(), backgroundColor: Colors.red, colorText: Colors.white);
+      // ScaffoldMessenger.of(
+      //   context,
+      // ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
     }
   }
 
@@ -1435,20 +1570,26 @@ void _showShareError(String message) {
       );
 
       if (response.statusCode == 200) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Post deleted successfully')),
-        );
+                      Get.snackbar('Success', 'Post Deleted Successfully', backgroundColor: Colors.green, colorText: Colors.white);
+
+        // ScaffoldMessenger.of(context).showSnackBar(
+        //   const SnackBar(content: Text('Post deleted successfully')),
+        // );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to delete post: ${response.statusCode}'),
-          ),
-        );
+                      Get.snackbar('Error', 'Failed to Delete Post: ${response.statusCode}', backgroundColor: Colors.red, colorText: Colors.white);
+
+        // ScaffoldMessenger.of(context).showSnackBar(
+        //   SnackBar(
+        //     content: Text('Failed to delete post: ${response.statusCode}'),
+        //   ),
+        // );
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+            Get.snackbar('Error', e.toString(), backgroundColor: Colors.red, colorText: Colors.white);
+
+      // ScaffoldMessenger.of(
+      //   context,
+      // ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
     }
   }
 
@@ -1496,20 +1637,27 @@ void _showShareError(String message) {
         setState(() {
           (widget.content as dynamic).files = <String>[];
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Files deleted successfully')),
-        );
+                      Get.snackbar('Success', 'Files Delted Successfully', backgroundColor: Colors.green, colorText: Colors.white);
+
+        // ScaffoldMessenger.of(context).showSnackBar(
+        //   const SnackBar(content: Text('Files deleted successfully')),
+        // );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to delete files: ${response.statusCode}'),
-          ),
-        );
+        Get.snackbar('Error', 'Failed to Delete Files: ${response.statusCode}', backgroundColor: Colors.red, colorText: Colors.white);
+
+        // ScaffoldMessenger.of(context).showSnackBar(
+        //   SnackBar(
+        //     content: Text('Failed to delete files: ${response.statusCode}'),
+        //   ),
+        // );
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+
+            Get.snackbar('Error', e.toString(), backgroundColor: Colors.red, colorText: Colors.white);
+
+      // ScaffoldMessenger.of(
+      //   context,
+      // ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
     }
   }
 
@@ -1571,12 +1719,14 @@ void _showShareError(String message) {
 
             // Validate input
             if (reason.isEmpty) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Please provide a reason for reporting.'),
-                  backgroundColor: Colors.red,
-                ),
-              );
+              Get.snackbar('Error', 'Please provide a reason for reporting.', backgroundColor: Colors.red, colorText: Colors.white);
+
+              // ScaffoldMessenger.of(context).showSnackBar(
+              //   const SnackBar(
+              //     content: Text('Please provide a reason for reporting.'),
+              //     backgroundColor: Colors.red,
+              //   ),
+              // );
               return;
             }
 
@@ -1599,33 +1749,39 @@ void _showShareError(String message) {
               // Handle API response
               if (response.statusCode == 200) {
                 final data = json.decode(response.body);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      data['message'] ?? 'Your report has been submitted successfully.',
-                    ),
-                    backgroundColor: Colors.green,
-                  ),
-                );
+                              Get.snackbar('Success', data['message'] ?? 'Your report has been submitted successfully.', backgroundColor: Colors.green, colorText: Colors.white);
+
+                // ScaffoldMessenger.of(context).showSnackBar(
+                //   SnackBar(
+                //     content: Text(
+                //       data['message'] ?? 'Your report has been submitted successfully.',
+                //     ),
+                //     backgroundColor: Colors.green,
+                //   ),
+                // );
                 Navigator.of(context).pop();
               } else {
                 final data = json.decode(response.body);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'Failed to submit report: ${data['message'] ?? 'Error ${response.statusCode}'}',
-                    ),
-                    backgroundColor: Colors.red,
-                  ),
-                );
+                              Get.snackbar('Error', data['message'] ?? 'Failed to Submit Report: ${response.statusCode}', backgroundColor: Colors.red, colorText: Colors.white);
+
+                // ScaffoldMessenger.of(context).showSnackBar(
+                //   SnackBar(
+                //     content: Text(
+                //       'Failed to submit report: ${data['message'] ?? 'Error ${response.statusCode}'}',
+                //     ),
+                //     backgroundColor: Colors.red,
+                //   ),
+                // );
               }
             } catch (e) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Error submitting report: ${e.toString()}'),
-                  backgroundColor: Colors.red,
-                ),
-              );
+                    Get.snackbar('Error', e.toString(), backgroundColor: Colors.red, colorText: Colors.white);
+
+              // ScaffoldMessenger.of(context).showSnackBar(
+              //   SnackBar(
+              //     content: Text('Error submitting report: ${e.toString()}'),
+              //     backgroundColor: Colors.red,
+              //   ),
+              // );
             }
           },
           child: const Text('Submit'),

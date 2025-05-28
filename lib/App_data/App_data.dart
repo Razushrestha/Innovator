@@ -32,7 +32,7 @@ class AppData {
     final id = JwtHelper.extractUserId(_authToken);
     developer.log('Getting current user ID from JWT: ${id ?? "null"}');
     return id;
-  }
+  } 
   
   String? get currentUserName => _currentUser?['name'];
   

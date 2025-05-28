@@ -12,6 +12,7 @@ import 'package:innovator/Authorization/Login.dart';
 import 'package:innovator/Notification/FCM_Services.dart';
 import 'package:innovator/main.dart';
 import 'package:innovator/screens/Course/home.dart';
+import 'package:innovator/screens/Eliza_ChatBot/Elizahomescreen.dart';
 import 'package:innovator/screens/F&Q/F&Qscreen.dart';
 import 'package:innovator/screens/Privacy_Policy/privacy_screen.dart';
 import 'package:innovator/screens/Profile/profile_page.dart';
@@ -348,9 +349,11 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
                     delay: 200,
                   ),
                   _buildAnimatedMenuItem(
-                    icon: Icons.settings_rounded,
-                    title: 'Settings',
-                    onTap: () {},
+                    icon: Icons.psychology_rounded,
+                    title: 'Eliza ChatBot',
+                    onTap: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => ElizaChatScreen()));
+                    },
                     delay: 300,
                   ),
                   _buildAnimatedMenuItem(

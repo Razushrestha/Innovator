@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:innovator/screens/chatrrom/Model/chatMessage.dart';
 import 'package:innovator/screens/chatrrom/utils.dart';
+import 'package:intl/intl.dart';
 import 'chat_controller.dart'; // Import the controller
 
 class ChatScreen extends StatelessWidget {
@@ -189,97 +190,103 @@ class ChatScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildMessageBubble(
-    BuildContext context,
-    ChatMessage message,
-    ChatController controller,
-  ) {
-    final isMe = message.senderId == currentUserId;
-    final messageTime =
-        '${message.timestamp.hour.toString().padLeft(2, '0')}:${message.timestamp.minute.toString().padLeft(2, '0')}';
+Widget _buildMessageBubble(
+  BuildContext context,
+  ChatMessage message,
+  ChatController controller,
+) {
+  final isMe = message.senderId == currentUserId;
+  final messageTime = DateFormat('HH:mm').format(message.timestamp.toLocal());
 
-    return GestureDetector(
-      onLongPress: () => _showDeleteOptions(context, message, controller),
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-        child: Row(
-          mainAxisAlignment:
-              isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
-          children: [
-            Flexible(
-              child: Container(
-                constraints: BoxConstraints(
-                  maxWidth: MediaQuery.of(context).size.width * 0.75,
+  return GestureDetector(
+    onLongPress: () => _showDeleteOptions(context, message, controller),
+    child: Container(
+      margin: EdgeInsets.only(
+        left: isMe ? 64 : 8,
+        right: isMe ? 8 : 64,
+        top: 2,
+        bottom: 2,
+      ),
+      child: Align(
+        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+        child: Container(
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.8,
+          ),
+          decoration: BoxDecoration(
+            color: isMe 
+                ? const Color(0xFFDCF8C6) // WhatsApp sent green
+                : Colors.white, // WhatsApp received white
+            borderRadius: BorderRadius.only(
+              topLeft: const Radius.circular(7.5),
+              topRight: const Radius.circular(7.5),
+              bottomLeft: Radius.circular(isMe ? 7.5 : 2),
+              bottomRight: Radius.circular(isMe ? 2 : 7.5),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withAlpha(30),
+                offset: const Offset(0, 1),
+                blurRadius: 0.5,
+              ),
+            ],
+          ),
+          child: Stack(
+            children: [
+              // Message text
+              Container(
+                padding: EdgeInsets.fromLTRB(
+                  7,
+                  6,
+                  7 + (messageTime.length * 4.2) + (isMe ? 20 : 0),
+                  17,
                 ),
-                decoration: BoxDecoration(
-                  color:
-                      isMe
-                          ? const Color.fromRGBO(220, 248, 198, 1)
-                          : Colors.white,
-                  borderRadius: BorderRadius.only(
-                    topLeft: const Radius.circular(12),
-                    topRight: const Radius.circular(12),
-                    bottomLeft: Radius.circular(isMe ? 12 : 0),
-                    bottomRight: Radius.circular(isMe ? 0 : 12),
+                child: Text(
+                  message.content,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w400,
+                    color: Color(0xFF303030),
+                    height: 1.19,
+                    letterSpacing: -0.078,
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 2,
-                      offset: const Offset(0, 1),
-                    ),
-                  ],
                 ),
-                child: Stack(
+              ),
+              
+              // Time and status
+              Positioned(
+                bottom: 4,
+                right: 7,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-                      child: Text(
-                        message.content,
-                        style: const TextStyle(
-                          fontFamily: 'Roboto', // or 'SF Pro Text' for iOS
-                          fontSize: 16,
-                          fontWeight: FontWeight.w400,
-                          color: Color(0xFF1C1C1E), // Dark gray like WhatsApp
-                          letterSpacing: 1.0,
-                          height: 1.4, // Line height for better readability
-                        ),
+                    Text(
+                      messageTime,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.black.withOpacity(0.45),
                       ),
                     ),
-                    Positioned(
-                      bottom: 4,
-                      right: 8,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            messageTime,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                          if (isMe) ...[
-                            const SizedBox(width: 4),
-                            Icon(
-                              message.read ? Icons.done_all : Icons.done,
-                              size: 16,
-                              color:
-                                  message.read ? Colors.blue : Colors.grey[600],
-                            ),
-                          ],
-                        ],
+                    if (isMe) ...[
+                      const SizedBox(width: 3),
+                      Icon(
+                        message.read ? Icons.done_all : Icons.done,
+                        size: 16,
+                        color: message.read 
+                            ? const Color(0xFF4FC3F7)
+                            : const Color(0xFF92A3A3),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildInputField(ChatController controller) {
     return Container(
@@ -317,7 +324,6 @@ class ChatScreen extends StatelessWidget {
                   maxLines: null,
                   minLines: 1,
                   textCapitalization: TextCapitalization.sentences,
-                  onSubmitted: (_) => controller.sendMessage(),
                 ),
               ),
             ),
@@ -538,3 +544,51 @@ class ChatScreen extends StatelessWidget {
     });
   }
 }
+
+
+// // Custom painter for WhatsApp message tails
+// class MessageTailPainter extends CustomPainter {
+//   final Color color;
+//   final bool isMe;
+
+//   MessageTailPainter({required this.color, required this.isMe});
+
+//   @override
+//   void paint(Canvas canvas, Size size) {
+//     final paint = Paint()
+//       ..color = color
+//       ..style = PaintingStyle.fill;
+
+//     final path = Path();
+    
+//     if (isMe) {
+//       // Tail for sent messages (right side)
+//       path.moveTo(0, 0);
+//       path.lineTo(0, 10);
+//       path.quadraticBezierTo(0, 15, 6, 15);
+//       path.quadraticBezierTo(12, 15, 12, 8);
+//       path.quadraticBezierTo(12, 0, 6, 0);
+//       path.close();
+//     } else {
+//       // Tail for received messages (left side)
+//       path.moveTo(12, 0);
+//       path.lineTo(12, 10);
+//       path.quadraticBezierTo(12, 15, 6, 15);
+//       path.quadraticBezierTo(0, 15, 0, 8);
+//       path.quadraticBezierTo(0, 0, 6, 0);
+//       path.close();
+//     }
+
+//     canvas.drawPath(path, paint);
+    
+//     // Add shadow to tail
+//     final shadowPaint = Paint()
+//       ..color = Colors.black.withOpacity(0.13)
+//       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 0.5);
+    
+//     canvas.drawPath(path, shadowPaint);
+//   }
+
+//   @override
+//   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+// }

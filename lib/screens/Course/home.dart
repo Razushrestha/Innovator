@@ -326,7 +326,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 'Explore Categories',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
-              TextButton(onPressed: () {}, child: const Text('See All')),
+              //TextButton(onPressed: () {}, child: const Text('See All')),
             ],
           ),
         ),
@@ -364,10 +364,19 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     return GestureDetector(
       onTap: () {
         // Navigate to BasicElectronic screen for any category tap
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const CourseDetailPage()),
-        );
+       showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Category Tapped'),
+      content: Text('You tapped on "${category.title}".'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('OK'),
+        ),
+      ],
+    ),
+  );
       },
       child: Container(
         decoration: BoxDecoration(

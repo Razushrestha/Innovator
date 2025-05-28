@@ -297,7 +297,7 @@ class ChatController extends GetxController {
         log('ChatController: Added new message to UI: ${message.content}');
         
         // Show notification for messages from receiver
-        if (message.senderId == receiverId) {
+        if (message.senderId == receiverId && !message.read) {
           _showSystemNotification(
             'New Message from $receiverName',
             message.content,
@@ -565,7 +565,7 @@ class ChatController extends GetxController {
       if (token == null) return;
 
       const String baseUrl = 'http://182.93.94.210:3064/api/v1';
-      final url = '$baseUrl/messages/$messageId/read';
+      final url = '$baseUrl/message/$messageId/read';
 
       final response = await http.put(
         Uri.parse(url),
@@ -591,7 +591,7 @@ class ChatController extends GetxController {
       if (token == null) return false;
 
       const String baseUrl = 'http://182.93.94.210:3064/api/v1';
-      final url = '$baseUrl/messages/$messageId/delete-for-me';
+      final url = '$baseUrl/message/$messageId';
 
       final response = await http.delete(
         Uri.parse(url),
@@ -622,7 +622,7 @@ class ChatController extends GetxController {
       if (token == null) return false;
 
       const String baseUrl = 'http://182.93.94.210:3064/api/v1';
-      final url = '$baseUrl/messages/$messageId/delete-for-everyone';
+      final url = '$baseUrl/message/$messageId/everyone';
 
       final response = await http.delete(
         Uri.parse(url),
@@ -653,7 +653,7 @@ class ChatController extends GetxController {
       if (token == null) return false;
 
       const String baseUrl = 'http://182.93.94.210:3064/api/v1';
-      final url = '$baseUrl/conversations/$receiverId';
+      final url = '$baseUrl/conversation/$currentUserId?otherUserId=$receiverId';
 
       final response = await http.delete(
         Uri.parse(url),

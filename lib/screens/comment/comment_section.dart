@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:innovator/App_data/App_data.dart';
 import 'package:innovator/screens/chatrrom/sound/soundplayer.dart';
 import 'package:innovator/screens/comment/JWT_Helper.dart';
@@ -187,15 +188,18 @@ class _CommentSectionState extends State<CommentSection> {
   }
 
   void _showSuccessSnackbar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.green),
-    );
+    Get.snackbar('Success', message, backgroundColor: Colors.green, colorText: Colors.white);
+    // ScaffoldMessenger.of(context).showSnackBar(
+    //   SnackBar(content: Text(message), backgroundColor: Colors.green),
+    // );
   }
 
   void _showErrorSnackbar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
-    );
+        Get.snackbar('Error', message, backgroundColor: Colors.red, colorText: Colors.white);
+
+    // ScaffoldMessenger.of(context).showSnackBar(
+    //   SnackBar(content: Text(message), backgroundColor: Colors.red),
+    // );
   }
 
   @override

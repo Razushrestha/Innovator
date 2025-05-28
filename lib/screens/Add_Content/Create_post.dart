@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
+import 'package:innovator/innovator_home.dart';
 import 'package:innovator/main.dart';
 import 'package:innovator/widget/FloatingMenuwidget.dart';
 import 'dart:convert';
@@ -9,6 +11,7 @@ import 'dart:io';
 import 'package:mime/mime.dart';
 import 'package:innovator/App_data/App_data.dart';
 import 'package:path/path.dart' as path;
+import 'package:image_picker/image_picker.dart';
 
 class CreatePostScreen extends StatefulWidget {
   const CreatePostScreen({super.key});
@@ -25,6 +28,7 @@ class _CreatePostScreenState extends State<CreatePostScreen>
   Map<String, dynamic>? _userData;
   String? _errorMessage;
   List<PlatformFile> _selectedFiles = [];
+  List<XFile> _selectedImages = []; // For storing selected images
   bool _isUploading = false;
   bool _isCreatingPost = false;
   List<dynamic> _uploadedFiles = [];
@@ -32,15 +36,16 @@ class _CreatePostScreenState extends State<CreatePostScreen>
   final AppData _appData = AppData();
   late AnimationController _animationController;
   late Animation<double> _animation;
+  final ImagePicker _picker = ImagePicker(); // ImagePicker instance
 
-  // Post type selection - FIXED: Ensure value matches dropdown item value
-  String _selectedPostType = 'innovation'; // Changed to match the id in _postTypes
+  // Post type selection
+  String _selectedPostType = 'innovation';
   final List<Map<String, dynamic>> _postTypes = [
     {'id': 'innovation', 'name': 'Innovation', 'icon': Icons.lightbulb_outline},
     {'id': 'idea', 'name': 'Idea', 'icon': Icons.tips_and_updates},
     {'id': 'project', 'name': 'Project', 'icon': Icons.rocket_launch},
     {'id': 'question', 'name': 'Question', 'icon': Icons.help_outline},
-    {'id': 'announcement', 'name': 'Announcement', 'icon': Icons.campaign}, // Fixed typo in 'announcement' and changed icon
+    {'id': 'announcement', 'name': 'Announcement', 'icon': Icons.campaign},
     {'id': 'other', 'name': 'Other', 'icon': Icons.more_horiz},
   ];
 
@@ -48,9 +53,7 @@ class _CreatePostScreenState extends State<CreatePostScreen>
   final Color _primaryColor = const Color.fromRGBO(244, 135, 6, 1);
   final Color _accentColor = const Color.fromARGB(255, 219, 231, 230);
   final Color _facebookBlue = const Color(0xFF1877F2);
-  final Color _backgroundColor = const Color(
-    0xFFF0F2F5,
-  ); // Facebook background color
+  final Color _backgroundColor = const Color(0xFFF0F2F5);
   final Color _cardColor = Colors.white;
   final Color _textColor = const Color(0xFF333333);
 
@@ -60,7 +63,6 @@ class _CreatePostScreenState extends State<CreatePostScreen>
     _checkAuthStatus();
     _fetchUserProfile();
 
-    // Animation setup for the post button
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 300),
       vsync: this,
@@ -71,19 +73,15 @@ class _CreatePostScreenState extends State<CreatePostScreen>
       curve: Curves.easeInOut,
     );
 
-    // Start animation when description changes or files are uploaded
     _descriptionController.addListener(_updateButtonState);
   }
 
-  // Listen to changes in the description field and update button state
-  // Update button state whenever description or uploaded files change
   void _updateButtonState() {
     if (_isPostButtonEnabled) {
       _animationController.forward();
     } else {
       _animationController.reverse();
     }
-    // Force UI update when text changes to update button state
     setState(() {});
   }
 
@@ -105,11 +103,67 @@ class _CreatePostScreenState extends State<CreatePostScreen>
     super.dispose();
   }
 
-  // Check if post button should be enabled - now checks for either description or files
   bool get _isPostButtonEnabled {
     return (_descriptionController.text.isNotEmpty ||
             _uploadedFiles.isNotEmpty) &&
         !_isCreatingPost;
+  }
+
+  // Method to capture image using camera
+  Future<void> _captureImage() async {
+    try {
+      final XFile? capturedImage = await _picker.pickImage(
+        source: ImageSource.camera,
+        maxWidth: 1920,
+        maxHeight: 1080,
+        imageQuality: 85,
+      );
+
+      if (capturedImage != null) {
+        setState(() {
+          _selectedImages.add(capturedImage);
+          _selectedFiles.add(PlatformFile(
+            name: capturedImage.name,
+            path: capturedImage.path,
+            size: File(capturedImage.path).lengthSync(),
+          ));
+        });
+
+        if (_selectedFiles.isNotEmpty) {
+          _uploadFiles();
+        }
+      }
+    } catch (e) {
+      _showError('Error capturing image: $e');
+    }
+  }
+
+  // Method to pick images from gallery
+  Future<void> _pickImages() async {
+    try {
+      final List<XFile>? pickedFiles = await _picker.pickMultiImage(
+        maxWidth: 1920,
+        maxHeight: 1080,
+        imageQuality: 85,
+      );
+
+      if (pickedFiles != null && pickedFiles.isNotEmpty) {
+        setState(() {
+          _selectedImages.addAll(pickedFiles);
+          _selectedFiles.addAll(pickedFiles.map((xfile) => PlatformFile(
+                name: xfile.name,
+                path: xfile.path,
+                size: File(xfile.path).lengthSync(),
+              )));
+        });
+
+        if (_selectedFiles.isNotEmpty) {
+          _uploadFiles();
+        }
+      }
+    } catch (e) {
+      _showError('Error picking images: $e');
+    }
   }
 
   Future<void> _pickFiles() async {
@@ -125,7 +179,6 @@ class _CreatePostScreenState extends State<CreatePostScreen>
           _selectedFiles = result.files;
         });
 
-        // Automatically start uploading files right after selection
         if (_selectedFiles.isNotEmpty) {
           _uploadFiles();
         }
@@ -183,7 +236,6 @@ class _CreatePostScreenState extends State<CreatePostScreen>
             _uploadedFiles = jsonResponse['data'];
           });
           _showSuccess('Files uploaded successfully!');
-          // Update button state after files are uploaded
           _updateButtonState();
         } else {
           _showError('Upload succeeded but no file data received');
@@ -205,7 +257,6 @@ class _CreatePostScreenState extends State<CreatePostScreen>
 
   Future<void> _fetchUserProfile() async {
     try {
-      // Use AuthToken from AppData singleton
       final String? authToken = AppData().authToken;
 
       if (authToken == null || authToken.isEmpty) {
@@ -230,8 +281,6 @@ class _CreatePostScreenState extends State<CreatePostScreen>
           setState(() {
             _userData = responseData['data'];
             _isLoading = false;
-
-            // Optionally update the current user data in AppData if needed
             AppData().setCurrentUser(_userData!);
           });
         } else {
@@ -256,7 +305,6 @@ class _CreatePostScreenState extends State<CreatePostScreen>
   }
 
   Future<void> _createPost() async {
-    // Allow posting if either description or files are present
     if (_descriptionController.text.trim().isEmpty && _uploadedFiles.isEmpty) {
       _showError('Please enter a description or upload files');
       return;
@@ -274,9 +322,8 @@ class _CreatePostScreenState extends State<CreatePostScreen>
     try {
       final createUrl = 'http://182.93.94.210:3064/api/v1/new-content';
 
-      // Create post body with selected type
       final body = {
-        'type': _selectedPostType, // Using the correct value directly
+        'type': _selectedPostType,
         'status': _descriptionController.text,
         'description': _descriptionController.text,
         'files': _uploadedFiles.isEmpty ? [] : _uploadedFiles,
@@ -294,6 +341,11 @@ class _CreatePostScreenState extends State<CreatePostScreen>
       if (response.statusCode == 200 || response.statusCode == 201) {
         _showSuccess('Post published successfully!');
         _clearForm();
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => Homepage()),
+          (route) => false,
+        );
       } else if (response.statusCode == 401) {
         _showError('Authentication failed. Please log in again.');
         await _appData.clearAuthToken();
@@ -313,33 +365,20 @@ class _CreatePostScreenState extends State<CreatePostScreen>
     setState(() {
       _descriptionController.clear();
       _selectedFiles = [];
+      _selectedImages = [];
       _uploadedFiles = [];
-      _selectedPostType = 'innovation'; // Reset to default value that matches the id
+      _selectedPostType = 'innovation';
     });
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red.shade800,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        margin: const EdgeInsets.all(16),
-      ),
-    );
+    Get.snackbar('Error', message,
+        backgroundColor: Colors.red.shade800, colorText: Colors.white);
   }
 
   void _showSuccess(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.green.shade700,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        margin: const EdgeInsets.all(16),
-      ),
-    );
+    Get.snackbar('Successfully', message,
+        backgroundColor: Colors.green, colorText: Colors.white);
   }
 
   String _safeGetString(dynamic item, String key, String defaultValue) {
@@ -362,12 +401,10 @@ class _CreatePostScreenState extends State<CreatePostScreen>
         (userData?['level'] ?? 'user').toString().toUpperCase();
     final String email = userData?['email'] ?? '';
     final String? picturePath = userData?['picture'];
-    final String baseUrl = 'http://182.93.94.210:3064'; // Base URL for the API
+    final String baseUrl = 'http://182.93.94.210:3064';
     return Scaffold(
-      key: _scaffoldKey, // Add the scaffold key here
-
+      key: _scaffoldKey,
       backgroundColor: _backgroundColor,
-
       body: Stack(
         children: [
           SingleChildScrollView(
@@ -392,7 +429,7 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                             backgroundColor: Colors.grey[200],
                             backgroundImage: picturePath != null
                                 ? NetworkImage('$baseUrl$picturePath')
-                                : null, // Removed AssetImage to fix potential error
+                                : null,
                             child: picturePath == null
                                 ? Icon(Icons.person, size: 40, color: Colors.grey)
                                 : null,
@@ -402,7 +439,6 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                // Display current user name from AppData
                                 Text(
                                   name,
                                   style: TextStyle(
@@ -411,8 +447,6 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                                     color: _textColor,
                                   ),
                                 ),
-
-                                // Post type dropdown
                                 Container(
                                   margin: const EdgeInsets.only(top: 6),
                                   padding: const EdgeInsets.symmetric(
@@ -443,7 +477,7 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                                           .map<DropdownMenuItem<String>>(
                                               (Map<String, dynamic> type) {
                                         return DropdownMenuItem<String>(
-                                          value: type['id'], // Using id as value
+                                          value: type['id'],
                                           child: Row(
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
@@ -466,9 +500,7 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                           ),
                         ],
                       ),
-
                       const SizedBox(height: 16),
-
                       // Text input area
                       TextField(
                         controller: _descriptionController,
@@ -490,9 +522,7 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                     ],
                   ),
                 ),
-
                 const SizedBox(height: 8),
-
                 // Attachment section
                 Container(
                   color: _cardColor,
@@ -508,9 +538,7 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                           color: _textColor,
                         ),
                       ),
-
                       const SizedBox(height: 16),
-
                       // Media buttons
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
@@ -518,10 +546,16 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                         child: Row(
                           children: [
                             _mediaButton(
+                              icon: Icons.camera_alt,
+                              color: Colors.purple,
+                              label: 'Camera',
+                              onTap: _captureImage, // Camera button
+                            ),
+                            _mediaButton(
                               icon: Icons.photo_library,
                               color: Colors.green,
                               label: 'Photos',
-                              onTap: _pickFiles,
+                              onTap: _pickImages,
                             ),
                             _mediaButton(
                               icon: Icons.videocam,
@@ -535,19 +569,11 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                               label: 'Files',
                               onTap: _pickFiles,
                             ),
-                            // _mediaButton(
-                            //   icon: Icons.location_on,
-                            //   color: Colors.red.shade700,
-                            //   label: 'Location',
-                            //   onTap: () {},
-                            // ),
                           ],
                         ),
                       ),
-
                       if (_selectedFiles.isNotEmpty && _isUploading) ...[
                         const SizedBox(height: 20),
-
                         // Upload status indicator
                         Row(
                           children: [
@@ -570,10 +596,8 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                           ],
                         ),
                       ],
-
                       if (_selectedFiles.isNotEmpty && !_isUploading) ...[
                         const SizedBox(height: 20),
-
                         Text(
                           'Selected Files (${_selectedFiles.length})',
                           style: TextStyle(
@@ -582,9 +606,7 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                             fontSize: 16,
                           ),
                         ),
-
                         const SizedBox(height: 12),
-
                         // Horizontal file previews
                         Container(
                           height: 100,
@@ -592,6 +614,11 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                             scrollDirection: Axis.horizontal,
                             itemCount: _selectedFiles.length,
                             itemBuilder: (context, index) {
+                              final file = _selectedFiles[index];
+                              final isImage = file.path != null &&
+                                  ['jpg', 'jpeg', 'png', 'gif', 'webp']
+                                      .contains(file.extension?.toLowerCase());
+
                               return Container(
                                 width: 100,
                                 margin: const EdgeInsets.only(right: 8),
@@ -604,15 +631,24 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                                 ),
                                 child: Stack(
                                   children: [
-                                    Center(
-                                      child: Icon(
-                                        _getFileIcon(
-                                          _selectedFiles[index].extension,
+                                    if (isImage && file.path != null)
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: Image.file(
+                                          File(file.path!),
+                                          width: 100,
+                                          height: 100,
+                                          fit: BoxFit.cover,
                                         ),
-                                        size: 36,
-                                        color: _facebookBlue,
+                                      )
+                                    else
+                                      Center(
+                                        child: Icon(
+                                          _getFileIcon(file.extension),
+                                          size: 36,
+                                          color: _facebookBlue,
+                                        ),
                                       ),
-                                    ),
                                     Positioned(
                                       right: 0,
                                       top: 0,
@@ -620,14 +656,15 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                                         onTap: () {
                                           setState(() {
                                             _selectedFiles.removeAt(index);
+                                            if (index < _selectedImages.length) {
+                                              _selectedImages.removeAt(index);
+                                            }
                                           });
                                         },
                                         child: Container(
                                           padding: const EdgeInsets.all(4),
                                           decoration: BoxDecoration(
-                                            color: Colors.black.withOpacity(
-                                              0.5,
-                                            ),
+                                            color: Colors.black.withAlpha(5),
                                             shape: BoxShape.circle,
                                           ),
                                           child: Icon(
@@ -648,7 +685,6 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                     ],
                   ),
                 ),
-
                 // Uploaded files section
                 if (_uploadedFiles.isNotEmpty) ...[
                   const SizedBox(height: 8),
@@ -676,9 +712,7 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                             ),
                           ],
                         ),
-
                         const SizedBox(height: 12),
-
                         ListView.separated(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
@@ -731,7 +765,6 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                                 onTap: () {
                                   setState(() {
                                     _uploadedFiles.removeAt(index);
-                                    // Update button state after removing file
                                     _updateButtonState();
                                   });
                                 },
@@ -748,22 +781,19 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                     ),
                   ),
                 ],
-
-                // Bottom area
               ],
             ),
           ),
           FloatingMenuWidget(scaffoldKey: _scaffoldKey),
         ],
       ),
-
       bottomSheet: Container(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
         decoration: BoxDecoration(
           color: Colors.white,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withAlpha(10),
               blurRadius: 4,
               offset: Offset(0, -1),
             ),
@@ -840,7 +870,7 @@ class _CreatePostScreenState extends State<CreatePostScreen>
               width: 50,
               height: 50,
               decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
+                color: color.withAlpha(10),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(icon, color: color, size: 24),

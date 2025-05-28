@@ -18,15 +18,16 @@ class ChatListController extends GetxController {
   final RxMap<String, int> unreadMessageCounts = <String, int>{}.obs;
   final RxMap<String, DateTime> newMessageTimestamps = <String, DateTime>{}.obs;
   final RxBool isMqttConnected = false.obs;
-  final RxString searchText = ''.obs; // Make search text reactive
+  final RxString searchText = ''.obs;
+  final RxBool isLoading = false.obs;
   final Set<String> processedMessageIds = {};
   static ChatListController? _instance;
+  
   static ChatListController get instance {
     _instance ??= Get.find<ChatListController>();
     return _instance!;
   }
   
-  // Method to get total unread count (optional helper)
   int get totalUnreadCount {
     return unreadMessageCounts.values.fold(0, (sum, count) => sum + count);
   }
@@ -35,6 +36,7 @@ class ChatListController extends GetxController {
     unreadMessageCounts.clear();
     newMessageTimestamps.clear();
   }
+  
   @override
   void onInit() {
     super.onInit();
@@ -42,7 +44,6 @@ class ChatListController extends GetxController {
     fetchChats();
     initializeMQTT();
     
-    // Set up reactive search listener
     searchController.addListener(() {
       searchText.value = searchController.text;
       _onSearchChanged();
@@ -99,8 +100,12 @@ class ChatListController extends GetxController {
     log('Filtered chats updated: ${filteredChats.length} chats');
   }
 
-  Future<void> fetchChats() async {
+  Future<void> fetchChats({bool showLoader = false}) async {
     try {
+      if (showLoader) {
+        isLoading.value = true;
+      }
+      
       final token = AppData().authToken;
       if (token == null) throw Exception('No auth token available');
 
@@ -118,10 +123,14 @@ class ChatListController extends GetxController {
         if (responseData is Map<String, dynamic> && responseData['data'] is List) {
           final rawChats = List<Map<String, dynamic>>.from(responseData['data']);
           
-          // Update observable lists properly
+          // Store current unread counts to preserve local updates
+          Map<String, int> preservedUnreadCounts = Map.from(unreadMessageCounts);
+          
+          // Clear and update chats list
+          chats.clear();
           chats.assignAll(rawChats);
           
-          // Process chat IDs and unread counts
+          // Process chat IDs and merge unread counts
           for (var chat in chats) {
             String? chatId;
             final user = chat['user'] as Map<String, dynamic>? ?? {};
@@ -134,16 +143,23 @@ class ChatListController extends GetxController {
                 chat['_id'] = chatId;
               }
             }
+            
             if (chatId != null) {
               final apiUnreadCount = (chat['unreadCount'] as int?) ?? 0;
-              final currentUnreadCount = unreadMessageCounts[chatId] ?? 0;
-              unreadMessageCounts[chatId] = currentUnreadCount > apiUnreadCount ? currentUnreadCount : apiUnreadCount;
+              final preservedCount = preservedUnreadCounts[chatId] ?? 0;
+              // Use the higher value between API and preserved counts
+              unreadMessageCounts[chatId] = preservedCount > apiUnreadCount ? preservedCount : apiUnreadCount;
             }
           }
           
           // Apply current search filter
           _onSearchChanged();
           _subscribeToChatTopics();
+          
+          // Force refresh all observables
+          forceRefreshUI();
+          
+          log('Chats fetched successfully: ${chats.length} chats');
         } else {
           throw Exception('Invalid chat list format');
         }
@@ -153,6 +169,10 @@ class ChatListController extends GetxController {
     } catch (e) {
       log('Error fetching chats: $e');
       Get.snackbar('Error', 'Failed to fetch chats: $e');
+    } finally {
+      if (showLoader) {
+        isLoading.value = false;
+      }
     }
   }
 
@@ -161,10 +181,14 @@ class ChatListController extends GetxController {
       final token = AppData().authToken;
       if (token == null) throw Exception('No auth token available for MQTT');
       
-      if (!mqttService.isConnected()) {
+      // Disconnect if already connected to ensure clean reconnection
+      if (mqttService.isConnected()) {
+        mqttService.disconnect();
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+      
       await mqttService.connect(token, AppData().currentUserId ?? '');
-    }
-    isMqttConnected.value = mqttService.isConnected();
+      isMqttConnected.value = mqttService.isConnected();
       
       mqttService.subscribe('user/${AppData().currentUserId}/messages', (payload) {
         log('Received message on user topic: $payload');
@@ -175,6 +199,7 @@ class ChatListController extends GetxController {
         isMqttConnected.value = false;
       });
       _subscribeToChatTopics();
+      log('MQTT initialized successfully');
     } catch (e) {
       log('Error initializing MQTT: $e');
       Get.snackbar('Error', 'Error connecting to MQTT: $e');
@@ -219,96 +244,100 @@ class ChatListController extends GetxController {
         });
 
         if (chatIndex == -1) {
-          fetchChats().then((_) {
-            chatIndex = chats.indexWhere((chat) {
-              final user = chat['user'] as Map<String, dynamic>? ?? {};
-              final userId = user['_id']?.toString() ?? '';
-              return (senderId == AppData().currentUserId && userId == receiverId) ||
-                  (receiverId == AppData().currentUserId && userId == senderId);
-            });
-            if (chatIndex != -1) {
-              _updateChat(chatIndex, senderId, messageText, messageData, senderName);
-            } else {
-              final tempChatId = 'temp_${senderId}_$receiverId';
-              final tempChat = {
-                '_id': tempChatId,
-                'user': {
-                  '_id': senderId,
-                  'name': senderName,
-                  'email': senderInfo['email'] ?? '',
-                  'picture': senderInfo['picture'] ?? '',
-                },
-                'lastMessage': {
-                  'message': messageText,
-                  'timestamp': messageData['createdAt']?.toString() ?? DateTime.now().toIso8601String(),
-                },
-                'unreadCount': isRead ? 0 : 1,
-              };
-              chats.insert(0, tempChat);
-              unreadMessageCounts[tempChatId] = isRead ? 0 : 1;
-              newMessageTimestamps[tempChatId] = DateTime.now().add(const Duration(seconds: 5));
-              _onSearchChanged(); // Update filtered chats
-              if (!isRead) showNotification(tempChatId, senderName, messageText);
-            }
-          });
-          return;
+          // Create temporary chat and refresh from API
+          _createTemporaryChat(senderId, receiverId, senderName, senderInfo, messageText, messageData, isRead);
+          // Refresh after a short delay to get proper chat data
+          Future.delayed(const Duration(milliseconds: 1000), () => fetchChats());
+        } else {
+          _updateExistingChat(chatIndex, senderId, messageText, messageData, senderName, isRead);
         }
-        _updateChat(chatIndex, senderId, messageText, messageData, senderName);
       } else if (data['type'] == 'read_receipt') {
-        final messageId = data['messageId']?.toString();
-        final chatTopic = data['chatTopic']?.toString();
-        if (messageId != null && chatTopic != null) {
-          for (var chat in chats) {
-            final user = chat['user'] as Map<String, dynamic>? ?? {};
-            final userId = user['_id']?.toString() ?? '';
-            final expectedTopic = mqttService.getChatTopic(AppData().currentUserId ?? '', userId);
-            if (expectedTopic == chatTopic) {
-              final chatId = chat['_id']?.toString();
-              if (chatId != null && unreadMessageCounts[chatId] != null && unreadMessageCounts[chatId]! > 0) {
-                unreadMessageCounts[chatId] = unreadMessageCounts[chatId]! - 1;
-                unreadMessageCounts.refresh();
-              }
-            }
-          }
-        }
+        _handleReadReceipt(data);
       }
     } catch (e) {
       log('Error processing MQTT message: $e');
     }
   }
 
-  void _updateChat(int chatIndex, String senderId, String messageText, Map<String, dynamic> messageData, String senderName) {
-    // Update the chat data directly in the observable list
+  void _createTemporaryChat(String senderId, String receiverId, String senderName, 
+      Map<String, dynamic> senderInfo, String messageText, Map<String, dynamic> messageData, bool isRead) {
+    final tempChatId = 'temp_${senderId}_$receiverId';
+    final tempChat = {
+      '_id': tempChatId,
+      'user': {
+        '_id': senderId,
+        'name': senderName,
+        'email': senderInfo['email'] ?? '',
+        'picture': senderInfo['picture'] ?? '',
+      },
+      'lastMessage': {
+        'message': messageText,
+        'timestamp': messageData['createdAt']?.toString() ?? DateTime.now().toIso8601String(),
+      },
+      'unreadCount': isRead ? 0 : 1,
+    };
+    
+    chats.insert(0, tempChat);
+    unreadMessageCounts[tempChatId] = isRead ? 0 : 1;
+    newMessageTimestamps[tempChatId] = DateTime.now().add(const Duration(seconds: 5));
+    _onSearchChanged(); // Update filtered chats
+    forceRefreshUI();
+    
+    if (!isRead && senderId != AppData().currentUserId) {
+      showNotification(tempChatId, senderName, messageText);
+    }
+  }
+
+  void _updateExistingChat(int chatIndex, String senderId, String messageText, 
+      Map<String, dynamic> messageData, String senderName, bool isRead) {
+    // Create updated chat data
     final updatedChat = Map<String, dynamic>.from(chats[chatIndex]);
     updatedChat['lastMessage'] = {
       'message': messageText,
       'timestamp': messageData['createdAt']?.toString() ?? DateTime.now().toIso8601String(),
     };
     
-    final isRead = messageData['read'] == true;
     final chatId = updatedChat['_id']?.toString() ?? '';
     
+    // Update unread count only for incoming messages
     if (senderId != AppData().currentUserId && !isRead) {
       unreadMessageCounts[chatId] = (unreadMessageCounts[chatId] ?? 0) + 1;
       newMessageTimestamps[chatId] = DateTime.now().add(const Duration(seconds: 5));
       showNotification(chatId, senderName, messageText);
     }
     
-    // Move chat to top if not already there
-    if (chatIndex > 0) {
-      chats.removeAt(chatIndex);
-      chats.insert(0, updatedChat);
-    } else {
-      chats[0] = updatedChat;
-    }
+    // Move chat to top and update
+    chats.removeAt(chatIndex);
+    chats.insert(0, updatedChat);
     
-    // Update filtered chats
+    // Force UI update
     _onSearchChanged();
+    forceRefreshUI();
+  }
+
+  void _handleReadReceipt(Map<String, dynamic> data) {
+    final messageId = data['messageId']?.toString();
+    final chatTopic = data['chatTopic']?.toString();
+    if (messageId != null && chatTopic != null) {
+      for (var chat in chats) {
+        final user = chat['user'] as Map<String, dynamic>? ?? {};
+        final userId = user['_id']?.toString() ?? '';
+        final expectedTopic = mqttService.getChatTopic(AppData().currentUserId ?? '', userId);
+        if (expectedTopic == chatTopic) {
+          final chatId = chat['_id']?.toString();
+          if (chatId != null && unreadMessageCounts[chatId] != null && unreadMessageCounts[chatId]! > 0) {
+            unreadMessageCounts[chatId] = unreadMessageCounts[chatId]! - 1;
+            forceRefreshUI();
+          }
+        }
+      }
+    }
   }
 
   void markChatAsRead(String chatId) {
     unreadMessageCounts[chatId] = 0;
     newMessageTimestamps.remove(chatId);
+    forceRefreshUI();
   }
 
   bool isRecentMessage(String chatId) {
@@ -322,31 +351,90 @@ class ChatListController extends GetxController {
     return true;
   }
 
-  String formatMessageTime(String timestamp) {
+  // Enhanced method to force refresh UI
+  void forceRefreshUI() {
+    try {
+      // Force update all reactive variables
+      chats.refresh();
+      filteredChats.refresh();
+      unreadMessageCounts.refresh();
+      newMessageTimestamps.refresh();
+      isMqttConnected.refresh();
+      searchText.refresh();
+      isLoading.refresh();
+      
+      // Trigger a complete rebuild of dependent widgets
+      update();
+      
+      log('UI force refreshed - Chats: ${chats.length}, Filtered: ${filteredChats.length}, Unread: ${unreadMessageCounts.length}');
+    } catch (e) {
+      log('Error in forceRefreshUI: $e');
+    }
+  }
+
+  // Utility method to format message timestamps
+  String formatMessageTime(String? timestamp) {
+    if (timestamp == null || timestamp.isEmpty) return '';
+    
     try {
       final messageTime = DateTime.parse(timestamp);
       final now = DateTime.now();
-      if (now.difference(messageTime).inDays > 0) {
-        return _getDayName(messageTime);
+      final difference = now.difference(messageTime);
+      
+      if (difference.inMinutes < 1) {
+        return 'Just now';
+      } else if (difference.inMinutes < 60) {
+        return '${difference.inMinutes}m ago';
+      } else if (difference.inHours < 24) {
+        return '${difference.inHours}h ago';
+      } else if (difference.inDays < 7) {
+        return '${difference.inDays}d ago';
       } else {
-        return '${messageTime.hour.toString().padLeft(2, '0')}:${messageTime.minute.toString().padLeft(2, '0')}';
+        // Format as date for older messages
+        return '${messageTime.day}/${messageTime.month}/${messageTime.year}';
       }
     } catch (e) {
-      log('Error parsing timestamp: $e');
+      log('Error formatting message time: $e');
       return '';
     }
   }
 
-  String _getDayName(DateTime date) {
-    final now = DateTime.now();
-    final yesterday = DateTime.now().subtract(const Duration(days: 1));
-    if (date.year == now.year && date.month == now.month && date.day == now.day) {
-      return 'Today';
-    } else if (date.year == yesterday.year && date.month == yesterday.month && date.day == yesterday.day) {
-      return 'Yesterday';
-    } else {
-      final weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      return weekdays[date.weekday - 1];
+  // Method to handle connection status changes
+  void onConnectionStatusChanged(bool isConnected) {
+    isMqttConnected.value = isConnected;
+    if (!isConnected) {
+      // Attempt to reconnect after a delay
+      Future.delayed(const Duration(seconds: 5), () {
+        if (!isMqttConnected.value) {
+          initializeMQTT();
+        }
+      });
     }
+    log('MQTT connection status changed: $isConnected');
+  }
+
+  // Method to clear all processed message IDs (useful for cleanup)
+  void clearProcessedMessages() {
+    processedMessageIds.clear();
+    log('Cleared processed message IDs');
+  }
+
+  // Method to get chat by ID
+  Map<String, dynamic>? getChatById(String chatId) {
+    try {
+      return chats.firstWhere((chat) => chat['_id']?.toString() == chatId);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Method to remove a chat (if needed)
+  void removeChat(String chatId) {
+    chats.removeWhere((chat) => chat['_id']?.toString() == chatId);
+    unreadMessageCounts.remove(chatId);
+    newMessageTimestamps.remove(chatId);
+    _onSearchChanged();
+    forceRefreshUI();
+    log('Chat removed: $chatId');
   }
 }

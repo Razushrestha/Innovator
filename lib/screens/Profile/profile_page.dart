@@ -27,6 +27,12 @@ class UserProfile {
   final DateTime createdAt;
   final DateTime updatedAt;
   final String? picture;
+  final String? gender; // Added
+  final String? location; // Added
+  final String? bio; // Added
+  final String? education; // Added
+  final String? profession; // Added
+  final String? achievements; // Added
 
   UserProfile({
     required this.id,
@@ -39,6 +45,12 @@ class UserProfile {
     required this.createdAt,
     required this.updatedAt,
     this.picture,
+    this.gender,
+    this.location,
+    this.bio,
+    this.education,
+    this.profession,
+    this.achievements,
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
@@ -57,6 +69,12 @@ class UserProfile {
           ? DateTime.parse(json['updatedAt'])
           : DateTime.now(),
       picture: json['picture'],
+      gender: json['gender'],
+      location: json['location'],
+      bio: json['bio'],
+      education: json['education'],
+      profession: json['profession'],
+      achievements: json['achievements'],
     );
   }
 }

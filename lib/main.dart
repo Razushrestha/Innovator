@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_gemini/flutter_gemini.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:get/get.dart';
@@ -12,6 +13,7 @@ import 'package:http/http.dart' as http;
 import 'package:innovator/App_data/App_data.dart';
 import 'package:innovator/firebase_options.dart';
 import 'package:innovator/innovator_home.dart';
+import 'package:innovator/screens/Eliza_ChatBot/global.dart';
 import 'package:innovator/screens/Splash_Screen/splash_screen.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -26,6 +28,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 }
  
 void main() async {
+  //Gemini.init(apiKey: api_key);
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await AppData().initialize();
