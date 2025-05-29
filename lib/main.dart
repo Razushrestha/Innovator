@@ -5,7 +5,6 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_gemini/flutter_gemini.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:get/get.dart';
@@ -13,27 +12,37 @@ import 'package:http/http.dart' as http;
 import 'package:innovator/App_data/App_data.dart';
 import 'package:innovator/firebase_options.dart';
 import 'package:innovator/innovator_home.dart';
-import 'package:innovator/screens/Eliza_ChatBot/global.dart';
 import 'package:innovator/screens/Splash_Screen/splash_screen.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 late Size mq;
 
+// Global navigation key to access navigator from anywhere
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  await FCMService.showNotification(message);
-  await FCMService.initialize();
+  try {
+    await FCMService.showNotificationStatic(message);
+    developer.log('Background notification shown successfully');
+  } catch (e) {
+    developer.log('Error showing background notification: $e');
+  }
   developer.log('Handling background message: ${message.messageId}');
 }
- 
+
 void main() async {
-  //Gemini.init(apiKey: api_key);
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await AppData().initialize();
+  
+  // Set background message handler
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
- await FCMService.initialize();
+  
+  // Initialize FCM service
+  await FCMService.initialize();
+  
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
@@ -62,44 +71,43 @@ class _InnovatorHomePageState extends ConsumerState<InnovatorHomePage> {
   void initState() {
     super.initState();
     _requestNotificationPermission();
-   // _loadNotifications();
     _setupFCMListeners();
     developer.log('Current user data on InnovatorHomePage init: ${AppData().currentUser}');
     developer.log('Current fcmTokens: ${AppData().fcmTokens}');
   }
 
   Future<void> _requestNotificationPermission() async {
-  try {
-    // Request notification permission for Android 13+
-    if (await Permission.notification.isDenied) {
-      final status = await Permission.notification.request();
-      developer.log('Notification permission status: $status');
-      if (status.isDenied) {
-        // Prompt user to enable notifications manually
-        if (await Permission.notification.isPermanentlyDenied) {
-          await openAppSettings();
+    try {
+      // Request notification permission for Android 13+
+      if (await Permission.notification.isDenied) {
+        final status = await Permission.notification.request();
+        developer.log('Notification permission status: $status');
+        if (status.isDenied) {
+          if (await Permission.notification.isPermanentlyDenied) {
+            await openAppSettings();
+          }
         }
       }
-    }
 
-    // Request FCM permission
-    NotificationSettings settings = await FirebaseMessaging.instance.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
-    developer.log('FCM permission status: ${settings.authorizationStatus}');
+      // Request FCM permission
+      NotificationSettings settings = await FirebaseMessaging.instance.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+        criticalAlert: true,
+        provisional: false,
+      );
+      developer.log('FCM permission status: ${settings.authorizationStatus}');
+      
+      await FCMService.checkAndRequestBatteryOptimization(context);
 
-    // MIUI-specific: Check if battery optimization is enabled
-    if (Platform.isAndroid) {
-      // Note: Requires additional package like `device_info_plus` to detect MIUI
-      developer.log('Running on Android, please ensure battery optimization is disabled for Innovator');
-      // Optionally, guide user to disable battery optimization (manual step for now)
+      if (Platform.isAndroid) {
+        developer.log('Running on Android, please ensure battery optimization is disabled for Innovator');
+      }
+    } catch (e) {
+      developer.log('Error requesting notification permission: $e');
     }
-  } catch (e) {
-    developer.log('Error requesting notification permission: $e');
   }
-}
 
   Future<void> _loadNotifications() async {
     try {
@@ -127,34 +135,12 @@ class _InnovatorHomePageState extends ConsumerState<InnovatorHomePage> {
   }
 
   void _setupFCMListeners() {
+    // This will now be handled globally by FCMService
+    // but we can still listen here for UI updates
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      developer.log('Foreground message received: ${message.messageId}');
-      FCMService.showNotification(message);
-      //_loadNotifications();
-    });
-
-    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      developer.log('Message opened app: ${message.messageId}');
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => NotificationScreen(notification: message),
-        ),
-      );
-      //_loadNotifications();
-    });
-
-    FirebaseMessaging.instance.getInitialMessage().then((RemoteMessage? message) {
-      if (message != null) {
-        developer.log('Initial message: ${message.messageId}');
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => NotificationScreen(notification: message),
-          ),
-        );
-        _loadNotifications();
-      }
+      developer.log('Foreground message received in main widget: ${message.messageId}');
+      // Refresh notifications count if needed
+      // _loadNotifications();
     });
   }
 
@@ -162,6 +148,7 @@ class _InnovatorHomePageState extends ConsumerState<InnovatorHomePage> {
   Widget build(BuildContext context) {
     mq = MediaQuery.of(context).size;
     return GetMaterialApp(
+      navigatorKey: navigatorKey, // Add global navigator key
       title: 'Inovator',
       theme: ThemeData(
         fontFamily: 'Segoe UI',
@@ -179,51 +166,7 @@ class _InnovatorHomePageState extends ConsumerState<InnovatorHomePage> {
       ),
       debugShowCheckedModeBanner: false,
       home: Scaffold(
-        // appBar: AppBar(
-        //   title: const Text('Inovator'),
-        //   actions: [
-        //     Stack(
-        //       children: [
-        //         IconButton(
-        //           icon: const Icon(Icons.notifications),
-        //           onPressed: () {
-        //             Navigator.push(
-        //               context,
-        //               MaterialPageRoute(
-        //                 builder: (context) => NotificationListScreen(notifications: _notifications),
-        //               ),
-        //             );
-        //           },
-        //         ),
-        //         if (_unreadCount > 0)
-        //           Positioned(
-        //             right: 8,
-        //             top: 8,
-        //             child: Container(
-        //               padding: const EdgeInsets.all(2),
-        //               decoration: BoxDecoration(
-        //                 color: Colors.red,
-        //                 borderRadius: BorderRadius.circular(10),
-        //               ),
-        //               constraints: const BoxConstraints(
-        //                 minWidth: 16,
-        //                 minHeight: 16,
-        //               ),
-        //               child: Text(
-        //                 '$_unreadCount',
-        //                 style: const TextStyle(
-        //                   color: Colors.white,
-        //                   fontSize: 10,
-        //                 ),
-        //                 textAlign: TextAlign.center,
-        //               ),
-        //             ),
-        //           ),
-        //       ],
-        //     ),
-        //   ],
-        // ),
-        body: const SplashScreen(), // Replace with your actual home screen
+        body: const SplashScreen(),
       ),
     );
   }
@@ -232,18 +175,64 @@ class _InnovatorHomePageState extends ConsumerState<InnovatorHomePage> {
 class FCMService {
   static final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
   static final FlutterLocalNotificationsPlugin _notificationsPlugin = FlutterLocalNotificationsPlugin();
+  static bool _isInitialized = false;
+
+  static Future<void> checkAndRequestBatteryOptimization(BuildContext? context) async {
+    if (Platform.isAndroid && context != null) {
+      try {
+        const MethodChannel platform = MethodChannel('battery_optimization');
+        
+        bool isIgnoringBatteryOptimizations = await platform.invokeMethod('isIgnoringBatteryOptimizations');
+        
+        if (!isIgnoringBatteryOptimizations) {
+          await showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: Text('Battery Optimization'),
+              content: Text(
+                'To receive notifications when the app is closed, please disable battery optimization for this app.\n\n'
+                'This will not significantly impact your battery life.'
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    Navigator.pop(context);
+                    await platform.invokeMethod('requestIgnoreBatteryOptimizations');
+                  },
+                  child: Text('Settings'),
+                ),
+              ],
+            ),
+          );
+        }
+      } catch (e) {
+        developer.log('Error checking battery optimization: $e');
+      }
+    }
+  }
 
   static Future<void> initialize() async {
+    if (_isInitialized) {
+      developer.log('FCMService already initialized');
+      return;
+    }
+
     try {
       // Create notification channel FIRST
       const AndroidNotificationChannel channel = AndroidNotificationChannel(
-        'default_channel',
-        'Default Notifications',
-        description: 'Channel for default notifications',
+        'high_importance_channel',
+        'High Importance Notifications',
+        description: 'Channel for important notifications',
         importance: Importance.max,
         playSound: true,
         showBadge: true,
         enableVibration: true,
+        enableLights: true,
+        ledColor: Colors.blue,
       );
 
       final androidPlugin = _notificationsPlugin
@@ -251,12 +240,23 @@ class FCMService {
       
       if (androidPlugin != null) {
         await androidPlugin.createNotificationChannel(channel);
+
+        // Request exact alarm permission for Android 12+
+        if (Platform.isAndroid) {
+          await androidPlugin.requestExactAlarmsPermission();
+          await androidPlugin.requestNotificationsPermission();
+        }
       }
 
       // Initialize local notifications
       const AndroidInitializationSettings androidSettings = 
           AndroidInitializationSettings('@mipmap/launcher_icon');
-      const DarwinInitializationSettings iosSettings = DarwinInitializationSettings();
+      const DarwinInitializationSettings iosSettings = DarwinInitializationSettings(
+        requestAlertPermission: true,
+        requestBadgePermission: true,
+        requestSoundPermission: true,
+        requestCriticalPermission: true,
+      );
       const InitializationSettings initializationSettings = InitializationSettings(
         android: androidSettings,
         iOS: iosSettings,
@@ -268,26 +268,24 @@ class FCMService {
           final payload = response.payload;
           if (payload != null) {
             developer.log('Notification tapped with payload: $payload');
-            // Handle notification tap
+            _handleNotificationTap(payload);
           }
         },
       );
 
-      // Request permissions
+      // Request FCM permissions
       NotificationSettings settings = await _firebaseMessaging.requestPermission(
         alert: true,
         badge: true,
         sound: true,
         provisional: false,
+        criticalAlert: true,
       );
 
       developer.log('FCM permission status: ${settings.authorizationStatus}');
 
-      // Handle foreground messages only here
-      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-        developer.log('Foreground message received: ${message.messageId}');
-        showNotification(message);
-      });
+      // Set up global message listeners
+      _setupGlobalMessageListeners();
 
       // Get and save FCM token
       await _updateFCMToken();
@@ -299,24 +297,118 @@ class FCMService {
         _updateTokenOnServer(newToken);
       });
 
+      _isInitialized = true;
+      developer.log('FCMService initialized successfully');
+
     } catch (e) {
       developer.log('Error initializing FCM: $e');
     }
   }
 
+  static void _setupGlobalMessageListeners() {
+    // Handle foreground messages - these will show on ANY screen
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      developer.log('Foreground message received globally: ${message.messageId}');
+      showNotification(message);
+    });
+
+    // Handle notification opened app
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      developer.log('Message opened app globally: ${message.messageId}');
+      _navigateToNotificationScreen(message);
+    });
+
+    // Handle initial message when app is opened from notification
+    FirebaseMessaging.instance.getInitialMessage().then((RemoteMessage? message) {
+      if (message != null) {
+        developer.log('App opened from notification: ${message.messageId}');
+        // Delay navigation to ensure app is fully loaded
+        Future.delayed(Duration(seconds: 2), () {
+          _navigateToNotificationScreen(message);
+        });
+      }
+    });
+  }
+
+  static void _handleNotificationTap(String payload) {
+    try {
+      final data = json.decode(payload);
+      final message = RemoteMessage(data: Map<String, String>.from(data));
+      _navigateToNotificationScreen(message);
+    } catch (e) {
+      developer.log('Error handling notification tap: $e');
+    }
+  }
+
+  static void _navigateToNotificationScreen(RemoteMessage message) {
+    final context = navigatorKey.currentContext;
+    if (context != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => NotificationScreen(notification: message),
+        ),
+      );
+    } else {
+      developer.log('Navigator context not available');
+    }
+  }
+
+  static Future<void> showNotificationStatic(RemoteMessage message) async {
+    try {
+      // Initialize local notifications plugin for background use
+      const AndroidInitializationSettings androidSettings = 
+          AndroidInitializationSettings('@mipmap/launcher_icon');
+      const InitializationSettings initializationSettings = InitializationSettings(
+        android: androidSettings,
+      );
+
+      final FlutterLocalNotificationsPlugin localNotifications = FlutterLocalNotificationsPlugin();
+      await localNotifications.initialize(initializationSettings);
+
+      // Create notification channel for background
+      const AndroidNotificationChannel channel = AndroidNotificationChannel(
+        'high_importance_channel',
+        'High Importance Notifications',
+        description: 'This channel is used for important notifications.',
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+        enableLights: true,
+      );
+
+      final androidPlugin = localNotifications
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+      
+      if (androidPlugin != null) {
+        await androidPlugin.createNotificationChannel(channel);
+      }
+
+      await _showNotificationInternal(message, localNotifications);
+    } catch (e) {
+      developer.log('Error showing background notification: $e');
+    }
+  }
+
   static Future<void> showNotification(RemoteMessage message) async {
+    await _showNotificationInternal(message, _notificationsPlugin);
+  }
+
+  static Future<void> _showNotificationInternal(
+    RemoteMessage message, 
+    FlutterLocalNotificationsPlugin plugin
+  ) async {
     try {
       developer.log('Processing notification: ${message.messageId}');
       final notification = message.notification;
       final data = message.data;
 
-      // Create a unique notification ID
       int notificationId = DateTime.now().millisecondsSinceEpoch ~/ 1000;
 
       AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-        'default_channel',
-        'Default Notifications',
-        channelDescription: 'Channel for default notifications',
+        'high_importance_channel',
+        'High Importance Notifications',
+        channelDescription: 'This channel is used for important notifications.',
         importance: Importance.max,
         priority: Priority.high,
         playSound: true,
@@ -326,13 +418,29 @@ class FCMService {
         enableVibration: true,
         channelShowBadge: true,
         autoCancel: true,
-        fullScreenIntent: true, // For heads-up notification
+        fullScreenIntent: true,
+        category: AndroidNotificationCategory.message,
+        visibility: NotificationVisibility.public,
+        ticker: 'New notification received',
+        when: DateTime.now().millisecondsSinceEpoch,
+        usesChronometer: false,
+        onlyAlertOnce: false,
+        ongoing: false,
+        silent: false,
+        // Add these for better visibility
+        styleInformation: BigTextStyleInformation(
+          notification?.body ?? data['body'] ?? 'You have a new notification',
+          contentTitle: notification?.title ?? data['title'] ?? 'New Notification',
+          summaryText: 'Innovator App',
+        ),
       );
 
-      DarwinNotificationDetails iosDetails = const DarwinNotificationDetails(
+      const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
         presentAlert: true,
         presentBadge: true,
         presentSound: true,
+        interruptionLevel: InterruptionLevel.active,
+        categoryIdentifier: 'general',
       );
 
       NotificationDetails notificationDetails = NotificationDetails(
@@ -340,7 +448,7 @@ class FCMService {
         iOS: iosDetails,
       );
 
-      await _notificationsPlugin.show(
+      await plugin.show(
         notificationId,
         notification?.title ?? data['title'] ?? 'New Notification',
         notification?.body ?? data['body'] ?? 'You have a new notification',
@@ -395,7 +503,16 @@ class FCMService {
       developer.log('Error updating FCM token on server: $e');
     }
   }
+
+  // Method to ensure FCM is working on any screen
+  static Future<void> ensureInitialized() async {
+    if (!_isInitialized) {
+      await initialize();
+    }
+  }
 }
+
+// Rest of your existing classes remain the same
 class NotificationListScreen extends StatelessWidget {
   final List<NotificationModel> notifications;
 
@@ -405,13 +522,14 @@ class NotificationListScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        
-        title: const Text('All Notifications', style: TextStyle(backgroundColor: Colors.orange),),
-leading: 
-  IconButton(onPressed: (){
-  Navigator.push(context, MaterialPageRoute(builder: (_) => Homepage()));
-}, icon: Icon(Icons.arrow_back)),
-backgroundColor: Colors.orange,
+        title: const Text('All Notifications', style: TextStyle(backgroundColor: Colors.orange)),
+        leading: IconButton(
+          onPressed: () {
+            Navigator.push(context, MaterialPageRoute(builder: (_) => Homepage()));
+          }, 
+          icon: Icon(Icons.arrow_back)
+        ),
+        backgroundColor: Colors.orange,
       ),
       body: ListView.builder(
         itemCount: notifications.length,
@@ -534,12 +652,29 @@ class NotificationScreen extends StatelessWidget {
   }
 }
 
-// Placeholder for SplashScreen
-// class SplashScreen extends StatelessWidget {
-//   const SplashScreen({super.key});
+// Mixin to ensure FCM works on any screen
+mixin FCMEnabledScreen<T extends StatefulWidget> on State<T> {
+  @override
+  void initState() {
+    super.initState();
+    FCMService.ensureInitialized();
+  }
+}
 
-//   @override
-//   Widget build(BuildContext context) {
-//     return const Center(child: CircularProgressIndicator());
-//   }
-// }
+// Example of how to use the mixin in any screen
+class ExampleScreen extends StatefulWidget {
+  @override
+  _ExampleScreenState createState() => _ExampleScreenState();
+}
+
+class _ExampleScreenState extends State<ExampleScreen> with FCMEnabledScreen {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('Example Screen')),
+      body: Center(
+        child: Text('Notifications will work on this screen too!'),
+      ),
+    );
+  }
+}

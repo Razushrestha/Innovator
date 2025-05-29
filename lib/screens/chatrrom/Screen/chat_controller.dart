@@ -287,7 +287,7 @@ class ChatController extends GetxController {
           m.id.startsWith('temp_') &&
           m.senderId == message.senderId &&
           m.content == message.content &&
-          m.timestamp.difference(message.timestamp).inSeconds.abs() < 5);
+          m.timestamp.difference(message.timestamp).inSeconds.abs() < 10);
       
       if (tempIndex != -1) {
         messages[tempIndex] = message;
@@ -499,6 +499,9 @@ class ChatController extends GetxController {
       log('ChatController: Cannot send message: ${isSendingMessage.value ? 'Already sending' : messageController.text.trim().isEmpty ? 'Empty message' : 'Null chat topic'}');
       return;
     }
+
+    final messageContent = messageController.text.trim();
+  messages.removeWhere((m) => m.id.startsWith('temp_') && m.content == messageContent);
 
     isSendingMessage.value = true;
     try {

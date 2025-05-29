@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:innovator/screens/chatrrom/Model/chatMessage.dart';
@@ -5,7 +7,7 @@ import 'package:innovator/screens/chatrrom/utils.dart';
 import 'package:intl/intl.dart';
 import 'chat_controller.dart'; // Import the controller
 
-class ChatScreen extends StatelessWidget {
+class ChatScreen extends StatefulWidget {
   final String currentUserId;
   final String currentUserName;
   final String currentUserPicture;
@@ -28,9 +30,16 @@ class ChatScreen extends StatelessWidget {
   }) : super(key: key);
 
   @override
+  State<ChatScreen> createState() => _ChatScreenState();
+}
+
+class _ChatScreenState extends State<ChatScreen> {
+    Timer? _debounceTimer;
+
+  @override
   Widget build(BuildContext context) {
     // Initialize controller with proper tag
-    final controllerTag = '${currentUserId}_$receiverId';
+    final controllerTag = '${widget.currentUserId}_${widget.receiverId}';
 
     // Get or create controller without initializing data in build
     final ChatController controller = Get.put(
@@ -42,21 +51,21 @@ class ChatScreen extends StatelessWidget {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!controller.isInitialized.value) {
         controller.initializeChat(
-          currentUserId: currentUserId,
-          currentUserName: currentUserName,
-          currentUserPicture: currentUserPicture,
-          currentUserEmail: currentUserEmail,
-          receiverId: receiverId,
-          receiverName: receiverName,
-          receiverPicture: receiverPicture,
-          receiverEmail: receiverEmail,
+          currentUserId: widget.currentUserId,
+          currentUserName: widget.currentUserName,
+          currentUserPicture: widget.currentUserPicture,
+          currentUserEmail: widget.currentUserEmail,
+          receiverId: widget.receiverId,
+          receiverName: widget.receiverName,
+          receiverPicture: widget.receiverPicture,
+          receiverEmail: widget.receiverEmail,
         );
       }
     });
 
-    final displayName = receiverName.isNotEmpty ? receiverName : 'Unknown';
+    final displayName = widget.receiverName.isNotEmpty ? widget.receiverName : 'Unknown';
     final profilePicture =
-        _isValidImageUrl(receiverPicture) ? receiverPicture : '';
+        _isValidImageUrl(widget.receiverPicture) ? widget.receiverPicture : '';
 
     return PopScope(
       canPop: false, // Prevents default pop unless explicitly allowed
@@ -195,10 +204,11 @@ Widget _buildMessageBubble(
   ChatMessage message,
   ChatController controller,
 ) {
-  final isMe = message.senderId == currentUserId;
+  final isMe = message.senderId == widget.currentUserId;
   final messageTime = DateFormat('HH:mm').format(message.timestamp.toLocal());
 
   return GestureDetector(
+    key: ValueKey(message.id), // Add unique key
     onLongPress: () => _showDeleteOptions(context, message, controller),
     child: Container(
       margin: EdgeInsets.only(
@@ -351,7 +361,7 @@ Widget _buildMessageBubble(
                   onPressed:
                       controller.isSendingMessage.value
                           ? null
-                          : controller.sendMessage,
+                          : () => _debounceSend(controller),
                 ),
               ),
             ),
@@ -360,6 +370,13 @@ Widget _buildMessageBubble(
       ),
     );
   }
+
+void _debounceSend(ChatController controller) {
+  if (_debounceTimer?.isActive ?? false) return;
+  _debounceTimer = Timer(const Duration(milliseconds: 500), () {
+    controller.sendMessage();
+  });
+}
 
   void _handleDeleteConversation(
     BuildContext context,
@@ -393,7 +410,7 @@ Widget _buildMessageBubble(
     ChatMessage message,
     ChatController controller,
   ) {
-    if (message.senderId != currentUserId)
+    if (message.senderId != widget.currentUserId)
       return; // Only allow deleting own messages
 
     showModalBottomSheet(
@@ -531,7 +548,7 @@ Widget _buildMessageBubble(
   }
 
   void _handleBackPress(ChatController controller) {
-    final controllerTag = '${currentUserId}_$receiverId';
+    final controllerTag = '${widget.currentUserId}_${widget.receiverId}';
 
     // Navigate back first
     if (Get.context != null) {

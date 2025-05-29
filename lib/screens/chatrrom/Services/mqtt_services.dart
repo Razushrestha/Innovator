@@ -128,6 +128,12 @@ bool isConnected() {
       'user/$_currentUserId/messages',
     ];
 
+    for (var topic in _topicCallbacks.keys.toList()) {
+    _client!.unsubscribe(topic);
+    developer.log('MQTTService: Unsubscribed from topic: $topic');
+  }
+  _topicCallbacks.clear();
+
     for (var topic in topics) {
       developer.log('MQTTService: Subscribing to topic: $topic');
       _client!.subscribe(topic, MqttQos.atLeastOnce);
