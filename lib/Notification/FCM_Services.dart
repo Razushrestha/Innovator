@@ -1,502 +1,812 @@
-// import 'dart:convert';
-// import 'dart:developer' as developer;
-// import 'package:firebase_messaging/firebase_messaging.dart';
-// import 'package:flutter/cupertino.dart';
-// import 'package:flutter/material.dart';
-// import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-// import 'package:http/http.dart' as http;
-// import 'package:innovator/App_data/App_data.dart';
+import 'dart:convert';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:innovator/App_data/App_data.dart';
+import 'package:innovator/innovator_home.dart';
+import 'package:intl/intl.dart';
 
-// class FCMHomeScreen extends StatefulWidget {
-//   const FCMHomeScreen({super.key});
+class NotificationListScreen extends StatefulWidget {
+  const NotificationListScreen({super.key});
 
-//   @override
-//   State<FCMHomeScreen> createState() => _FCMHomeScreenState();
-// }
+  @override
+  State<NotificationListScreen> createState() => _NotificationListScreenState();
+}
 
-// class _FCMHomeScreenState extends State<FCMHomeScreen> {
-//   int _unreadCount = 0;
-//   List<NotificationModel> _notifications = [];
-//   bool _isLoading = false;
+class _NotificationListScreenState extends State<NotificationListScreen> {
+  final ScrollController _scrollController = ScrollController();
+  List<NotificationModel> notifications = [];
+  bool isLoading = false;
+  bool isLoadingMore = false;
+  String? nextCursor;
+  bool hasMore = true;
+  bool isDeletingAll = false;
 
-//   @override
-//   void initState() {
-//     super.initState();
-//     _loadNotifications();
-//     _setupFCMListeners();
-//     // Log current user data to debug fcmTokens
-//     developer.log('Current user data on FCMHomeScreen init: ${AppData().currentUser}');
-//     developer.log('Current fcmTokens: ${AppData().fcmTokens}');
-//   }
+  @override
+  void initState() {
+    super.initState();
+    fetchNotifications();
+    _scrollController.addListener(_scrollListener);
+  }
 
-//   Future<void> _loadNotifications() async {
-//     setState(() => _isLoading = true);
-//     try {
-//       final response = await http.get(
-//         Uri.parse('http://182.93.94.210:3064/api/v1/notifications'),
-//         headers: {
-//           'Content-Type': 'application/json',
-//           'Authorization': 'Bearer ${AppData().authToken}', // Use AppData token
-//         },
-//       );
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
-//       if (response.statusCode == 200) {
-//         final data = json.decode(response.body);
-//         setState(() {
-//           _unreadCount = data['data']['unreadCount'] ?? 0;
-//           _notifications = (data['data']['notifications'] as List)
-//               .map((json) => NotificationModel.fromJson(json))
-//               .toList();
-//         });
-//       } else {
-//         developer.log('Failed to load notifications: ${response.statusCode} - ${response.body}');
-//         ScaffoldMessenger.of(context).showSnackBar(
-//           SnackBar(content: Text('Failed to load notifications: ${response.statusCode}')),
-//         );
-//       }
-//     } catch (e) {
-//       developer.log('Error loading notifications: $e');
-//       ScaffoldMessenger.of(context).showSnackBar(
-//         SnackBar(content: Text('Error loading notifications: $e')),
-//       );
-//     } finally {
-//       setState(() => _isLoading = false);
-//     }
-//   }
+  void _scrollListener() {
+    if (_scrollController.position.pixels ==
+            _scrollController.position.maxScrollExtent &&
+        hasMore &&
+        !isLoadingMore) {
+      fetchMoreNotifications();
+    }
+  }
 
-//   void _setupFCMListeners() {
-//     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-//       FCMService.showNotification(message);
-//       _loadNotifications();
-//     });
+  Future<void> fetchNotifications() async {
+    if (isLoading) return;
+    
+    setState(() => isLoading = true);
+    try {
+      final token = AppData().authToken;
+      if (token == null) throw Exception('No authentication token found');
 
-//     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-//       Navigator.push(
-//         context,
-//         MaterialPageRoute(
-//           builder: (context) => NotificationScreen(notification: message),
-//         ),
-//       );
-//       _loadNotifications();
-//     });
-//   }
+      final url = Uri.parse('http://182.93.94.210:3064/api/v1/notifications');
+      final response = await http.get(
+        url,
+        headers: {'Authorization': 'Bearer $token'},
+      );
 
-//   Future<void> _updateFCMToken() async {
-//     try {
-//       final token = await FirebaseMessaging.instance.getToken();
-//       if (token != null) {
-//         await AppData().saveFcmToken(token); // Use AppData to save token
-//         developer.log('FCM token saved: $token');
-//         // Verify the save
-//         final updatedUserData = AppData().currentUser;
-//         developer.log('Updated user data after FCM save: $updatedUserData');
-//         if (updatedUserData?['fcmTokens']?.contains(token) == true) {
-//           ScaffoldMessenger.of(context).showSnackBar(
-//             SnackBar(content: Text('FCM token updated successfully')),
-//           );
-//         } else {
-//           developer.log('Error: FCM token not found in fcmTokens array');
-//           ScaffoldMessenger.of(context).showSnackBar(
-//             SnackBar(content: Text('Failed to save FCM token locally')),
-//           );
-//         }
-//       } else {
-//         developer.log('Failed to retrieve FCM token');
-//         ScaffoldMessenger.of(context).showSnackBar(
-//           SnackBar(content: Text('Failed to retrieve FCM token')),
-//         );
-//       }
-//     } catch (e) {
-//       developer.log('Error updating FCM token: $e');
-//       ScaffoldMessenger.of(context).showSnackBar(
-//         SnackBar(content: Text('Error updating FCM token: $e')),
-//       );
-//     }
-//   }
+      if (response.statusCode == 200) {
+        final jsonData = jsonDecode(response.body);
+        final List<dynamic> notificationData = jsonData['data']['notifications'];
+        setState(() {
+          notifications = notificationData
+              .map((json) => NotificationModel.fromJson(json))
+              .toList();
+          nextCursor = jsonData['data']['nextCursor'];
+          hasMore = jsonData['data']['hasMore'];
+        });
+      } else {
+        throw Exception('Failed to fetch notifications: ${response.statusCode}');
+      }
+    } catch (e) {
+      _showErrorSnackbar('Error fetching notifications: $e');
+    } finally {
+      setState(() => isLoading = false);
+    }
+  }
 
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       appBar: AppBar(
-//         title: const Text('Notifications'),
-//         actions: [
-//           Stack(
-//             children: [
-//               IconButton(
-//                 icon: const Icon(Icons.notifications),
-//                 onPressed: () {
-//                   Navigator.push(
-//                     context,
-//                     MaterialPageRoute(
-//                       builder: (context) => NotificationListScreen(
-//                         notifications: _notifications,
-//                       ),
-//                     ),
-//                   );
-//                 },
-//               ),
-//               if (_unreadCount > 0)
-//                 Positioned(
-//                   right: 8,
-//                   top: 8,
-//                   child: Container(
-//                     padding: const EdgeInsets.all(2),
-//                     decoration: BoxDecoration(
-//                       color: Colors.red,
-//                       borderRadius: BorderRadius.circular(10),
-//                     ),
-//                     constraints: const BoxConstraints(
-//                       minWidth: 16,
-//                       minHeight: 16,
-//                     ),
-//                     child: Text(
-//                       '$_unreadCount',
-//                       style: const TextStyle(
-//                         color: Colors.white,
-//                         fontSize: 10,
-//                       ),
-//                       textAlign: TextAlign.center,
-//                     ),
-//                   ),
-//                 ),
-//             ],
-//           ),
-//         ],
-//       ),
-//       body: _isLoading
-//           ? const Center(child: CircularProgressIndicator())
-//           : RefreshIndicator(
-//               onRefresh: _loadNotifications,
-//               child: ListView(
-//                 padding: const EdgeInsets.all(16),
-//                 children: [
-//                   const Text(
-//                     'Welcome to FCM Notification App',
-//                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-//                   ),
-//                   const SizedBox(height: 20),
-//                   ElevatedButton(
-//                     onPressed: _updateFCMToken,
-//                     child: const Text('Update FCM Token'),
-//                   ),
-//                   const SizedBox(height: 20),
-//                   const Text(
-//                     'Recent Notifications:',
-//                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-//                   ),
-//                   ..._notifications.take(3).map((notification) => ListTile(
-//                         title: Text(notification.content),
-//                         subtitle: Text(
-//                           'Type: ${notification.type} • ${notification.createdAt}',
-//                         ),
-//                         onTap: () {
-//                           Navigator.push(
-//                             context,
-//                             MaterialPageRoute(
-//                               builder: (context) => NotificationScreen(
-//                                 notification: RemoteMessage(
-//                                   data: {
-//                                     'type': notification.type,
-//                                     'content': notification.content,
-//                                     'click_action': 'FLUTTER_NOTIFICATION_CLICK',
-//                                   },
-//                                 ),
-//                               ),
-//                             ),
-//                           );
-//                         },
-//                       )),
-//                 ],
-//               ),
-//             ),
-//       floatingActionButton: FloatingActionButton(
-//         onPressed: _loadNotifications,
-//         child: const Icon(Icons.refresh),
-//       ),
-//     );
-//   }
-// }
+  Future<void> fetchMoreNotifications() async {
+    if (isLoadingMore || !hasMore || nextCursor == null) return;
+    
+    setState(() => isLoadingMore = true);
+    try {
+      final token = AppData().authToken;
+      if (token == null) throw Exception('No authentication token found');
 
-// class NotificationListScreen extends StatelessWidget {
-//   final List<NotificationModel> notifications;
+      final url = Uri.parse(
+          'http://182.93.94.210:3064/api/v1/notifications?cursor=$nextCursor');
+      final response = await http.get(
+        url,
+        headers: {'Authorization': 'Bearer $token'},
+      );
 
-//   const NotificationListScreen({super.key, required this.notifications});
+      if (response.statusCode == 200) {
+        final jsonData = jsonDecode(response.body);
+        final List<dynamic> notificationData = jsonData['data']['notifications'];
+        setState(() {
+          notifications.addAll(notificationData
+              .map((json) => NotificationModel.fromJson(json))
+              .toList());
+          nextCursor = jsonData['data']['nextCursor'];
+          hasMore = jsonData['data']['hasMore'];
+        });
+      } else {
+        throw Exception('Failed to fetch more notifications: ${response.statusCode}');
+      }
+    } catch (e) {
+      _showErrorSnackbar('Error fetching more notifications: $e');
+    } finally {
+      setState(() => isLoadingMore = false);
+    }
+  }
 
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       appBar: AppBar(title: const Text('All Notifications')),
-//       body: ListView.builder(
-//         itemCount: notifications.length,
-//         itemBuilder: (context, index) {
-//           final notification = notifications[index];
-//           return ListTile(
-//             title: Text(notification.content),
-//             subtitle: Text(
-//               'From: ${notification.sender?.email ?? 'Unknown'} • ${notification.createdAt}',
-//             ),
-//             trailing: notification.read ? null : const Icon(Icons.brightness_1, size: 12, color: Colors.blue),
-//             onTap: () {
-//               Navigator.push(
-//                 context,
-//                 MaterialPageRoute(
-//                   builder: (context) => NotificationScreen(
-//                     notification: RemoteMessage(
-//                       data: {
-//                         'type': notification.type,
-//                         'content': notification.content,
-//                         'click_action': 'FLUTTER_NOTIFICATION_CLICK',
-//                       },
-//                     ),
-//                   ),
-//                 ),
-//               );
-//             },
-//           );
-//         },
-//       ),
-//     );
-//   }
-// }
+  Future<void> markAsRead(String notificationId) async {
+    try {
+      final token = AppData().authToken;
+      if (token == null) throw Exception('No authentication token found');
 
-// class NotificationModel {
-//   final String id;
-//   final String type;
-//   final String content;
-//   final bool read;
-//   final String createdAt;
-//   final Sender? sender;
+      final response = await http.post(
+        Uri.parse('http://182.93.94.210:3064/api/v1/notifications/mark-read'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({'notificationIds': [notificationId]}),
+      );
 
-//   NotificationModel({
-//     required this.id,
-//     required this.type,
-//     required this.content,
-//     required this.read,
-//     required this.createdAt,
-//     this.sender,
-//   });
+      if (response.statusCode == 200) {
+        setState(() {
+          final index = notifications.indexWhere((n) => n.id == notificationId);
+          if (index != -1) {
+            notifications[index] = notifications[index].copyWith(read: true);
+          }
+        });
+      } else {
+        throw Exception('Failed to mark notification as read: ${response.statusCode}');
+      }
+    } catch (e) {
+      _showErrorSnackbar('Error marking notification as read: $e');
+    }
+  }
 
-//   factory NotificationModel.fromJson(Map<String, dynamic> json) {
-//     return NotificationModel(
-//       id: json['_id'],
-//       type: json['type'],
-//       content: json['content'],
-//       read: json['read'] ?? false,
-//       createdAt: json['createdAt'],
-//       sender: json['sender'] != null ? Sender.fromJson(json['sender']) : null,
-//     );
-//   }
-// }
+  Future<void> markAllAsRead() async {
+    try {
+      final token = AppData().authToken;
+      if (token == null) throw Exception('No authentication token found');
 
-// class Sender {
-//   final String id;
-//   final String email;
-//   final String? name;
-//   final String? picture;
+      final response = await http.post(
+        Uri.parse('http://182.93.94.210:3064/api/v1/notifications/mark-all-read'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
 
-//   Sender({
-//     required this.id,
-//     required this.email,
-//     this.name,
-//     this.picture,
-//   });
+      if (response.statusCode == 200) {
+        final jsonData = jsonDecode(response.body);
+        final modifiedCount = jsonData['data']['modifiedCount'] ?? 0;
+        
+        if (modifiedCount > 0) {
+          setState(() {
+            notifications = notifications.map((n) => n.copyWith(read: true)).toList();
+          });
+          _showSuccessSnackbar('All notifications marked as read');
+        } else {
+          _showInfoSnackbar('No unread notifications to mark');
+        }
+      } else {
+        throw Exception('Failed to mark all notifications as read: ${response.statusCode}');
+      }
+    } catch (e) {
+      _showErrorSnackbar('Error marking all notifications as read: $e');
+    }
+  }
 
-//   factory Sender.fromJson(Map<String, dynamic> json) {
-//     return Sender(
-//       id: json['_id'],
-//       email: json['email'],
-//       name: json['name'],
-//       picture: json['picture'],
-//     );
-//   }
-// }
+  Future<void> deleteNotification(String notificationId) async {
+    try {
+      final token = AppData().authToken;
+      if (token == null) throw Exception('No authentication token found');
 
-// class FCMService {
-//   static final FlutterLocalNotificationsPlugin _notificationsPlugin =
-//       FlutterLocalNotificationsPlugin();
+      final response = await http.delete(
+        Uri.parse('http://182.93.94.210:3064/api/v1/notifications/$notificationId'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
 
-//   static Future<void> initialize() async {
-//     await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
-//       alert: true,
-//       badge: true,
-//       sound: true,
-//     );
+      if (response.statusCode == 200) {
+        setState(() {
+          notifications.removeWhere((n) => n.id == notificationId);
+        });
+        _showSuccessSnackbar('Notification deleted');
+      } else {
+        throw Exception('Failed to delete notification: ${response.statusCode}');
+      }
+    } catch (e) {
+      _showErrorSnackbar('Error deleting notification: $e');
+    }
+  }
 
-//     await FirebaseMessaging.instance.requestPermission(
-//       alert: true,
-//       announcement: false,
-//       badge: true,
-//       carPlay: false,
-//       criticalAlert: false,
-//       provisional: false,
-//       sound: true,
-//     );
+  Future<void> deleteAllNotifications() async {
+    if (notifications.isEmpty) return;
+    
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete All Notifications'),
+        content: const Text('Are you sure you want to delete all notifications? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete All', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
 
-//     const AndroidInitializationSettings initializationSettingsAndroid =
-//         AndroidInitializationSettings('notification_icon');
+    if (confirmed != true) return;
 
-//     final DarwinInitializationSettings initializationSettingsIOS =
-//         DarwinInitializationSettings(
-//       requestAlertPermission: true,
-//       requestBadgePermission: true,
-//       requestSoundPermission: true,
-//       onDidReceiveLocalNotification: (id, title, body, payload) async {},
-//     );
+    setState(() => isDeletingAll = true);
+    try {
+      final token = AppData().authToken;
+      if (token == null) throw Exception('No authentication token found');
 
-//     final InitializationSettings initializationSettings =
-//         InitializationSettings(
-//       android: initializationSettingsAndroid,
-//       iOS: initializationSettingsIOS,
-//     );
+      final response = await http.delete(
+        Uri.parse('http://182.93.94.210:3064/api/v1/notifications'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
 
-//     await _notificationsPlugin.initialize(
-//       initializationSettings,
-//       onDidReceiveNotificationResponse: (details) {
-//         if (details.payload != null) {
-//           final data = json.decode(details.payload!);
-//           final message = RemoteMessage(data: Map<String, dynamic>.from(data));
-//           _handleNotificationTap(message);
-//         }
-//       },
-//     );
+      if (response.statusCode == 200) {
+        setState(() => notifications.clear());
+        _showSuccessSnackbar('All notifications deleted');
+      } else {
+        throw Exception('Failed to delete all notifications: ${response.statusCode}');
+      }
+    } catch (e) {
+      _showErrorSnackbar('Error deleting all notifications: $e');
+    } finally {
+      setState(() => isDeletingAll = false);
+    }
+  }
 
-//     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-//       showNotification(message);
-//     });
+  void _showErrorSnackbar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
 
-//     RemoteMessage? initialMessage =
-//         await FirebaseMessaging.instance.getInitialMessage();
-//     if (initialMessage != null) {
-//       _handleNotificationTap(initialMessage);
-//     }
+  void _showSuccessSnackbar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
 
-//     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-//       _handleNotificationTap(message);
-//     });
+  void _showInfoSnackbar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
 
-//     // Handle token refresh
-//     FirebaseMessaging.instance.onTokenRefresh.listen((token) async {
-//       await AppData().saveFcmToken(token);
-//       developer.log('FCM token refreshed and saved: $token');
-//       final updatedUserData = AppData().currentUser;
-//       developer.log('User data after token refresh: $updatedUserData');
-//     });
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          'Notifications',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 24,
+            color: Colors.white,
+          ),
+        ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => Homepage())),
+        ),
+        backgroundColor: Colors.deepOrange,
+        elevation: 0,
+        actions: [
+          if (notifications.isNotEmpty) ...[
+            IconButton(
+              icon: const Icon(Icons.check_circle, color: Colors.white),
+              onPressed: markAllAsRead,
+              tooltip: 'Mark all as read',
+            ),
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert, color: Colors.white),
+              onSelected: (value) {
+                if (value == 'delete_all') {
+                  deleteAllNotifications();
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'delete_all',
+                  child: Text('Delete all notifications'),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+      body: _buildNotificationList(),
+    );
+  }
 
-//     // Update FCM token on app start
-//     await _updateFCMToken();
-//   }
+  Widget _buildNotificationList() {
+    if (isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
-//   static Future<void> _updateFCMToken() async {
-//     try {
-//       final token = await FirebaseMessaging.instance.getToken();
-//       if (token != null) {
-//         await AppData().saveFcmToken(token);
-//         developer.log('FCM token saved: $token');
-//         final updatedUserData = AppData().currentUser;
-//         developer.log('Updated user data after FCM save: $updatedUserData');
-//       } else {
-//         developer.log('Failed to retrieve FCM token');
-//       }
-//     } catch (e) {
-//       developer.log('Error updating FCM token: $e');
-//     }
-//   }
+    if (notifications.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.notifications_off, size: 64, color: Colors.grey),
+            const SizedBox(height: 16),
+            const Text(
+              'No notifications',
+              style: TextStyle(fontSize: 18, color: Colors.grey),
+            ),
+            TextButton(
+              onPressed: fetchNotifications,
+              child: const Text('Refresh'),
+            ),
+          ],
+        ),
+      );
+    }
 
-//   static Future<void> showNotification(RemoteMessage message) async {
-//     final notification = message.notification;
-//     final android = message.notification?.android;
-//     final data = message.data;
+    return RefreshIndicator(
+      onRefresh: fetchNotifications,
+      child: ListView.separated(
+        controller: _scrollController,
+        physics: const AlwaysScrollableScrollPhysics(),
+        itemCount: notifications.length + (hasMore ? 1 : 0),
+        separatorBuilder: (context, index) => const Divider(height: 1),
+        itemBuilder: (context, index) {
+          if (index == notifications.length) {
+            return _buildLoadMoreIndicator();
+          }
+          return _buildNotificationItem(notifications[index]);
+        },
+      ),
+    );
+  }
 
-//     const AndroidNotificationChannel channel = AndroidNotificationChannel(
-//       'default',
-//       'Default Channel',
-//       description: 'This channel is used for important notifications.',
-//       importance: Importance.high,
-//       playSound: true,
-//       sound: RawResourceAndroidNotificationSound('notification'),
-//     );
+  Widget _buildLoadMoreIndicator() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Center(
+        child: isLoadingMore
+            ? const CircularProgressIndicator()
+            : TextButton(
+                onPressed: fetchMoreNotifications,
+                child: const Text('Load more notifications'),
+              ),
+      ),
+    );
+  }
 
-//     await _notificationsPlugin
-//         .resolvePlatformSpecificImplementation<
-//             AndroidFlutterLocalNotificationsPlugin>()
-//         ?.createNotificationChannel(channel);
+  Widget _buildNotificationItem(NotificationModel notification) {
+    return Dismissible(
+      key: Key(notification.id),
+      background: Container(
+        color: Colors.red,
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 16),
+        child: const Icon(Icons.delete, color: Colors.white),
+      ),
+      direction: DismissDirection.endToStart,
+      confirmDismiss: (direction) async {
+        return await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Delete Notification'),
+            content: const Text('Are you sure you want to delete this notification?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Delete', style: TextStyle(color: Colors.red)),
+              ),
+            ],
+          ),
+        );
+      },
+      onDismissed: (_) => deleteNotification(notification.id),
+      child: InkWell(
+        onTap: () {
+          if (!notification.read) {
+            markAsRead(notification.id);
+          }
+          _navigateToNotificationDetails(notification);
+        },
+        child: Container(
+          color: notification.read ? Colors.white : Colors.blue[50],
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildNotificationIcon(notification),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildNotificationContent(notification),
+                    _buildNotificationMeta(notification),
+                  ],
+                ),
+              ),
+              _buildUnreadIndicator(notification),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-//     AndroidNotificationDetails androidNotificationDetails =
-//         AndroidNotificationDetails(
-//       channel.id,
-//       channel.name,
-//       channelDescription: channel.description,
-//       importance: Importance.high,
-//       priority: Priority.high,
-//       playSound: true,
-//       sound: channel.sound,
-//       icon: android?.smallIcon ?? 'notification_icon',
-//       color: const Color(0xFF4A90E2),
-//     );
+  Widget _buildNotificationIcon(NotificationModel notification) {
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: _getNotificationColor(notification.type),
+      ),
+      child: Icon(
+        _getNotificationIcon(notification.type),
+        color: Colors.white,
+        size: 24,
+      ),
+    );
+  }
 
-//     DarwinNotificationDetails iosNotificationDetails =
-//         const DarwinNotificationDetails(
-//       presentAlert: true,
-//       presentBadge: true,
-//       presentSound: true,
-//       sound: 'default',
-//     );
+  Widget _buildNotificationContent(NotificationModel notification) {
+    return RichText(
+      text: TextSpan(
+        style: TextStyle(
+          fontSize: 16,
+          color: Colors.black,
+          fontWeight: notification.read ? FontWeight.normal : FontWeight.bold,
+        ),
+        children: [
+          if (notification.sender?.name != null)
+            TextSpan(
+              text: '${notification.sender?.name} ',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          TextSpan(text: notification.content),
+        ],
+      ),
+    );
+  }
 
-//     NotificationDetails notificationDetails = NotificationDetails(
-//       android: androidNotificationDetails,
-//       iOS: iosNotificationDetails,
-//     );
+  Widget _buildNotificationMeta(NotificationModel notification) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Row(
+          children: [
+            Text(
+              DateFormat('MMM d, yyyy • HH:mm').format(DateTime.parse(notification.createdAt)),
+              style: const TextStyle(fontSize: 8, color: Colors.grey),
+            ),
+             if (notification.sender?.email != null) ...[
+                          const Text(' • ', style: TextStyle(color: Colors.grey)),
+                          Text(
+            notification.sender!.email!,
+            style: const TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                        ],
+           
+          ],
+        ),
+      ),
+    );
+  }
 
-//     await _notificationsPlugin.show(
-//       DateTime.now().millisecondsSinceEpoch ~/ 1000,
-//       notification?.title ?? 'New Notification',
-//       notification?.body ?? data['content'] ?? 'You have a new notification',
-//       notificationDetails,
-//       payload: json.encode(message.data),
-//     );
-//   }
+  Widget _buildUnreadIndicator(NotificationModel notification) {
+    return !notification.read
+        ? Container(
+            width: 8,
+            height: 8,
+            margin: const EdgeInsets.only(left: 8),
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.blue,
+            ),
+          )
+        : const SizedBox(width: 8);
+  }
 
-//   static void _handleNotificationTap(RemoteMessage message) {
-//     developer.log('Notification tapped with data: ${message.data}');
-//     if (message.data['type'] == 'message') {
-//       // Navigate to messages screen
-//     } else if (message.data['type'] == 'content') {
-//       // Navigate to content screen
-//     }
-//   }
-// }
+  void _navigateToNotificationDetails(NotificationModel notification) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => NotificationDetailScreen(
+          notification: RemoteMessage(
+            data: {
+              'type': notification.type,
+              'content': notification.content,
+              'sender': notification.sender?.name ?? 'Unknown',
+              'createdAt': notification.createdAt,
+            },
+          ),
+        ),
+      ),
+    );
+  }
 
-// class NotificationScreen extends StatelessWidget {
-//   final RemoteMessage notification;
+  IconData _getNotificationIcon(String type) {
+    switch (type.toLowerCase()) {
+      case 'message':
+        return Icons.message;
+      case 'comment':
+        return Icons.comment;
+      case 'like':
+        return Icons.favorite;
+      case 'friend_request':
+        return Icons.person_add;
+      case 'mention':
+        return Icons.alternate_email;
+      default:
+        return Icons.notifications;
+    }
+  }
 
-//   const NotificationScreen({super.key, required this.notification});
+  Color _getNotificationColor(String type) {
+    switch (type.toLowerCase()) {
+      case 'message':
+        return Colors.blue;
+      case 'comment':
+        return Colors.green;
+      case 'like':
+        return Colors.red;
+      case 'friend_request':
+        return Colors.purple;
+      case 'mention':
+        return Colors.orange;
+      default:
+        return Colors.deepOrange;
+    }
+  }
+}
 
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       appBar: AppBar(title: const Text('Notification Details')),
-//       body: Padding(
-//         padding: const EdgeInsets.all(16.0),
-//         child: Column(
-//           crossAxisAlignment: CrossAxisAlignment.start,
-//           children: [
-//             Text(
-//               notification.notification?.title ?? 'Notification',
-//               style: Theme.of(context).textTheme.headlineSmall,
-//             ),
-//             const SizedBox(height: 16),
-//             Text(
-//               notification.notification?.body ??
-//                   notification.data['content'] ??
-//                   'No content available',
-//               style: Theme.of(context).textTheme.bodyLarge,
-//             ),
-//             const SizedBox(height: 16),
-//             const Text('Additional Data:', style: TextStyle(fontWeight: FontWeight.bold)),
-//             ...notification.data.entries.map((entry) => Text('${entry.key}: ${entry.value}')),
-//           ],
-//         ),
-//       ),
-//     );
-//   }
-// }
+class NotificationDetailScreen extends StatelessWidget {
+  final RemoteMessage notification;
+
+  const NotificationDetailScreen({super.key, required this.notification});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          'Notification Details',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.deepOrange,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildNotificationHeader(),
+            const SizedBox(height: 24),
+            _buildNotificationContent(),
+            if (notification.data.isNotEmpty) ...[
+              const SizedBox(height: 24),
+              _buildAdditionalData(),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNotificationHeader() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: _getNotificationColor(notification.data['type'] ?? ''),
+          ),
+          child: Icon(
+            _getNotificationIcon(notification.data['type'] ?? ''),
+            color: Colors.white,
+            size: 28,
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                notification.data['type']?.toString().toUpperCase() ?? 'NOTIFICATION',
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Colors.deepOrange,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'From: ${notification.data['sender'] ?? 'Unknown'}',
+                style: const TextStyle(fontSize: 16, color: Colors.grey),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                DateFormat('MMMM d, yyyy • HH:mm').format(
+                  DateTime.parse(notification.data['createdAt'] ?? DateTime.now().toString()),
+                ),
+                style: const TextStyle(fontSize: 14, color: Colors.grey),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNotificationContent() {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Text(
+          notification.data['content'] ?? 'No content available',
+          style: const TextStyle(fontSize: 16),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAdditionalData() {
+    final additionalData = notification.data.entries
+        .where((entry) => !['type', 'content', 'sender', 'createdAt'].contains(entry.key))
+        .toList();
+
+    if (additionalData.isEmpty) return const SizedBox();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Additional Information',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: additionalData
+                  .map((entry) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${entry.key}: ',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Expanded(
+                              child: Text(
+                                entry.value.toString(),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ))
+                  .toList(),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  IconData _getNotificationIcon(String type) {
+    switch (type.toLowerCase()) {
+      case 'message':
+        return Icons.message;
+      case 'comment':
+        return Icons.comment;
+      case 'like':
+        return Icons.favorite;
+      case 'friend_request':
+        return Icons.person_add;
+      case 'mention':
+        return Icons.alternate_email;
+      default:
+        return Icons.notifications;
+    }
+  }
+
+  Color _getNotificationColor(String type) {
+    switch (type.toLowerCase()) {
+      case 'message':
+        return Colors.blue;
+      case 'comment':
+        return Colors.green;
+      case 'like':
+        return Colors.red;
+      case 'friend_request':
+        return Colors.purple;
+      case 'mention':
+        return Colors.orange;
+      default:
+        return Colors.deepOrange;
+    }
+  }
+}
+
+class NotificationModel {
+  final String id;
+  final String type;
+  final String content;
+  final bool read;
+  final String createdAt;
+  final Sender? sender;
+
+  NotificationModel({
+    required this.id,
+    required this.type,
+    required this.content,
+    required this.read,
+    required this.createdAt,
+    this.sender,
+  });
+
+  factory NotificationModel.fromJson(Map<String, dynamic> json) {
+    return NotificationModel(
+      id: json['_id'],
+      type: json['type'],
+      content: json['content'],
+      read: json['read'] ?? false,
+      createdAt: json['createdAt'],
+      sender: json['sender'] != null ? Sender.fromJson(json['sender']) : null,
+    );
+  }
+
+  NotificationModel copyWith({
+    String? id,
+    String? type,
+    String? content,
+    bool? read,
+    String? createdAt,
+    Sender? sender,
+  }) {
+    return NotificationModel(
+      id: id ?? this.id,
+      type: type ?? this.type,
+      content: content ?? this.content,
+      read: read ?? this.read,
+      createdAt: createdAt ?? this.createdAt,
+      sender: sender ?? this.sender,
+    );
+  }
+}
+
+class Sender {
+  final String id;
+  final String email;
+  final String? name;
+  final String? picture;
+
+  Sender({
+    required this.id,
+    required this.email,
+    this.name,
+    this.picture,
+  });
+
+  factory Sender.fromJson(Map<String, dynamic> json) {
+    return Sender(
+      id: json['_id'],
+      email: json['email'],
+      name: json['name'],
+      picture: json['picture'],
+    );
+  }
+}

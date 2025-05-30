@@ -14,7 +14,9 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
-
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    
     <application
         android:label="Innovator"
         android:name="${applicationName}"
@@ -54,7 +56,7 @@
             </intent-filter>
         </service>
 
-        <!-- FIXED: Add tools:replace to resolve conflict -->
+        <!-- Firebase Messaging Receiver -->
         <receiver
             android:name="io.flutter.plugins.firebase.messaging.FlutterFirebaseMessagingReceiver"
             android:exported="false"
@@ -82,6 +84,18 @@
             </intent-filter>
         </receiver>
 
+        <!-- Boot receiver to restart service -->
+        <receiver
+            android:name=".BootReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter android:priority="1000">
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </receiver>
+
         <!-- Meta-data -->
         <meta-data
             android:name="flutterEmbedding"
@@ -102,7 +116,6 @@
             android:name="firebase_messaging_auto_init_enabled"
             android:value="true"/>
 
-        <!-- Default notification color -->
     </application>
 
     <!-- Queries for Process Text -->

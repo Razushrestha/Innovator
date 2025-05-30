@@ -157,7 +157,7 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => NotificationScreen(notification: message),
+            builder: (context) => NotificationDetailScreen(notification: message),
           ),
         );
         _loadNotifications();
@@ -170,7 +170,7 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => NotificationScreen(notification: message),
+            builder: (context) => NotificationDetailScreen(notification: message),
           ),
         );
         _loadNotifications();
@@ -309,7 +309,7 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
                         context,
                         MaterialPageRoute(
                           builder: (_) => ProviderScope(
-                            child: NotificationListScreen(notifications: _notifications),
+                            child: NotificationListScreen(),
                           ),
                         ),
                         (route) => false,

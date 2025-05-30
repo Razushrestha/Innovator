@@ -734,7 +734,7 @@ class _FeedItemState extends State<FeedItem>
       }
 
       final response = await http.post(
-        Uri.parse('http://182.93.94.210:3064/api/v1/content/${widget.content.id}/view'),
+        Uri.parse('http://182.93.94.210:3064/api/v1/content/view/${widget.content.id}'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -744,7 +744,7 @@ class _FeedItemState extends State<FeedItem>
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        if (data['status'] == 200 && data['message'] == 'View recorded') {
+        if (data['status'] == 200 && data['message'] == 'View incremented') {
           developer.log('View recorded for content ID: ${widget.content.id}, Views: ${data['data']['views']}');
           // Optionally, update local state if view count is needed in UI
         } else {
@@ -821,57 +821,128 @@ class _FeedItemState extends State<FeedItem>
   Widget build(BuildContext context) {
     final bool isOwnContent = _isAuthorCurrentUser();
 
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 12.0),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12.0),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(10),
-            blurRadius: 8.0,
-            offset: const Offset(0, 2),
-          ),
-        ],
+    return AnimatedContainer(
+  duration: const Duration(milliseconds: 200),
+  margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 10.0),
+  decoration: BoxDecoration(
+    color: Colors.white,
+    borderRadius: BorderRadius.circular(20.0),
+    boxShadow: [
+      BoxShadow(
+        color: Colors.black.withOpacity(0.08),
+        blurRadius: 20.0,
+        offset: const Offset(0, 4),
+        spreadRadius: 0,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(height: 8.0),
-          Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Row(
-              children: [
-                _buildAuthorAvatar(),
-                const SizedBox(width: 12.0),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder:
-                              (_) => SpecificUserProfilePage(
-                                userId: widget.content.author.id,
-                              ),
-                        ),
-                      );
-                    },
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Text(
+      BoxShadow(
+        color: Colors.black.withOpacity(0.04),
+        blurRadius: 8.0,
+        offset: const Offset(0, 2),
+        spreadRadius: 0,
+      ),
+    ],
+  ),
+  child: ClipRRect(
+    borderRadius: BorderRadius.circular(20.0),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header Section
+        Container(
+          padding: const EdgeInsets.all(16.0),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Colors.white,
+                Colors.grey.shade50,
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: Row(
+            children: [
+              // Enhanced Avatar
+              Hero(
+                tag: 'avatar_${widget.content.author.id}',
+                child: Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.blue.shade400,
+                        Colors.purple.shade400,
+                      ],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.blue.withAlpha(30),
+                        blurRadius: 12.0,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(2.0),
+                    child: _buildAuthorAvatar(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16.0),
+              
+              // Author Info
+              Expanded(
+                child: GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      PageRouteBuilder(
+                        pageBuilder: (context, animation, secondaryAnimation) =>
+                            SpecificUserProfilePage(
+                              userId: widget.content.author.id,
+                            ),
+                        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                          return SlideTransition(
+                            position: animation.drive(
+                              Tween(begin: const Offset(1.0, 0.0), end: Offset.zero),
+                            ),
+                            child: child,
+                          );
+                        },
+                      ),
+                    );
+                  },
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
                               widget.content.author.name,
                               style: const TextStyle(
-                                fontWeight: FontWeight.bold,
+                                fontWeight: FontWeight.w700,
                                 fontSize: 16.0,
+                                color: Color(0xFF1A1A1A),
+                                letterSpacing: -0.3,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (!isOwnContent) ...[
+                            const SizedBox(width: 8.0),
+                            Container(
+                              width: 4.0,
+                              height: 4.0,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade400,
+                                shape: BoxShape.circle,
                               ),
                             ),
-                            VerticalDivider(),
-                            if (!isOwnContent)
-                              FollowButton(
+                            const SizedBox(width: 8.0),
+                            AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              child: FollowButton(
                                 targetUserEmail: widget.content.author.email,
                                 initialFollowStatus: widget.content.isFollowed,
                                 onFollowSuccess: () {
@@ -881,112 +952,175 @@ class _FeedItemState extends State<FeedItem>
                                   widget.onFollowToggled(false);
                                 },
                               ),
+                            ),
                           ],
-                        ),
-                        Row(
-                          children: [
-                            Text(
-                              '${widget.content.type} • ',
+                        ],
+                      ),
+                      const SizedBox(height: 4.0),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8.0,
+                              vertical: 2.0,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _getTypeColor(widget.content.type).withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12.0),
+                            ),
+                            child: Text(
+                              widget.content.type,
                               style: TextStyle(
-                                color: Colors.grey[700],
+                                color: _getTypeColor(widget.content.type),
                                 fontSize: 13.0,
-                                fontWeight: FontWeight.bold,
-                                
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.3,
+                                 fontFamily: 'Segoe UI'
                               ),
                             ),
-                            Text(
-                              '$formattedTimeAgo',
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: 12.0,
-                              ),
+                          ),
+                          const SizedBox(width: 8.0),
+                          Text(
+                            formattedTimeAgo,
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 12.0,
+                              fontWeight: FontWeight.w500,
                             ),
-                          ],
-                        ),
-                      ],
-                    ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
+              ),
 
-                IconButton(
-                  icon: const Icon(Icons.more_vert),
-                  onPressed: () {
+              // Modern Menu Button
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12.0),
+                  onTap: () {
                     if (_isAuthorCurrentUser()) {
                       _showQuickSuggestions(context);
                     } else {
                       _showQuickspecificSuggestions(context);
                     }
                   },
+                  child: Container(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Icon(
+                      Icons.more_horiz_rounded,
+                      color: Colors.grey.shade600,
+                      size: 20.0,
+                    ),
+                  ),
                 ),
-              ],
-            ),
-          ),
-          if (widget.content.status.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16.0,
-                vertical: 8.0,
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final span = TextSpan(
-                        text: widget.content.status,
-                        style: const TextStyle(fontSize: 15.0),
-                      );
-                      final tp = TextPainter(
-                        text: span,
-                        maxLines: _maxLinesCollapsed,
-                        textDirection: TextDirection.ltr,
-                      );
-                      tp.layout(maxWidth: constraints.maxWidth);
-                      final needsExpandCollapse = tp.didExceedMaxLines;
+            ],
+          ),
+        ),
 
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
+        // Content Section
+        if (widget.content.status.isNotEmpty)
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 20.0,
+              vertical: 16.0,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final span = TextSpan(
+                      text: widget.content.status,
+                      style: const TextStyle(fontSize: 15.0),
+                    );
+                    final tp = TextPainter(
+                      text: span,
+                      maxLines: _maxLinesCollapsed,
+                      textDirection: TextDirection.ltr,
+                    );
+                    tp.layout(maxWidth: constraints.maxWidth);
+                    final needsExpandCollapse = tp.didExceedMaxLines;
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        AnimatedSize(
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeInOut,
+                          child: Text(
                             widget.content.status,
-                            style: TextStyle(
-                              fontSize: 16.0,
-                              fontFamily: 'Segoe UI',
-                              letterSpacing: 0.5,
+                            style: const TextStyle(
+                              fontSize: 15.0,
+                              height: 1.5,
+                              color: Color(0xFF2D2D2D),
+                              fontWeight: FontWeight.w400,
+                              letterSpacing: 0.1,
                             ),
                             maxLines: _isExpanded ? null : _maxLinesCollapsed,
-                            overflow:
-                                _isExpanded ? null : TextOverflow.ellipsis,
+                            overflow: _isExpanded ? null : TextOverflow.ellipsis,
                           ),
-                          if (needsExpandCollapse)
-                            GestureDetector(
+                        ),
+                        if (needsExpandCollapse)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8.0),
+                            child: GestureDetector(
                               onTap: () {
                                 setState(() {
                                   _isExpanded = !_isExpanded;
                                 });
                               },
-                              child: Text(
-                                _isExpanded ? 'Show Less' : 'Show More',
-                                style: TextStyle(
-                                  color: Colors.blue,
-                                  fontSize: 14,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12.0,
+                                  vertical: 6.0,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.shade50,
+                                  borderRadius: BorderRadius.circular(16.0),
+                                ),
+                                child: Text(
+                                  _isExpanded ? 'Show Less' : 'Show More',
+                                  style: TextStyle(
+                                    color: Colors.blue.shade700,
+                                    fontSize: 13.0,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ),
                             ),
-                        ],
-                      );
-                    },
-                  ),
-                ],
-              ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+              ],
             ),
-          if (widget.content.files.isNotEmpty) _buildMediaPreview(),
-          Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
+          ),
+
+        // Media Section
+        if (widget.content.files.isNotEmpty)
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16.0),
+              child: _buildMediaPreview(),
+            ),
+          ),
+
+        // Action Buttons Section
+        Container(
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // Like Button
+              _buildActionButton(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     LikeButton(
                       contentId: widget.content.id,
@@ -998,50 +1132,132 @@ class _FeedItemState extends State<FeedItem>
                         player.playlikeSound();
                       },
                     ),
-                    Text('${widget.content.likes}'),
-                  ],
-                ),
-                Row(
-                  children: [
-                    IconButton(
-                      onPressed: () {
-                        setState(() {
-                          _showComments = !_showComments;
-                        });
-                      },
-                      icon: Icon(
-                        _showComments ? Icons.comment : Icons.comment_outlined,
-                        color: _showComments ? Colors.blue : null,
+                    const SizedBox(width: 8.0),
+                    Text(
+                      '${widget.content.likes}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade700,
+                        fontSize: 14.0,
                       ),
                     ),
-                    Text('${widget.content.comments}'),
                   ],
                 ),
-                IconButton(
-                  icon: const Icon(Icons.share_outlined),
-                  onPressed: () {
-                     _showShareOptions(context);
-                  },
+                onTap: () {},
+              ),
+
+              // Comment Button
+              _buildActionButton(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      child: Icon(
+                        _showComments ? Icons.chat_bubble : Icons.chat_bubble_outline,
+                        color: _showComments ? Colors.blue.shade600 : Colors.grey.shade600,
+                        size: 20.0,
+                      ),
+                    ),
+                    const SizedBox(width: 8.0),
+                    Text(
+                      '${widget.content.comments}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: _showComments ? Colors.blue.shade600 : Colors.grey.shade700,
+                        fontSize: 14.0,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-          if (_showComments)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12.0),
-              child: CommentSection(
-                contentId: widget.content.id,
-                onCommentAdded: () {
+                onTap: () {
                   setState(() {
-                    widget.content.comments++;
+                    _showComments = !_showComments;
                   });
                 },
               ),
-            ),
-        ],
-      ),
-    );
+
+              // Share Button
+              _buildActionButton(
+                child: Icon(
+                  Icons.share_outlined,
+                  color: Colors.grey.shade600,
+                  size: 20.0,
+                ),
+                onTap: () {
+                  _showShareOptions(context);
+                },
+              ),
+            ],
+          ),
+        ),
+
+        // Comments Section
+        AnimatedSize(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+          child: _showComments
+              ? Container(
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade50,
+                    borderRadius: const BorderRadius.only(
+                      bottomLeft: Radius.circular(20.0),
+                      bottomRight: Radius.circular(20.0),
+                    ),
+                  ),
+                  padding: const EdgeInsets.all(16.0),
+                  child: CommentSection(
+                    contentId: widget.content.id,
+                    onCommentAdded: () {
+                      setState(() {
+                        widget.content.comments++;
+                      });
+                    },
+                  ),
+                )
+              : const SizedBox.shrink(),
+        ),
+      ],
+    ),
+  ),
+);
   }
+
+  Widget _buildActionButton({
+  required Widget child,
+  required VoidCallback onTap,
+}) {
+  return Material(
+    color: Colors.transparent,
+    child: InkWell(
+      borderRadius: BorderRadius.circular(12.0),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: 12.0,
+          vertical: 8.0,
+        ),
+        child: child,
+      ),
+    ),
+  );
+}
+
+// Helper method for content type colors
+Color _getTypeColor(String type) {
+  switch (type.toLowerCase()) {
+    case 'post':
+      return Colors.blue.shade600;
+    case 'photo':
+      return Colors.green.shade600;
+    case 'video':
+      return Colors.red.shade600;
+    case 'story':
+      return Colors.purple.shade600;
+    default:
+      return Colors.grey.shade600;
+  }
+}
 
 
   void _showShareOptions(BuildContext context) {

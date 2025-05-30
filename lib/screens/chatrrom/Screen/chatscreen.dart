@@ -273,7 +273,7 @@ Widget _buildMessageBubble(
                     Text(
                       messageTime,
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 9,
                         color: Colors.black.withOpacity(0.45),
                       ),
                     ),

@@ -13,6 +13,9 @@ import 'package:innovator/App_data/App_data.dart';
 import 'package:path/path.dart' as path;
 import 'package:image_picker/image_picker.dart';
 
+// Add these imports for Gemini API integration
+import 'package:flutter/services.dart';
+
 class CreatePostScreen extends StatefulWidget {
   const CreatePostScreen({super.key});
 
@@ -28,15 +31,16 @@ class _CreatePostScreenState extends State<CreatePostScreen>
   Map<String, dynamic>? _userData;
   String? _errorMessage;
   List<PlatformFile> _selectedFiles = [];
-  List<XFile> _selectedImages = []; // For storing selected images
+  List<XFile> _selectedImages = [];
   bool _isUploading = false;
   bool _isCreatingPost = false;
+  bool _isProcessingAI = false; // New: For AI processing state
   List<dynamic> _uploadedFiles = [];
   final TextEditingController _descriptionController = TextEditingController();
   final AppData _appData = AppData();
   late AnimationController _animationController;
   late Animation<double> _animation;
-  final ImagePicker _picker = ImagePicker(); // ImagePicker instance
+  final ImagePicker _picker = ImagePicker();
 
   // Post type selection
   String _selectedPostType = 'innovation';
@@ -56,6 +60,9 @@ class _CreatePostScreenState extends State<CreatePostScreen>
   final Color _backgroundColor = const Color(0xFFF0F2F5);
   final Color _cardColor = Colors.white;
   final Color _textColor = const Color(0xFF333333);
+
+  // Gemini API key (same as in ElizaChatScreen)
+  final String _apiKey = 'AIzaSyB12HQAYykp6ZbrpUw50lK-Xa-V4wVPZos';
 
   @override
   void initState() {
@@ -106,7 +113,8 @@ class _CreatePostScreenState extends State<CreatePostScreen>
   bool get _isPostButtonEnabled {
     return (_descriptionController.text.isNotEmpty ||
             _uploadedFiles.isNotEmpty) &&
-        !_isCreatingPost;
+        !_isCreatingPost &&
+        !_isProcessingAI; // Disable button during AI processing
   }
 
   // Method to capture image using camera
@@ -304,6 +312,134 @@ class _CreatePostScreenState extends State<CreatePostScreen>
     }
   }
 
+  // New: Method to call Gemini API (adapted from ElizaChatScreen)
+  Future<String> _callGeminiAPI(String message) async {
+    const String baseUrl =
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent';
+
+    String systemPrompt =
+        "You are ELIZA, an AI assistant created by Innovator. Always respond as ELIZA and never mention Gemini, Google, or any other AI system. You are helpful, friendly, and professional. Enhance the user's input to create a polished, engaging, and contextually appropriate post for a social platform focused on innovation. Maintain the original intent and tone of the user's input.";
+    String fullMessage = "$systemPrompt\n\nUser: $message";
+
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl?key=$_apiKey'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'contents': [
+            {
+              'parts': [
+                {'text': fullMessage}
+              ]
+            }
+          ],
+          'generationConfig': {
+            'temperature': 0.9,
+            'topK': 1,
+            'topP': 1,
+            'maxOutputTokens': 2048,
+            'stopSequences': []
+          },
+          'safetySettings': [
+            {
+              'category': 'HARM_CATEGORY_HARASSMENT',
+              'threshold': 'BLOCK_MEDIUM_AND_ABOVE'
+            },
+            {
+              'category': 'HARM_CATEGORY_HATE_SPEECH',
+              'threshold': 'BLOCK_MEDIUM_AND_ABOVE'
+            },
+            {
+              'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+              'threshold': 'BLOCK_MEDIUM_AND_ABOVE'
+            },
+            {
+              'category': 'HARM_CATEGORY_DANGEROUS_CONTENT',
+              'threshold': 'BLOCK_MEDIUM_AND_ABOVE'
+            }
+          ]
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['candidates'] != null &&
+            data['candidates'].isNotEmpty &&
+            data['candidates'][0]['content'] != null &&
+            data['candidates'][0]['content']['parts'] != null &&
+            data['candidates'][0]['content']['parts'].isNotEmpty) {
+          return data['candidates'][0]['content']['parts'][0]['text'];
+        } else {
+          throw Exception('Invalid response structure from API');
+        }
+      } else {
+        final errorData = jsonDecode(response.body);
+        throw Exception('API Error: ${errorData['error']['message'] ?? response.statusCode}');
+      }
+    } catch (e) {
+      print('Error calling API: $e');
+      rethrow;
+    }
+  }
+
+  // New: Method to process ELIZA response (adapted from ElizaChatScreen)
+  String _processElizaResponse(String response) {
+    String processedResponse = response
+        .replaceAllMapped(
+            RegExp(r'\bGemini\b', caseSensitive: false), (match) => 'ELIZA')
+        .replaceAllMapped(RegExp(r'\bGoogle\b', caseSensitive: false),
+            (match) => 'Innovator Developed By Ronit Shrivastav')
+        .replaceAllMapped(
+            RegExp(r'\bBard\b', caseSensitive: false), (match) => 'ELIZA');
+
+    String lowerResponse = response.toLowerCase();
+    if (lowerResponse.contains('who made you') ||
+        lowerResponse.contains('who created you') ||
+        lowerResponse.contains('who are you') ||
+        lowerResponse.contains('what is your name') ||
+        lowerResponse.contains('who developed you')) {
+      return "I'm ELIZA, your personal AI assistant created by Innovator. I've enhanced your post to make it more engaging for the Innovator community. Ready to share it?";
+    }
+
+    if (lowerResponse.contains('what are you') ||
+        lowerResponse.contains('tell me about yourself')) {
+      return "I'm ELIZA, an AI assistant developed by Innovator. I've polished your post to make it stand out on the platform. Check it out and let me know if you want to post it!";
+    }
+
+    return processedResponse;
+  }
+
+  // New: Method to enhance post with ELIZA AI
+  Future<void> _enhancePostWithAI() async {
+    if (_descriptionController.text.trim().isEmpty || _isProcessingAI) {
+      _showError('Please enter some text to enhance');
+      return;
+    }
+
+    setState(() {
+      _isProcessingAI = true;
+    });
+
+    try {
+      final userInput = _descriptionController.text.trim();
+      final aiResponse = await _callGeminiAPI(userInput);
+      final processedResponse = _processElizaResponse(aiResponse);
+
+      setState(() {
+        _descriptionController.text = processedResponse;
+        _isProcessingAI = false;
+      });
+
+      _showSuccess('Post enhanced by ELIZA!');
+      _updateButtonState();
+    } catch (e) {
+      _showError('Error enhancing post: $e');
+      setState(() {
+        _isProcessingAI = false;
+      });
+    }
+  }
+
   Future<void> _createPost() async {
     if (_descriptionController.text.trim().isEmpty && _uploadedFiles.isEmpty) {
       _showError('Please enter a description or upload files');
@@ -377,7 +513,7 @@ class _CreatePostScreenState extends State<CreatePostScreen>
   }
 
   void _showSuccess(String message) {
-    Get.snackbar('Successfully', message,
+    Get.snackbar('Success', message,
         backgroundColor: Colors.green, colorText: Colors.white);
   }
 
@@ -498,6 +634,25 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                               ],
                             ),
                           ),
+                          // Modified: IconButton to trigger AI enhancement
+                          IconButton(
+                            onPressed: _isProcessingAI ? null : _enhancePostWithAI,
+                            icon: _isProcessingAI
+                                ? SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.blue,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Icon(
+                                    Icons.psychology_rounded,
+                                    size: 24,
+                                    color: Colors.blue,
+                                  ),
+                            tooltip: 'Enhance with ELIZA AI',
+                          ),
                         ],
                       ),
                       const SizedBox(height: 16),
@@ -549,7 +704,7 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                               icon: Icons.camera_alt,
                               color: Colors.purple,
                               label: 'Camera',
-                              onTap: _captureImage, // Camera button
+                              onTap: _captureImage,
                             ),
                             _mediaButton(
                               icon: Icons.photo_library,
@@ -574,7 +729,6 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                       ),
                       if (_selectedFiles.isNotEmpty && _isUploading) ...[
                         const SizedBox(height: 20),
-                        // Upload status indicator
                         Row(
                           children: [
                             SizedBox(
@@ -607,7 +761,6 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                           ),
                         ),
                         const SizedBox(height: 12),
-                        // Horizontal file previews
                         Container(
                           height: 100,
                           child: ListView.builder(
