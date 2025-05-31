@@ -10,6 +10,7 @@ import 'package:innovator/screens/chatrrom/Services/mqtt_services.dart';
 import 'package:innovator/screens/chatrrom/sound/soundplayer.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 class ChatController extends GetxController {
   // Observable variables
@@ -18,7 +19,8 @@ class ChatController extends GetxController {
   final errorMessage = ''.obs;
   final isSendingMessage = false.obs;
   final mqttInitialized = false.obs;
-  final isInitialized = false.obs; // Add this to track initialization
+  final isInitialized = false.obs;
+  final isAppInBackground = false.obs; // Track app state
   
   // Controllers
   final TextEditingController messageController = TextEditingController();
@@ -43,6 +45,18 @@ class ChatController extends GetxController {
   void onInit() {
     super.onInit();
     _initializeNotifications();
+    _setupAppLifecycleListener();
+  }
+
+  // Setup app lifecycle listener to track when app goes to background
+  void _setupAppLifecycleListener() {
+    WidgetsBinding.instance.addObserver(_AppLifecycleObserver(this));
+  }
+
+  // Method to update app background state
+  void updateAppState(bool inBackground) {
+    isAppInBackground.value = inBackground;
+    log('ChatController: App state changed - inBackground: $inBackground');
   }
 
   // Initialize chat with user data
@@ -142,8 +156,65 @@ class ChatController extends GetxController {
         );
   }
 
-  // Show system notification
-  Future<void> _showSystemNotification(String title, String body) async {
+  // Enhanced notification system that works with FCM
+  Future<void> _showChatNotification(String title, String body, Map<String, dynamic> data) async {
+    try {
+      // If app is in background, send FCM notification to ensure it works when app is closed
+      if (isAppInBackground.value) {
+        await _sendFCMNotification(title, body, data);
+      } else {
+        // If app is in foreground, show local notification
+        await _showLocalNotification(title, body, data);
+      }
+    } catch (e) {
+      log('ChatController: Error showing notification: $e');
+    }
+  }
+
+  // Send FCM notification via your backend
+  Future<void> _sendFCMNotification(String title, String body, Map<String, dynamic> data) async {
+    try {
+      final token = AppData().authToken;
+      if (token == null) return;
+
+      const String baseUrl = 'http://182.93.94.210:3064/api/v1';
+      final url = '$baseUrl/send-notification'; // You'll need to create this endpoint
+
+      final payload = {
+        'title': title,
+        'body': body,
+        'data': data,
+        'userId': currentUserId, // To get the FCM token for this user
+        'targetUserId': receiverId, // The user who should receive the notification
+        'type': 'chat_message',
+      };
+
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(payload),
+      );
+
+      if (response.statusCode == 200) {
+        log('ChatController: FCM notification sent successfully');
+      } else {
+        log('ChatController: Failed to send FCM notification: ${response.statusCode}');
+        // Fallback to local notification
+        await _showLocalNotification(title, body, data);
+      }
+    } catch (e) {
+      log('ChatController: Error sending FCM notification: $e');
+      // Fallback to local notification
+      await _showLocalNotification(title, body, data);
+    }
+  }
+
+  // Show local notification (for when app is in foreground)
+  Future<void> _showLocalNotification(String title, String body, Map<String, dynamic> data) async {
     const androidDetails = AndroidNotificationDetails(
       'chat_channel',
       'Chat Notifications',
@@ -151,6 +222,9 @@ class ChatController extends GetxController {
       importance: Importance.max,
       priority: Priority.high,
       showWhen: true,
+      playSound: true,
+      enableVibration: true,
+      icon: '@mipmap/ic_launcher',
     );
     const iosDetails = DarwinNotificationDetails(
       presentAlert: true,
@@ -167,6 +241,7 @@ class ChatController extends GetxController {
       title,
       body,
       notificationDetails,
+      payload: jsonEncode(data),
     );
   }
 
@@ -263,9 +338,16 @@ class ChatController extends GetxController {
     try {
       final notification = jsonDecode(payload);
       log('ChatController: Received notification: $notification');
-      _showSystemNotification(
+      
+      final notificationData = {
+        'type': 'general_notification',
+        'payload': notification,
+      };
+      
+      _showChatNotification(
         notification['title'] ?? 'New Notification',
         notification['content'] ?? 'You have a new notification',
+        notificationData,
       );
     } catch (e) {
       log('ChatController: Error processing notification: $e');
@@ -298,9 +380,19 @@ class ChatController extends GetxController {
         
         // Show notification for messages from receiver
         if (message.senderId == receiverId && !message.read) {
-          _showSystemNotification(
-            'New Message from $receiverName',
+          final notificationData = {
+            'type': 'chat_message',
+            'messageId': message.id,
+            'senderId': message.senderId,
+            'senderName': message.senderName,
+            'receiverId': message.receiverId,
+            'chatId': '${currentUserId}_$receiverId',
+          };
+          
+          await _showChatNotification(
+            'New Message from ${message.senderName}',
             message.content,
+            notificationData,
           );
         }
       }
@@ -501,7 +593,8 @@ class ChatController extends GetxController {
     }
 
     final messageContent = messageController.text.trim();
-  messages.removeWhere((m) => m.id.startsWith('temp_') && m.content == messageContent);
+    // Clean up any existing temporary messages with the same content
+    messages.removeWhere((m) => m.id.startsWith('temp_') && m.content == messageContent);
 
     isSendingMessage.value = true;
     try {
@@ -712,6 +805,9 @@ class ChatController extends GetxController {
   void onClose() {
     log('ChatController: Disposing controller');
     
+    // Remove app lifecycle observer
+    WidgetsBinding.instance.removeObserver(_AppLifecycleObserver(this));
+    
     // Disconnect MQTT
     try {
       _mqttService.disconnect();
@@ -724,5 +820,29 @@ class ChatController extends GetxController {
     scrollController.dispose();
     
     super.onClose();
+  }
+}
+
+// App lifecycle observer to track when app goes to background
+class _AppLifecycleObserver extends WidgetsBindingObserver {
+  final ChatController _controller;
+
+  _AppLifecycleObserver(this._controller);
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    
+    switch (state) {
+      case AppLifecycleState.resumed:
+        _controller.updateAppState(false); // App in foreground
+        break;
+      case AppLifecycleState.paused:
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.detached:
+        _controller.updateAppState(true); // App in background/closed
+        break;
+    }
   }
 }

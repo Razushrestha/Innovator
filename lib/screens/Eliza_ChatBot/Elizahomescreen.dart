@@ -11,12 +11,16 @@ class Message {
   final bool isUser;
   final DateTime timestamp;
   final bool isLoading;
+  final String? messageId;
+  bool isReported;
 
   Message({
     required this.text,
     required this.isUser,
     required this.timestamp,
     this.isLoading = false,
+    this.messageId,
+    this.isReported = false,
   });
 
   Map<String, dynamic> toJson() => {
@@ -24,6 +28,8 @@ class Message {
         'isUser': isUser,
         'timestamp': timestamp.toIso8601String(),
         'isLoading': isLoading,
+        'messageId': messageId,
+        'isReported': isReported,
       };
 
   factory Message.fromJson(Map<String, dynamic> json) => Message(
@@ -31,7 +37,41 @@ class Message {
         isUser: json['isUser'],
         timestamp: DateTime.parse(json['timestamp']),
         isLoading: json['isLoading'] ?? false,
+        messageId: json['messageId'],
+        isReported: json['isReported'] ?? false,
       );
+
+  Message copyWith({
+    String? text,
+    bool? isUser,
+    DateTime? timestamp,
+    bool? isLoading,
+    String? messageId,
+    bool? isReported,
+  }) {
+    return Message(
+      text: text ?? this.text,
+      isUser: isUser ?? this.isUser,
+      timestamp: timestamp ?? this.timestamp,
+      isLoading: isLoading ?? this.isLoading,
+      messageId: messageId ?? this.messageId,
+      isReported: isReported ?? this.isReported,
+    );
+  }
+}
+
+class ReportCategory {
+  final String id;
+  final String title;
+  final String description;
+  final IconData icon;
+
+  const ReportCategory({
+    required this.id,
+    required this.title,
+    required this.description,
+    required this.icon,
+  });
 }
 
 class ElizaChatScreen extends StatefulWidget {
@@ -51,6 +91,46 @@ class _ElizaChatScreenState extends State<ElizaChatScreen> with TickerProviderSt
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late AnimationController _backgroundController;
+
+  // Report categories
+  static const List<ReportCategory> _reportCategories = [
+    ReportCategory(
+      id: 'inappropriate',
+      title: 'Inappropriate Content',
+      description: 'Content that is offensive, vulgar, or inappropriate',
+      icon: Icons.warning_amber_rounded,
+    ),
+    ReportCategory(
+      id: 'harmful',
+      title: 'Harmful Information',
+      description: 'Content that could be dangerous or misleading',
+      icon: Icons.dangerous_rounded,
+    ),
+    ReportCategory(
+      id: 'hate_speech',
+      title: 'Hate Speech',
+      description: 'Content promoting hatred or discrimination',
+      icon: Icons.block_rounded,
+    ),
+    ReportCategory(
+      id: 'spam',
+      title: 'Spam or Repetitive',
+      description: 'Unwanted repetitive or spam content',
+      icon: Icons.repeat_rounded,
+    ),
+    ReportCategory(
+      id: 'misinformation',
+      title: 'Misinformation',
+      description: 'False or misleading information',
+      icon: Icons.fact_check_rounded,
+    ),
+    ReportCategory(
+      id: 'other',
+      title: 'Other',
+      description: 'Other concerns not listed above',
+      icon: Icons.more_horiz_rounded,
+    ),
+  ];
 
   @override
   void initState() {
@@ -77,12 +157,18 @@ class _ElizaChatScreenState extends State<ElizaChatScreen> with TickerProviderSt
         text: "Hello! I'm ELIZA, your personal AI assistant created by Innovator. I'm here to help you with anything you need. How can I assist you today?",
         isUser: false,
         timestamp: DateTime.now(),
+        messageId: _generateMessageId(),
       ));
       _saveMessages();
     }
 
     // Start animation
     _animationController.forward();
+  }
+
+  String _generateMessageId() {
+    return DateTime.now().millisecondsSinceEpoch.toString() +
+           math.Random().nextInt(1000).toString();
   }
 
   @override
@@ -112,6 +198,19 @@ class _ElizaChatScreenState extends State<ElizaChatScreen> with TickerProviderSt
     await prefs.setString('eliza_messages', messagesJson);
   }
 
+  Future<void> _saveReportedContent(String messageId, String category, String? additionalInfo) async {
+    final prefs = await SharedPreferences.getInstance();
+    final reports = prefs.getStringList('reported_content') ?? [];
+    final reportData = {
+      'messageId': messageId,
+      'category': category,
+      'additionalInfo': additionalInfo,
+      'timestamp': DateTime.now().toIso8601String(),
+    };
+    reports.add(jsonEncode(reportData));
+    await prefs.setStringList('reported_content', reports);
+  }
+
   Future<void> _clearMessages() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('eliza_messages');
@@ -121,6 +220,7 @@ class _ElizaChatScreenState extends State<ElizaChatScreen> with TickerProviderSt
         text: "Hello! I'm ELIZA, your personal AI assistant created by Innovator. I'm here to help you with anything you need. How can I assist you today?",
         isUser: false,
         timestamp: DateTime.now(),
+        messageId: _generateMessageId(),
       ));
     });
     await _saveMessages();
@@ -135,6 +235,66 @@ class _ElizaChatScreenState extends State<ElizaChatScreen> with TickerProviderSt
     );
   }
 
+  void _showReportDialog(Message message) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return ReportDialog(
+          message: message,
+          categories: _reportCategories,
+          onReport: (category, additionalInfo) async {
+            await _handleReport(message, category, additionalInfo);
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _handleReport(Message message, String category, String? additionalInfo) async {
+    try {
+      // Save report locally
+      await _saveReportedContent(message.messageId!, category, additionalInfo);
+
+      // Update message status
+      final messageIndex = _messages.indexWhere((m) => m.messageId == message.messageId);
+      if (messageIndex != -1) {
+        setState(() {
+          _messages[messageIndex] = message.copyWith(isReported: true);
+        });
+        await _saveMessages();
+      }
+
+      // Show confirmation
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white, size: 18),
+              const SizedBox(width: 8),
+              Expanded(child: Text('Content reported successfully. Thank you for your feedback.')),
+            ],
+          ),
+          backgroundColor: const Color(0xFF10B981),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+
+      // TODO: Send report to your backend server
+      // await _sendReportToServer(message.messageId!, category, additionalInfo);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to submit report. Please try again.'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    }
+  }
+
   String _processElizaResponse(String response) {
     // Replace any mentions of Gemini with ELIZA
     String processedResponse = response
@@ -144,8 +304,8 @@ class _ElizaChatScreenState extends State<ElizaChatScreen> with TickerProviderSt
 
     // Add ELIZA personality responses for identity questions
     String lowerResponse = response.toLowerCase();
-    if (lowerResponse.contains('who made you') || 
-        lowerResponse.contains('who created you') || 
+    if (lowerResponse.contains('who made you') ||
+        lowerResponse.contains('who created you') ||
         lowerResponse.contains('who are you') ||
         lowerResponse.contains('what is your name') ||
         lowerResponse.contains('who developed you')) {
@@ -170,6 +330,7 @@ class _ElizaChatScreenState extends State<ElizaChatScreen> with TickerProviderSt
         text: userMessage,
         isUser: true,
         timestamp: DateTime.now(),
+        messageId: _generateMessageId(),
       ));
       _isLoading = true;
     });
@@ -186,6 +347,7 @@ class _ElizaChatScreenState extends State<ElizaChatScreen> with TickerProviderSt
           text: processedResponse,
           isUser: false,
           timestamp: DateTime.now(),
+          messageId: _generateMessageId(),
         ));
         _isLoading = false;
       });
@@ -200,6 +362,7 @@ class _ElizaChatScreenState extends State<ElizaChatScreen> with TickerProviderSt
           text: "I apologize, but I'm experiencing some technical difficulties right now. Please check your internet connection and try again. If the problem persists, please contact Innovator support.",
           isUser: false,
           timestamp: DateTime.now(),
+          messageId: _generateMessageId(),
         ));
         _isLoading = false;
       });
@@ -293,6 +456,48 @@ class _ElizaChatScreenState extends State<ElizaChatScreen> with TickerProviderSt
     });
   }
 
+  String _formatTime(DateTime timestamp) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final date = DateTime(timestamp.year, timestamp.month, timestamp.day);
+    final timeFormat = timestamp.hour > 12
+        ? '${timestamp.hour - 12}:${timestamp.minute.toString().padLeft(2, '0')} PM'
+        : '${timestamp.hour}:${timestamp.minute.toString().padLeft(2, '0')} AM';
+
+    if (date == today) {
+      return timeFormat;
+    } else {
+      return '${timestamp.month}/${timestamp.day}/${timestamp.year} $timeFormat';
+    }
+  }
+
+  Widget _buildLoadingIndicator() {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.start,
+        children: [
+          const SizedBox(width: 52), // Align with AI message bubble
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: const SizedBox(
+              width: 40,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6366F1)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
@@ -313,17 +518,17 @@ class _ElizaChatScreenState extends State<ElizaChatScreen> with TickerProviderSt
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: isDarkMode 
-                ? [
-                    const Color(0xFF0F172A),
-                    const Color(0xFF1E293B),
-                    const Color(0xFF334155),
-                  ]
-                : [
-                    const Color(0xFFF8FAFC),
-                    const Color(0xFFE2E8F0),
-                    const Color(0xFFCBD5E1),
-                  ],
+              colors: isDarkMode
+                  ? [
+                      const Color(0xFF0F172A),
+                      const Color(0xFF1E293B),
+                      const Color(0xFF334155),
+                    ]
+                  : [
+                      const Color(0xFFF8FAFC),
+                      const Color(0xFFE2E8F0),
+                      const Color(0xFFCBD5E1),
+                    ],
             ),
           ),
           child: AnimatedBuilder(
@@ -338,9 +543,9 @@ class _ElizaChatScreenState extends State<ElizaChatScreen> with TickerProviderSt
                       child: Container(
                         margin: const EdgeInsets.symmetric(horizontal: 8),
                         decoration: BoxDecoration(
-                          color: isDarkMode 
-                            ? const Color(0xFF1E293B).withOpacity(0.7)
-                            : Colors.white.withOpacity(0.7),
+                          color: isDarkMode
+                              ? const Color(0xFF1E293B).withOpacity(0.7)
+                              : Colors.white.withOpacity(0.7),
                           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
                           boxShadow: [
                             BoxShadow(
@@ -417,8 +622,12 @@ class _ElizaChatScreenState extends State<ElizaChatScreen> with TickerProviderSt
               borderRadius: BorderRadius.circular(24),
               border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
             ),
-            child: IconButton(onPressed: (){Navigator.pop(context);}, icon: Icon(Icons.psychology_rounded))
-            
+            child: IconButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              icon: Icon(Icons.psychology_rounded, color: Colors.white),
+            ),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -536,9 +745,9 @@ class _ElizaChatScreenState extends State<ElizaChatScreen> with TickerProviderSt
                         : null,
                     color: message.isUser
                         ? null
-                        : isDarkMode
-                            ? const Color(0xFF334155)
-                            : const Color(0xFFF1F5F9),
+                        : message.isReported
+                            ? (isDarkMode ? const Color(0xFF7F1D1D) : const Color(0xFFFEE2E2))
+                            : (isDarkMode ? const Color(0xFF334155) : const Color(0xFFF1F5F9)),
                     borderRadius: BorderRadius.circular(24).copyWith(
                       bottomLeft: message.isUser ? const Radius.circular(24) : const Radius.circular(6),
                       bottomRight: message.isUser ? const Radius.circular(6) : const Radius.circular(24),
@@ -550,10 +759,34 @@ class _ElizaChatScreenState extends State<ElizaChatScreen> with TickerProviderSt
                         offset: const Offset(0, 4),
                       ),
                     ],
+                    border: message.isReported
+                        ? Border.all(color: Colors.red.withOpacity(0.3), width: 1)
+                        : null,
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      if (message.isReported) ...[
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.flag_rounded,
+                              size: 16,
+                              color: Colors.red.withOpacity(0.8),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Content Reported',
+                              style: TextStyle(
+                                color: Colors.red.withOpacity(0.8),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                      ],
                       SelectableText(
                         message.text,
                         style: TextStyle(
@@ -598,14 +831,14 @@ class _ElizaChatScreenState extends State<ElizaChatScreen> with TickerProviderSt
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                             decoration: BoxDecoration(
-                              color: isDarkMode 
-                                ? const Color(0xFF475569).withOpacity(0.7)
-                                : const Color(0xFFE2E8F0).withOpacity(0.8),
+                              color: isDarkMode
+                                  ? const Color(0xFF475569).withOpacity(0.7)
+                                  : const Color(0xFFE2E8F0).withOpacity(0.8),
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(
-                                color: isDarkMode 
-                                  ? Colors.white.withOpacity(0.1)
-                                  : Colors.black.withOpacity(0.1),
+                                color: isDarkMode
+                                    ? Colors.white.withOpacity(0.1)
+                                    : Colors.black.withOpacity(0.1),
                               ),
                             ),
                             child: Row(
@@ -631,6 +864,56 @@ class _ElizaChatScreenState extends State<ElizaChatScreen> with TickerProviderSt
                           ),
                         ),
                       ),
+                      const SizedBox(width: 8),
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(20),
+                          onTap: message.isReported ? null : () => _showReportDialog(message),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: message.isReported
+                                  ? Colors.red.withOpacity(0.1)
+                                  : (isDarkMode
+                                      ? const Color(0xFF475569).withOpacity(0.7)
+                                      : const Color(0xFFE2E8F0).withOpacity(0.8)),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: message.isReported
+                                    ? Colors.red.withOpacity(0.3)
+                                    : (isDarkMode
+                                        ? Colors.white.withOpacity(0.1)
+                                        : Colors.black.withOpacity(0.1)),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  message.isReported ? Icons.flag_rounded : Icons.flag_outlined,
+                                  size: 14,
+                                  color: message.isReported
+                                      ? Colors.red
+                                      : (isDarkMode ? Colors.white70 : const Color(0xFF64748B)),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  message.isReported ? 'Reported' : 'Report',
+                                  style: TextStyle(
+                                    color: message.isReported
+                                        ? Colors.red
+                                        : (isDarkMode ? Colors.white70 : const Color(0xFF64748B)),
+                                    fontSize: 12,
+                                    fontFamily: 'Inter',
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -643,15 +926,11 @@ class _ElizaChatScreenState extends State<ElizaChatScreen> with TickerProviderSt
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF06B6D4), Color(0xFF3B82F6)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
+                color: const Color(0xFF6366F1),
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF3B82F6).withOpacity(0.3),
+                    color: const Color(0xFF6366F1).withOpacity(0.3),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -669,181 +948,230 @@ class _ElizaChatScreenState extends State<ElizaChatScreen> with TickerProviderSt
     );
   }
 
-  Widget _buildLoadingIndicator() {
+  Widget _buildInputArea() {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: isDarkMode ? const Color(0xFF1E293B) : Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
       child: Row(
         children: [
+          Expanded(
+            child: TextField(
+              controller: _controller,
+              maxLines: 4,
+              minLines: 1,
+              style: TextStyle(
+                color: isDarkMode ? Colors.white : const Color(0xFF1E293B),
+                fontFamily: 'Inter',
+                fontSize: 16,
+              ),
+              decoration: InputDecoration(
+                hintText: 'Type your message...',
+                hintStyle: TextStyle(
+                  color: isDarkMode ? Colors.grey[500] : const Color(0xFF94A3B8),
+                  fontFamily: 'Inter',
+                ),
+                filled: true,
+                fillColor: isDarkMode
+                    ? const Color(0xFF334155).withOpacity(0.7)
+                    : const Color(0xFFF1F5F9),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(24),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              ),
+              onSubmitted: (_) => _sendMessage(),
+            ),
+          ),
+          const SizedBox(width: 12),
           Container(
-            width: 40,
-            height: 40,
             decoration: BoxDecoration(
               gradient: const LinearGradient(
                 colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF6366F1).withOpacity(0.3),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
+              borderRadius: BorderRadius.circular(24),
             ),
-            child: const Icon(
-              Icons.psychology_rounded,
-              color: Colors.white,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            decoration: BoxDecoration(
-              color: isDarkMode ? const Color(0xFF334155) : const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(24).copyWith(
-                bottomLeft: const Radius.circular(6),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.08),
-                  blurRadius: 15,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildAnimatedDot(0),
-                const SizedBox(width: 6),
-                _buildAnimatedDot(1),
-                const SizedBox(width: 6),
-                _buildAnimatedDot(2),
-              ],
+            child: IconButton(
+              icon: const Icon(Icons.send_rounded, color: Colors.white),
+              onPressed: _sendMessage,
             ),
           ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildAnimatedDot(int index) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0.0, end: 1.0),
-      duration: Duration(milliseconds: 800 + (index * 200)),
-      builder: (context, value, child) {
-        return Transform.scale(
-          scale: 0.4 + 0.6 * (0.5 + 0.5 * math.sin(value * math.pi * 2)),
-          child: Container(
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-              ),
-              borderRadius: BorderRadius.circular(5),
-            ),
-          ),
-        );
-      },
-    );
+class ReportDialog extends StatefulWidget {
+  final Message message;
+  final List<ReportCategory> categories;
+  final Function(String, String?) onReport;
+
+  const ReportDialog({
+    required this.message,
+    required this.categories,
+    required this.onReport,
+  });
+
+  @override
+  _ReportDialogState createState() => _ReportDialogState();
+}
+
+class _ReportDialogState extends State<ReportDialog> {
+  String? _selectedCategory;
+  final TextEditingController _additionalInfoController = TextEditingController();
+
+  @override
+  void dispose() {
+    _additionalInfoController.dispose();
+    super.dispose();
   }
 
-  Widget _buildInputArea() {
+  @override
+  Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      margin: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF1E293B) : Colors.white,
-        borderRadius: BorderRadius.circular(28),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, -5),
-          ),
-        ],
+    return AlertDialog(
+      backgroundColor: isDarkMode ? const Color(0xFF1E293B) : Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Text(
+        'Report Content',
+        style: TextStyle(
+          color: isDarkMode ? Colors.white : const Color(0xFF1E293B),
+          fontFamily: 'Inter',
+          fontWeight: FontWeight.w700,
+        ),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Row(
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: isDarkMode ? const Color(0xFF334155) : const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: TextField(
-                  controller: _controller,
-                  decoration: InputDecoration(
-                    hintText: 'Ask ELIZA anything...',
-                    hintStyle: TextStyle(
-                      color: isDarkMode ? Colors.grey[400] : const Color(0xFF64748B),
-                      fontSize: 16,
-                      fontFamily: 'Inter',
-                      fontWeight: FontWeight.w400,
-                    ),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 16,
-                    ),
-                  ),
-                  style: TextStyle(
-                    color: isDarkMode ? Colors.white : const Color(0xFF1E293B),
-                    fontSize: 16,
-                    fontFamily: 'Inter',
-                  ),
-                  maxLines: null,
-                  textCapitalization: TextCapitalization.sentences,
-                  onSubmitted: (_) => _sendMessage(),
-                ),
+            Text(
+              'Please select a reason for reporting this content:',
+              style: TextStyle(
+                color: isDarkMode ? Colors.white70 : const Color(0xFF64748B),
+                fontFamily: 'Inter',
+                fontSize: 14,
               ),
             ),
-            const SizedBox(width: 8),
-            GestureDetector(
-              onTap: _sendMessage,
-              child: Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(28),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF6366F1).withOpacity(0.4),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
+            const SizedBox(height: 16),
+            ...widget.categories.map((category) {
+              return RadioListTile<String>(
+                title: Row(
+                  children: [
+                    Icon(
+                      category.icon,
+                      size: 20,
+                      color: isDarkMode ? Colors.white70 : const Color(0xFF6366F1),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        category.title,
+                        style: TextStyle(
+                          color: isDarkMode ? Colors.white : const Color(0xFF1E293B),
+                          fontFamily: 'Inter',
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
                   ],
                 ),
-                child: Icon(
-                  _isLoading ? Icons.hourglass_empty_rounded : Icons.send_rounded,
-                  color: Colors.white,
-                  size: 24,
+                subtitle: Text(
+                  category.description,
+                  style: TextStyle(
+                    color: isDarkMode ? Colors.white70 : const Color(0xFF64748B),
+                    fontFamily: 'Inter',
+                    fontSize: 12,
+                  ),
+                ),
+                value: category.id,
+                groupValue: _selectedCategory,
+                onChanged: (value) {
+                  setState(() {
+                    _selectedCategory = value;
+                  });
+                },
+                activeColor: const Color(0xFF6366F1),
+              );
+            }).toList(),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _additionalInfoController,
+              maxLines: 3,
+              style: TextStyle(
+                color: isDarkMode ? Colors.white : const Color(0xFF1E293B),
+                fontFamily: 'Inter',
+              ),
+              decoration: InputDecoration(
+                hintText: 'Additional details (optional)',
+                hintStyle: TextStyle(
+                  color: isDarkMode ? Colors.grey[500] : const Color(0xFF94A3B8),
+                  fontFamily: 'Inter',
+                ),
+                filled: true,
+                fillColor: isDarkMode
+                    ? const Color(0xFF334155).withOpacity(0.7)
+                    : const Color(0xFFF1F5F9),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
                 ),
               ),
             ),
           ],
         ),
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(
+            'Cancel',
+            style: TextStyle(
+              color: isDarkMode ? Colors.white70 : const Color(0xFF64748B),
+              fontFamily: 'Inter',
+            ),
+          ),
+        ),
+        ElevatedButton(
+          onPressed: _selectedCategory == null
+              ? null
+              : () {
+                  widget.onReport(
+                    _selectedCategory!,
+                    _additionalInfoController.text.isEmpty
+                        ? null
+                        : _additionalInfoController.text,
+                  );
+                  Navigator.pop(context);
+                },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF6366F1),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          child: const Text(
+            'Submit Report',
+            style: TextStyle(
+              color: Colors.white,
+              fontFamily: 'Inter',
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
     );
-  }
-
-  String _formatTime(DateTime time) {
-    final hour = time.hour % 12 == 0 ? 12 : time.hour % 12;
-    final minute = time.minute.toString().padLeft(2, '0');
-    final period = time.hour >= 12 ? 'PM' : 'AM';
-    return '$hour:$minute $period';
   }
 }
 
@@ -856,32 +1184,43 @@ class BackgroundPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
+      ..shader = LinearGradient(
+        colors: isDarkMode
+            ? [
+                const Color(0xFF0F172A).withOpacity(0.2),
+                const Color(0xFF1E293B).withOpacity(0.2),
+                const Color(0xFF6366F1).withOpacity(0.1),
+              ]
+            : [
+                const Color(0xFFF8FAFC).withOpacity(0.2),
+                const Color(0xFFE2E8F0).withOpacity(0.2),
+                const Color(0xFFCBD5E1).withOpacity(0.1),
+              ],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        transform: GradientRotation(animationValue * 2 * math.pi),
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+
+    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), paint);
+
+    // Add subtle animated circles
+    final circlePaint = Paint()
+      ..color = isDarkMode
+          ? Colors.white.withOpacity(0.05)
+          : const Color(0xFF6366F1).withOpacity(0.05)
       ..style = PaintingStyle.fill;
 
-    // Create floating orbs
-    for (int i = 0; i < 5; i++) {
-      final double x = size.width * (0.1 + 0.8 * ((i * 0.3 + animationValue) % 1.0));
-      final double y = size.height * (0.1 + 0.8 * ((i * 0.7 + animationValue * 0.5) % 1.0));
-      final double radius = 20 + 30 * math.sin(animationValue * 2 * math.pi + i);
-      
-      paint.shader = RadialGradient(
-        colors: isDarkMode
-          ? [
-              Color(0xFF6366F1).withOpacity(0.1),
-              Color(0xFF8B5CF6).withOpacity(0.05),
-              Colors.transparent,
-            ]
-          : [
-              Color(0xFF6366F1).withOpacity(0.08),
-              Color(0xFF8B5CF6).withOpacity(0.04),
-              Colors.transparent,
-            ],
-      ).createShader(Rect.fromCircle(center: Offset(x, y), radius: radius));
-      
-      canvas.drawCircle(Offset(x, y), radius, paint);
+    for (int i = 0; i < 3; i++) {
+      final offset = Offset(
+        size.width * (0.2 + 0.3 * i + math.sin(animationValue * 2 * math.pi + i) * 0.1),
+        size.height * (0.3 + 0.2 * i + math.cos(animationValue * 2 * math.pi + i) * 0.1),
+      );
+      canvas.drawCircle(offset, 50.0 + 20.0 * i, circlePaint);
     }
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+  bool shouldRepaint(BackgroundPainter oldDelegate) {
+    return oldDelegate.animationValue != animationValue || oldDelegate.isDarkMode != isDarkMode;
+  }
 }

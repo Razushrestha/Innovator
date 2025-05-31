@@ -740,7 +740,7 @@ class _FeedItemState extends State<FeedItem>
           'Accept': 'application/json',
           'authorization': 'Bearer $authToken',
         },
-      ).timeout(const Duration(seconds: 10));
+      ).timeout( Duration(seconds: 100));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -1985,7 +1985,7 @@ void _showShareError(String message) {
                 //     content: Text(
                 //       'Failed to submit report: ${data['message'] ?? 'Error ${response.statusCode}'}',
                 //     ),
-                //     backgroundColor: Colors.red,
+                //     backgroundColor: Colors.,
                 //   ),
                 // );
               }
