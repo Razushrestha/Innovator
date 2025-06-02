@@ -70,9 +70,7 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
     ));
     
     _fetchUserProfile();
-    _requestNotificationPermission();
     _loadNotifications();
-    _setupFCMListeners();
     
     // Start animations
     _slideController.forward();
@@ -89,33 +87,7 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
     super.dispose();
   }
 
-  Future<void> _requestNotificationPermission() async {
-    try {
-      if (await Permission.notification.isDenied) {
-        final status = await Permission.notification.request();
-        developer.log('Notification permission status: $status');
-        if (status.isDenied) {
-          if (await Permission.notification.isPermanentlyDenied) {
-            await openAppSettings();
-          }
-        }
-      }
-
-      NotificationSettings settings = await FirebaseMessaging.instance.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
-      developer.log('FCM permission status: ${settings.authorizationStatus}');
-
-      if (Platform.isAndroid) {
-        developer.log('Running on Android, please ensure battery optimization is disabled for Innovator');
-      }
-    } catch (e) {
-      developer.log('Error requesting notification permission: $e');
-    }
-  }
-
+  
   Future<void> _loadNotifications() async {
     try {
       final response = await http.get(
@@ -144,40 +116,7 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
     }
   }
 
-  void _setupFCMListeners() {
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      developer.log('Foreground message received: ${message.messageId}');
-      FCMService.showNotification(message);
-      _loadNotifications();
-    });
-
-    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      developer.log('Message opened app: ${message.messageId}');
-      if (mounted) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => NotificationDetailScreen(notification: message),
-          ),
-        );
-        _loadNotifications();
-      }
-    });
-
-    FirebaseMessaging.instance.getInitialMessage().then((RemoteMessage? message) {
-      if (message != null && mounted) {
-        developer.log('Initial message: ${message.messageId}');
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => NotificationDetailScreen(notification: message),
-          ),
-        );
-        _loadNotifications();
-      }
-    });
-  }
-
+  
   Future<void> _fetchUserProfile() async {
     try {
       final String? authToken = AppData().authToken;

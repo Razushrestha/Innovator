@@ -40,7 +40,6 @@ class ChatListController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    _initializeNotifications();
     fetchChats();
     initializeMQTT();
     
@@ -57,34 +56,7 @@ class ChatListController extends GetxController {
     super.onClose();
   }
 
-  Future<void> _initializeNotifications() async {
-    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const iosInit = DarwinInitializationSettings();
-    const initSettings = InitializationSettings(android: androidInit, iOS: iosInit);
-    await notificationsPlugin.initialize(initSettings);
-    log('Notifications initialized');
-  }
-
-  Future<void> showNotification(String chatId, String senderName, String message) async {
-    const androidDetails = AndroidNotificationDetails(
-      'chat_channel',
-      'Chat Notifications',
-      channelDescription: 'Notifications for new chat messages',
-      importance: Importance.max,
-      priority: Priority.high,
-      showWhen: true,
-    );
-    const platformDetails = NotificationDetails(android: androidDetails);
-    await notificationsPlugin.show(
-      chatId.hashCode,
-      'New Message from $senderName',
-      message,
-      platformDetails,
-      payload: chatId,
-    );
-    log('Notification shown for chatId: $chatId, sender: $senderName');
-  }
-
+  
   void _onSearchChanged() {
     final query = searchText.value.toLowerCase();
     if (query.isEmpty) {
@@ -283,9 +255,9 @@ class ChatListController extends GetxController {
     _onSearchChanged(); // Update filtered chats
     forceRefreshUI();
     
-    if (!isRead && senderId != AppData().currentUserId) {
-      showNotification(tempChatId, senderName, messageText);
-    }
+    // if (!isRead && senderId != AppData().currentUserId) {
+    //   showNotification(tempChatId, senderName, messageText);
+    // }
   }
 
   void _updateExistingChat(int chatIndex, String senderId, String messageText, 
@@ -303,7 +275,6 @@ class ChatListController extends GetxController {
     if (senderId != AppData().currentUserId && !isRead) {
       unreadMessageCounts[chatId] = (unreadMessageCounts[chatId] ?? 0) + 1;
       newMessageTimestamps[chatId] = DateTime.now().add(const Duration(seconds: 5));
-      showNotification(chatId, senderName, messageText);
     }
     
     // Move chat to top and update

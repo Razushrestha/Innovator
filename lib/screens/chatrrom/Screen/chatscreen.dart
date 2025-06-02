@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -35,6 +36,8 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
     Timer? _debounceTimer;
+      bool _isProcessingSend = false; // Add this flag
+
 
   @override
   Widget build(BuildContext context) {
@@ -372,11 +375,36 @@ Widget _buildMessageBubble(
   }
 
 void _debounceSend(ChatController controller) {
-  if (_debounceTimer?.isActive ?? false) return;
-  _debounceTimer = Timer(const Duration(milliseconds: 500), () {
-    controller.sendMessage();
-  });
-}
+    // Prevent multiple rapid calls
+    if (_isProcessingSend) {
+      log('ChatScreen: Send already in progress, ignoring');
+      return;
+    }
+
+    // Cancel existing timer
+    if (_debounceTimer?.isActive ?? false) {
+      _debounceTimer?.cancel();
+    }
+
+    // Check if message is empty
+    if (controller.messageController.text.trim().isEmpty) {
+      return;
+    }
+
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      if (!_isProcessingSend && controller.messageController.text.trim().isNotEmpty) {
+        _isProcessingSend = true;
+        
+        controller.sendMessage().then((_) {
+          _isProcessingSend = false;
+        }).catchError((error) {
+          _isProcessingSend = false;
+          log('ChatScreen: Error in send message: $error');
+        });
+      }
+    });
+  }
+  
 
   void _handleDeleteConversation(
     BuildContext context,
@@ -559,6 +587,11 @@ void _debounceSend(ChatController controller) {
     Future.delayed(const Duration(milliseconds: 100), () {
       Get.delete<ChatController>(tag: controllerTag, force: true);
     });
+  }
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    super.dispose();
   }
 }
 

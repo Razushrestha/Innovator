@@ -7,7 +7,7 @@ class VideoPlayerManager {
   void initializeController(String contentId, String videoUrl) async {
     if (_controllers.containsKey(contentId)) return;
 
-    final controller = VideoPlayerController.network(videoUrl);
+    final controller = VideoPlayerController.networkUrl(Uri.parse(videoUrl));
     _controllers[contentId] = controller;
     await controller.initialize();
   }

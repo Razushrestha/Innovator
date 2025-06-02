@@ -63,7 +63,7 @@ dependencies:
   mqtt_client: ^10.8.0
   connectivity_plus: ^6.1.4
   audioplayers: ^6.4.0
-  flutter_local_notifications: 17.2.2
+  flutter_local_notifications: ^17.2.2
   badges: ^3.1.2
   carousel_slider: ^5.0.0
   permission_handler: ^12.0.0+1

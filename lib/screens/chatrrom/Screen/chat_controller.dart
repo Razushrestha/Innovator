@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:developer';
 import 'package:flutter/material.dart';
@@ -10,7 +11,6 @@ import 'package:innovator/screens/chatrrom/Services/mqtt_services.dart';
 import 'package:innovator/screens/chatrrom/sound/soundplayer.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 
 class ChatController extends GetxController {
   // Observable variables
@@ -21,6 +21,9 @@ class ChatController extends GetxController {
   final mqttInitialized = false.obs;
   final isInitialized = false.obs;
   final isAppInBackground = false.obs; // Track app state
+
+  final Set<String> _processedMessageIds = <String>{};
+
   
   // Controllers
   final TextEditingController messageController = TextEditingController();
@@ -75,6 +78,9 @@ class ChatController extends GetxController {
       log('ChatController: Already initialized, skipping');
       return;
     }
+
+        _processedMessageIds.clear();
+
 
     this.currentUserId = currentUserId;
     this.currentUserName = currentUserName;
@@ -134,7 +140,7 @@ class ChatController extends GetxController {
   Future<void> _initializeNotifications() async {
     _notificationsPlugin = FlutterLocalNotificationsPlugin();
 
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings = AndroidInitializationSettings('app_icon');
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
@@ -156,94 +162,7 @@ class ChatController extends GetxController {
         );
   }
 
-  // Enhanced notification system that works with FCM
-  Future<void> _showChatNotification(String title, String body, Map<String, dynamic> data) async {
-    try {
-      // If app is in background, send FCM notification to ensure it works when app is closed
-      if (isAppInBackground.value) {
-        await _sendFCMNotification(title, body, data);
-      } else {
-        // If app is in foreground, show local notification
-        await _showLocalNotification(title, body, data);
-      }
-    } catch (e) {
-      log('ChatController: Error showing notification: $e');
-    }
-  }
-
-  // Send FCM notification via your backend
-  Future<void> _sendFCMNotification(String title, String body, Map<String, dynamic> data) async {
-    try {
-      final token = AppData().authToken;
-      if (token == null) return;
-
-      const String baseUrl = 'http://182.93.94.210:3064/api/v1';
-      final url = '$baseUrl/send-notification'; // You'll need to create this endpoint
-
-      final payload = {
-        'title': title,
-        'body': body,
-        'data': data,
-        'userId': currentUserId, // To get the FCM token for this user
-        'targetUserId': receiverId, // The user who should receive the notification
-        'type': 'chat_message',
-      };
-
-      final response = await http.post(
-        Uri.parse(url),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode(payload),
-      );
-
-      if (response.statusCode == 200) {
-        log('ChatController: FCM notification sent successfully');
-      } else {
-        log('ChatController: Failed to send FCM notification: ${response.statusCode}');
-        // Fallback to local notification
-        await _showLocalNotification(title, body, data);
-      }
-    } catch (e) {
-      log('ChatController: Error sending FCM notification: $e');
-      // Fallback to local notification
-      await _showLocalNotification(title, body, data);
-    }
-  }
-
-  // Show local notification (for when app is in foreground)
-  Future<void> _showLocalNotification(String title, String body, Map<String, dynamic> data) async {
-    const androidDetails = AndroidNotificationDetails(
-      'chat_channel',
-      'Chat Notifications',
-      channelDescription: 'Notifications for new chat messages',
-      importance: Importance.max,
-      priority: Priority.high,
-      showWhen: true,
-      playSound: true,
-      enableVibration: true,
-      icon: '@mipmap/ic_launcher',
-    );
-    const iosDetails = DarwinNotificationDetails(
-      presentAlert: true,
-      presentBadge: true,
-      presentSound: true,
-    );
-    const notificationDetails = NotificationDetails(
-      android: androidDetails,
-      iOS: iosDetails,
-    );
-
-    await _notificationsPlugin.show(
-      DateTime.now().millisecondsSinceEpoch % 10000,
-      title,
-      body,
-      notificationDetails,
-      payload: jsonEncode(data),
-    );
-  }
+  
 
   // Setup MQTT connection and subscriptions
   Future<void> validateAndSetupMQTT() async {
@@ -283,9 +202,9 @@ class ChatController extends GetxController {
       });
 
       // Subscribe to notifications
-      _mqttService.subscribe('user/$currentUserId/notifications', (String payload) {
-        _handleNotification(payload);
-      });
+      // _mqttService.subscribe('user/$currentUserId/notifications', (String payload) {
+      //   _handleNotification(payload);
+      // });
 
       mqttInitialized.value = true;
       log('ChatController: MQTT setup completed');
@@ -299,27 +218,68 @@ class ChatController extends GetxController {
   Future<void> _handleChatMessage(String payload) async {
     try {
       log('ChatController: Received MQTT message on chat topic: $payload');
-      final message = ChatMessage.fromJson(jsonDecode(payload));
-      log('ChatController: Parsed message: senderId=${message.senderId}, receiverId=${message.receiverId}');
+      final data = jsonDecode(payload);
       
-      if (_isValidMessage(message)) {
-        await _processIncomingMessage(message);
+      // Handle different message formats
+      ChatMessage? message;
+      if (data.containsKey('message') && data['message'] is Map) {
+        // Message wrapped in 'message' field
+        message = ChatMessage.fromJson(data['message']);
+      } else if (data.containsKey('sender') && data.containsKey('receiver')) {
+        // Direct message format - convert to ChatMessage format
+        message = ChatMessage(
+          id: data['id'] ?? 'msg_${DateTime.now().millisecondsSinceEpoch}',
+          senderId: data['sender']['_id'],
+          senderName: data['sender']['name'] ?? 'Unknown',
+          senderPicture: data['sender']['picture'] ?? '',
+          senderEmail: data['sender']['email'] ?? '',
+          receiverId: data['receiver']['_id'],
+          receiverName: data['receiver']['name'] ?? 'Unknown',
+          receiverPicture: data['receiver']['picture'] ?? '',
+          receiverEmail: data['receiver']['email'] ?? '',
+          content: data['message'],
+          timestamp: DateTime.parse(data['timestamp']),
+          read: data['read'] ?? false,
+          readAt: data['readAt'] != null ? DateTime.parse(data['readAt']) : null,
+        );
+      } else {
+        // Try to parse as direct ChatMessage
+        message = ChatMessage.fromJson(data);
+      }
+      
+      if (message != null) {
+        log('ChatController: Parsed message: senderId=${message.senderId}, receiverId=${message.receiverId}');
+        
+        if (_isValidMessage(message)) {
+          await _processIncomingMessage(message);
+        } else {
+          log('ChatController: Invalid message for current chat, ignoring');
+        }
       }
     } catch (e) {
-      log('ChatController: Error processing MQTT message: $e');
+      log('ChatController: Error processing MQTT chat message: $e');
     }
   }
 
   // Handle user-specific messages
-  Future<void> _handleUserMessage(String payload) async {
+ Future<void> _handleUserMessage(String payload) async {
     try {
       log('ChatController: Received MQTT message on user messages topic: $payload');
       final data = jsonDecode(payload);
       
       if (data['type'] == 'new_message') {
+        // Only process if it's not from the chat topic (to avoid duplicates)
         final message = ChatMessage.fromJson(data['message']);
         if (_isValidMessage(message)) {
-          await _processIncomingMessage(message);
+          // Add a small delay to let chat topic handler process first
+          await Future.delayed(const Duration(milliseconds: 100));
+          
+          // Check if message was already processed by chat topic handler
+          if (!_processedMessageIds.contains(message.id)) {
+            await _processIncomingMessage(message);
+          } else {
+            log('ChatController: Message already processed by chat topic handler, skipping');
+          }
         }
       } else if (data['type'] == 'read_receipt') {
         _handleReadReceipt(data);
@@ -334,25 +294,7 @@ class ChatController extends GetxController {
   }
 
   // Handle notifications
-  void _handleNotification(String payload) {
-    try {
-      final notification = jsonDecode(payload);
-      log('ChatController: Received notification: $notification');
-      
-      final notificationData = {
-        'type': 'general_notification',
-        'payload': notification,
-      };
-      
-      _showChatNotification(
-        notification['title'] ?? 'New Notification',
-        notification['content'] ?? 'You have a new notification',
-        notificationData,
-      );
-    } catch (e) {
-      log('ChatController: Error processing notification: $e');
-    }
-  }
+  
 
   // Validate if message is for current chat
   bool _isValidMessage(ChatMessage message) {
@@ -363,39 +305,43 @@ class ChatController extends GetxController {
   // Process incoming message
   Future<void> _processIncomingMessage(ChatMessage message) async {
     bool isDuplicate = messages.any((m) => m.id == message.id);
+     if (_processedMessageIds.contains(message.id)) {
+      log('ChatController: Skipping duplicate message: ${message.id}');
+      return;
+    }
     if (!isDuplicate) {
       // Check for temporary message to replace
       final tempIndex = messages.indexWhere((m) =>
           m.id.startsWith('temp_') &&
           m.senderId == message.senderId &&
           m.content == message.content &&
-          m.timestamp.difference(message.timestamp).inSeconds.abs() < 10);
+          m.timestamp.difference(message.timestamp).inSeconds.abs() < 30);
       
       if (tempIndex != -1) {
+              final tempMessage = messages[tempIndex];
+
         messages[tempIndex] = message;
         log('ChatController: Replaced temporary message with server message: ${message.id}');
       } else {
+       // Check if this exact message already exists (additional safety)
+      bool messageExists = messages.any((m) => 
+          m.id == message.id || 
+          (m.senderId == message.senderId && 
+           m.receiverId == message.receiverId &&
+           m.content.trim() == message.content.trim() &&
+           m.timestamp.difference(message.timestamp).inSeconds.abs() < 5));
+
+      if (!messageExists) {
         messages.add(message);
         log('ChatController: Added new message to UI: ${message.content}');
         
         // Show notification for messages from receiver
         if (message.senderId == receiverId && !message.read) {
-          final notificationData = {
-            'type': 'chat_message',
-            'messageId': message.id,
-            'senderId': message.senderId,
-            'senderName': message.senderName,
-            'receiverId': message.receiverId,
-            'chatId': '${currentUserId}_$receiverId',
-          };
           
-          await _showChatNotification(
-            'New Message from ${message.senderName}',
-            message.content,
-            notificationData,
-          );
+          
+          
         }
-      }
+     }
       
       // Sort messages by timestamp
       messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
@@ -416,6 +362,7 @@ class ChatController extends GetxController {
       }
     }
   }
+}
 
   // Handle read receipt
   void _handleReadReceipt(Map<String, dynamic> data) {
@@ -594,12 +541,14 @@ class ChatController extends GetxController {
 
     final messageContent = messageController.text.trim();
     // Clean up any existing temporary messages with the same content
-    messages.removeWhere((m) => m.id.startsWith('temp_') && m.content == messageContent);
+    messages.removeWhere((m) => m.id.startsWith('temp_') && m.content.trim() == messageContent);
 
     isSendingMessage.value = true;
+        messageController.clear(); // Clear immediately to prevent double sending
+
     try {
-      final messageContent = messageController.text.trim();
-      messageController.clear();
+     // final messageContent = messageController.text.trim();
+     // messageController.clear();
 
       final tempId = 'temp_${DateTime.now().millisecondsSinceEpoch}_$currentUserId';
       final message = ChatMessage(
@@ -639,15 +588,28 @@ class ChatController extends GetxController {
         },
         'message': messageContent,
         'timestamp': message.timestamp.toIso8601String(),
+                'tempId': tempId, // Include temp ID for better tracking
+
       };
 
       log('ChatController: Sending message to topic: $chatTopic');
       await _mqttService.publish(chatTopic!, payload);
       SoundPlayer().playSound();
+
+      // Set a timeout to remove temporary message if not replaced
+      Timer(const Duration(seconds: 3), () {
+        final stillExists = messages.any((m) => m.id == tempId);
+        if (stillExists) {
+          log('ChatController: Removing unconfirmed temporary message: $tempId');
+          messages.removeWhere((m) => m.id == tempId);
+          _cacheMessages();
+        }
+      });
+
     } catch (e) {
       log('ChatController: Error sending message: $e');
       Get.snackbar('Error', 'Failed to send message. Please try again.');
-      messages.removeWhere((m) => m.id.startsWith('temp_'));
+      messages.removeWhere((m) => m.id.startsWith('temp_') && m.senderId == currentUserId );
       await _cacheMessages();
     } finally {
       isSendingMessage.value = false;
@@ -804,6 +766,8 @@ class ChatController extends GetxController {
   @override
   void onClose() {
     log('ChatController: Disposing controller');
+        _processedMessageIds.clear();
+
     
     // Remove app lifecycle observer
     WidgetsBinding.instance.removeObserver(_AppLifecycleObserver(this));
