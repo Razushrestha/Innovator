@@ -80,6 +80,7 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
       if (response.statusCode == 200) {
         return json.decode(response.body)['data'];
       } else {
+          Image.asset('animation/NoGallery.gif');
         throw Exception('Failed to load profile: ${response.statusCode}');
       }
     } catch (e) {

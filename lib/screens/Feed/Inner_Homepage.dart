@@ -328,7 +328,7 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
         _hasError = true;
         _errorMessage = 'Authentication required. Please login.';
       });
-      Navigator.of(context).pushReplacementNamed('/login');
+      Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => LoginPage()), (route) => false);
       return false;
     }
     return true;
@@ -369,7 +369,7 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
     } else {
       setState(() {
         _hasError = true;
-        _errorMessage = 'Invalid data format received from server';
+        _errorMessage = 'Please Contact To Our Support Team';
       });
     }
   }
@@ -384,7 +384,7 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
         await _loadMoreContent();
       } else {
         await _appData.logout();
-        Navigator.of(context).pushReplacementNamed('/login');
+        Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => LoginPage()), (route) => false);
         setState(() {
           _hasError = true;
           _errorMessage = 'Session expired. Please login again.';
@@ -424,6 +424,7 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
     setState(() {
       _hasError = true;
       _errorMessage = 'Server error: $statusCode';
+      Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => LoginPage()), (route) => false);
     });
   }
 
@@ -431,18 +432,20 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
     setState(() {
       _hasError = true;
 
-      Lottie.asset(
+       //_errorMessage = 'Network error. Please check your connection.';
+    });
+    Lottie.asset(
         'animation/Googlesignup.json',
         height: mq.height * .05,
-      ); //_errorMessage = 'Network error. Please check your connection.';
-    });
+      );
   }
 
   void _handleGenericError(dynamic e) {
     setState(() {
       _hasError = true;
-      _errorMessage = 'Error: ${e.toString()}';
+      //_errorMessage = 'Error: ${e.toString()}';
     });
+    Lottie.asset('animation/No_Internet.json');
   }
 
   Future<void> _refresh() async {
@@ -557,7 +560,7 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
                           print('Error in FAB onPressed: $e');
                           Get.snackbar(
                             'Error',
-                            'Failed to open chat: $e',
+                            'Please Contact to Our Support Team',
                             snackPosition: SnackPosition.BOTTOM,
                           );
                         }
@@ -644,19 +647,19 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              _errorMessage.contains('expired') ||
-                      _errorMessage.contains('Authentication')
-                  ? Icons.warning_amber
-                  : Icons.error_outline,
-              size: 48,
-              color:
-                  _errorMessage.contains('expired') ||
-                          _errorMessage.contains('Authentication')
-                      ? Colors.orange
-                      : Colors.red,
-            ),
-            const SizedBox(height: 16),
+            // Icon(
+            //   _errorMessage.contains('expired') ||
+            //           _errorMessage.contains('Authentication')
+            //       ? Icons.warning_amber
+            //       : Icons.error_outline,
+            //   size: 48,
+            //   color:
+            //       _errorMessage.contains('expired') ||
+            //               _errorMessage.contains('Authentication')
+            //           ? Colors.orange
+            //           : Colors.red,
+            // ),
+            // const SizedBox(height: 16),
             Text(
               _errorMessage,
               textAlign: TextAlign.center,
@@ -673,14 +676,26 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
                 _errorMessage.contains('Authentication'))
               ElevatedButton(
                 onPressed: () {
-                  Navigator.of(context).pushReplacementNamed('/login');
+                  Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => LoginPage()), (route) => false);
                 },
                 child: const Text('Login'),
               )
             else
-              ElevatedButton(
+            SizedBox(
+              //height: 200,
+              width: 500,
+              child: Lottie.asset('animation/No_Internet.json',)),
+            SizedBox(height: 10,),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+        backgroundColor: Colors.deepOrange,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(30),
+        ),
+      ),
                 onPressed: _refresh,
-                child: const Text('Try Again'),
+                label: Icon(Icons.refresh, color: Colors.white,),
               ),
           ],
         ),
@@ -693,6 +708,7 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
+          Lottie.asset('animation/No-Content.json'),
           const Icon(Icons.inbox, size: 48, color: Colors.grey),
           const SizedBox(height: 16),
           const Text('No content available'),
@@ -817,6 +833,7 @@ class _FeedItemState extends State<FeedItem>
           );
         }
       } else if (response.statusCode == 401) {
+        //Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => LoginPage()), (route) => false);
         Get.snackbar(
           'Error',
           'Session expired. Please login again.',
@@ -1735,45 +1752,75 @@ class _FeedItemState extends State<FeedItem>
   }
 
   void _showQuickspecificSuggestions(BuildContext context) {
-    final RenderBox button = context.findRenderObject() as RenderBox;
-    final RenderBox overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox;
-
-    final RelativeRect position = RelativeRect.fromRect(
-      Rect.fromPoints(
-        button.localToGlobal(
-          button.size.topRight(Offset(-40, 0)),
-          ancestor: overlay,
+  showModalBottomSheet<String>(
+    context: context,
+    backgroundColor: Colors.transparent,
+    builder: (context) {
+      return AnimatedPadding(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
+        padding: MediaQuery.of(context).viewInsets,
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.08),
+                blurRadius: 20,
+                offset: const Offset(0, -4),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.copy, color: Colors.blue),
+                title: const Text('Copy content'),
+                onTap: () {
+                  Navigator.pop(context, 'copy');
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.flag, color: Colors.orange),
+                title: const Text('Report'),
+                onTap: () {
+                  Navigator.pop(context, 'report');
+                },
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
         ),
-        button.localToGlobal(
-          button.size.topRight(Offset.zero),
-          ancestor: overlay,
-        ),
-      ),
-
-      Offset.zero & overlay.size,
-    );
-
-    showMenu<String>(
-      context: context,
-      position: position,
-      items: [
-        const PopupMenuItem<String>(value: 'copy', child: Text('Copy content')),
-        const PopupMenuItem<String>(value: 'report', child: Text('Report')),
-      ],
-    ).then((value) {
-      if (value == null) return;
-      switch (value) {
-        case 'copy':
-          _copyContentToClipboard();
-          break;
-        case 'report':
-          _showReportLinkButton(context);
-          break;
-      }
-    });
-  }
-
+      );
+    },
+  ).then((value) {
+    if (value == null) return;
+    switch (value) {
+      case 'copy':
+        _copyContentToClipboard();
+        break;
+      case 'report':
+        _showReportLinkButton(context);
+        break;
+    }
+  });
+}
   void _showQuickSuggestions(BuildContext context) {
     final RenderBox button = context.findRenderObject() as RenderBox;
     final RenderBox overlay =
@@ -1793,43 +1840,105 @@ class _FeedItemState extends State<FeedItem>
       Offset.zero & overlay.size,
     );
 
-    showMenu<String>(
-      context: context,
-      position: position,
-      items: [
-        const PopupMenuItem<String>(value: 'edit', child: Text('Edit content')),
-        const PopupMenuItem<String>(
-          value: 'delete',
-          child: Text('Delete post'),
+    showModalBottomSheet<String>(
+  context: context,
+  backgroundColor: Colors.transparent,
+  builder: (context) {
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+      padding: MediaQuery.of(context).viewInsets,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 20,
+              offset: const Offset(0, -4),
+            ),
+          ],
         ),
-        if (widget.content.files.isNotEmpty)
-          const PopupMenuItem<String>(
-            value: 'delete_files',
-            child: Text('Delete files'),
-          ),
-        const PopupMenuItem<String>(value: 'copy', child: Text('Copy content')),
-        const PopupMenuItem<String>(value: 'report', child: Text('Report')),
-      ],
-    ).then((value) {
-      if (value == null) return;
-      switch (value) {
-        case 'edit':
-          _showEditContentDialog(context);
-          break;
-        case 'delete':
-          _showDeleteConfirmation(context);
-          break;
-        case 'delete_files':
-          _showDeleteFilesConfirmation(context);
-          break;
-        case 'copy':
-          _copyContentToClipboard();
-          break;
-        case 'report':
-          _showReportLinkButton(context);
-          break;
-      }
-    });
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.edit, color: Color(0xFFF48706)),
+              title: const Text('Edit content'),
+              onTap: () {
+                Navigator.pop(context, 'edit');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete, color: Colors.red),
+              title: const Text('Delete post'),
+              onTap: () {
+                Navigator.pop(context, 'delete');
+              },
+            ),
+            if (widget.content.files.isNotEmpty)
+              ListTile(
+                leading: const Icon(Icons.attach_file, color: Colors.purple),
+                title: const Text('Delete files'),
+                onTap: () {
+                  Navigator.pop(context, 'delete_files');
+                },
+              ),
+            ListTile(
+              leading: const Icon(Icons.copy, color: Colors.blue),
+              title: const Text('Copy content'),
+              onTap: () {
+                Navigator.pop(context, 'copy');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.flag, color: Colors.orange),
+              title: const Text('Report'),
+              onTap: () {
+                Navigator.pop(context, 'report');
+              },
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  },
+).then((value) {
+  if (value == null) return;
+  switch (value) {
+    case 'edit':
+      _showEditContentDialog(context);
+      break;
+    case 'delete':
+      _showDeleteConfirmation(context);
+      break;
+    case 'delete_files':
+      _showDeleteFilesConfirmation(context);
+      break;
+    case 'copy':
+      _copyContentToClipboard();
+      break;
+    case 'report':
+      _showReportLinkButton(context);
+      break;
+  }
+});
   }
 
   void _showEditContentDialog(BuildContext context) {
@@ -1837,11 +1946,30 @@ class _FeedItemState extends State<FeedItem>
       text: widget.content.status,
     );
 
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Edit Content'),
+    showGeneralDialog(
+  context: context,
+  barrierDismissible: true,
+  barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+  barrierColor: Colors.black.withOpacity(0.4),
+  transitionDuration: const Duration(milliseconds: 300),
+  pageBuilder: (context, animation, secondaryAnimation) {
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 24),
+        child: Material(
+          color: Colors.transparent,
+          child: AlertDialog(
+            backgroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            title: const Text(
+              'Edit Content',
+              style: TextStyle(
+                color: Color(0xFFF48706),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             content: TextField(
               controller: controller,
               decoration: const InputDecoration(
@@ -1860,11 +1988,27 @@ class _FeedItemState extends State<FeedItem>
                   _updateContentStatus(controller.text);
                   Navigator.of(context).pop();
                 },
-                child: const Text('Update'),
+                child: const Text(
+                  'Update',
+                  style: TextStyle(color: Color(0xFFF48706), fontWeight: FontWeight.bold),
+                ),
               ),
             ],
           ),
+        ),
+      ),
     );
+  },
+  transitionBuilder: (context, animation, secondaryAnimation, child) {
+    return ScaleTransition(
+      scale: CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutBack,
+      ),
+      child: child,
+    );
+  },
+);
   }
 
   Future<void> _updateContentStatus(String newStatus) async {
@@ -2091,11 +2235,31 @@ class _FeedItemState extends State<FeedItem>
     final TextEditingController reasonController = TextEditingController();
     final TextEditingController descriptionController = TextEditingController();
 
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Report Content'),
+    // ...inside _showReportLinkButton(BuildContext context)...
+showGeneralDialog(
+  context: context,
+  barrierDismissible: true,
+  barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+  barrierColor: Colors.black.withAlpha(40),
+  transitionDuration: const Duration(milliseconds: 300),
+  pageBuilder: (context, animation, secondaryAnimation) {
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 20),
+        child: Material(
+          color: Colors.transparent,
+          child: AlertDialog(
+            backgroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            title: const Text(
+              'Report Content',
+              style: TextStyle(
+                color: Color(0xFFF48706),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -2111,6 +2275,7 @@ class _FeedItemState extends State<FeedItem>
                       labelText: 'Reason',
                       border: OutlineInputBorder(),
                       hintText: 'Enter the reason for reporting',
+                      
                     ),
                     maxLines: 2,
                   ),
@@ -2123,6 +2288,7 @@ class _FeedItemState extends State<FeedItem>
                       hintText: 'Provide additional details (optional)',
                     ),
                     maxLines: 3,
+                  
                   ),
                 ],
               ),
@@ -2137,7 +2303,6 @@ class _FeedItemState extends State<FeedItem>
                   final reason = reasonController.text.trim();
                   final description = descriptionController.text.trim();
 
-                  // Validate input
                   if (reason.isEmpty) {
                     Get.snackbar(
                       'Error',
@@ -2145,18 +2310,10 @@ class _FeedItemState extends State<FeedItem>
                       backgroundColor: Colors.red,
                       colorText: Colors.white,
                     );
-
-                    // ScaffoldMessenger.of(context).showSnackBar(
-                    //   const SnackBar(
-                    //     content: Text('Please provide a reason for reporting.'),
-                    //     backgroundColor: Colors.red,
-                    //   ),
-                    // );
                     return;
                   }
 
                   try {
-                    // Prepare API request
                     final response = await http.post(
                       Uri.parse('http://182.93.94.210:3064/api/v1/report'),
                       headers: {
@@ -2167,49 +2324,27 @@ class _FeedItemState extends State<FeedItem>
                       body: jsonEncode({
                         'reportedUserId': widget.content.author.id,
                         'reason': reason,
-                        'description':
-                            description.isEmpty ? reason : description,
+                        'description': description.isEmpty ? reason : description,
                       }),
                     );
 
-                    // Handle API response
                     if (response.statusCode == 200) {
                       final data = json.decode(response.body);
                       Get.snackbar(
                         'Success',
-                        data['message'] ??
-                            'Your report has been submitted successfully.',
+                        data['message'] ?? 'Your report has been submitted successfully.',
                         backgroundColor: Colors.green,
                         colorText: Colors.white,
                       );
-
-                      // ScaffoldMessenger.of(context).showSnackBar(
-                      //   SnackBar(
-                      //     content: Text(
-                      //       data['message'] ?? 'Your report has been submitted successfully.',
-                      //     ),
-                      //     backgroundColor: Colors.green,
-                      //   ),
-                      // );
                       Navigator.of(context).pop();
                     } else {
                       final data = json.decode(response.body);
                       Get.snackbar(
                         'Error',
-                        data['message'] ??
-                            'Failed to Submit Report: ${response.statusCode}',
+                        data['message'] ?? 'Failed to Submit Report: ${response.statusCode}',
                         backgroundColor: Colors.red,
                         colorText: Colors.white,
                       );
-
-                      // ScaffoldMessenger.of(context).showSnackBar(
-                      //   SnackBar(
-                      //     content: Text(
-                      //       'Failed to submit report: ${data['message'] ?? 'Error ${response.statusCode}'}',
-                      //     ),
-                      //     backgroundColor: Colors.,
-                      //   ),
-                      // );
                     }
                   } catch (e) {
                     Get.snackbar(
@@ -2218,52 +2353,124 @@ class _FeedItemState extends State<FeedItem>
                       backgroundColor: Colors.red,
                       colorText: Colors.white,
                     );
-
-                    // ScaffoldMessenger.of(context).showSnackBar(
-                    //   SnackBar(
-                    //     content: Text('Error submitting report: ${e.toString()}'),
-                    //     backgroundColor: Colors.red,
-                    //   ),
-                    // );
                   }
                 },
-                child: const Text('Submit'),
+                child: const Text(
+                  'Submit',
+                  style: TextStyle(color: Color(0xFFF48706), fontWeight: FontWeight.bold),
+                ),
               ),
             ],
           ),
+        ),
+      ),
     );
+  },
+  transitionBuilder: (context, animation, secondaryAnimation, child) {
+    return ScaleTransition(
+      scale: CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutBack,
+      ),
+      child: child,
+    );
+  },
+);
+// ...existing code...
   }
 
+  // ...existing code...
   Widget _buildAuthorAvatar() {
     if (widget.content.author.picture.isEmpty) {
-      return CircleAvatar(
-        child: Text(
-          widget.content.author.name.isNotEmpty
-              ? widget.content.author.name[0].toUpperCase()
-              : '?',
+      return GestureDetector(
+        onTap: () {
+          _showBigAvatarDialog(context, null, widget.content.author.name);
+        },
+        child: CircleAvatar(
+          child: Text(
+            widget.content.author.name.isNotEmpty
+                ? widget.content.author.name[0].toUpperCase()
+                : '?',
+          ),
         ),
       );
     }
 
-    return CachedNetworkImage(
-      imageUrl: 'http://182.93.94.210:3064${widget.content.author.picture}',
-      imageBuilder:
-          (context, imageProvider) =>
-              CircleAvatar(backgroundImage: imageProvider),
-      placeholder:
-          (context, url) => const CircleAvatar(
-            child: CircularProgressIndicator(strokeWidth: 2.0),
+    return GestureDetector(
+      onTap: () {
+        _showBigAvatarDialog(
+          context,
+          'http://182.93.94.210:3064${widget.content.author.picture}',
+          widget.content.author.name,
+        );
+      },
+      child: CachedNetworkImage(
+        imageUrl: 'http://182.93.94.210:3064${widget.content.author.picture}',
+        imageBuilder: (context, imageProvider) =>
+            CircleAvatar(backgroundImage: imageProvider),
+        placeholder: (context, url) => const CircleAvatar(
+          child: CircularProgressIndicator(strokeWidth: 2.0),
+        ),
+        errorWidget: (context, url, error) => CircleAvatar(
+          child: Text(
+            widget.content.author.name.isNotEmpty
+                ? widget.content.author.name[0].toUpperCase()
+                : '?',
           ),
-      errorWidget:
-          (context, url, error) => CircleAvatar(
-            child: Text(
-              widget.content.author.name.isNotEmpty
-                  ? widget.content.author.name[0].toUpperCase()
-                  : '?',
-            ),
-          ),
+        ),
+      ),
     );
   }
+
+  // ...existing code...
+  void _showBigAvatarDialog(BuildContext context, String? imageUrl, String name) {
+    showDialog(
+      context: context,
+      barrierDismissible: true, // Allow tap outside to dismiss
+      builder: (context) => GestureDetector(
+        onTap: () => Navigator.of(context).pop(), // Dismiss on tap outside
+        child: Material(
+          color: Colors.transparent,
+          child: Center(
+            child: GestureDetector(
+                    onTap: () => FocusScope.of(context).unfocus(),
+ // Prevent dialog from closing when tapping the avatar itself
+              child: imageUrl == null
+                  ? CircleAvatar(
+                      radius: 80,
+                      backgroundColor: Colors.blue.shade200,
+                      child: Text(
+                        name.isNotEmpty ? name[0].toUpperCase() : '?',
+                        style: const TextStyle(fontSize: 60, color: Colors.white),
+                      ),
+                    )
+                  : CachedNetworkImage(
+                      imageUrl: imageUrl,
+                      imageBuilder: (context, imageProvider) => CircleAvatar(
+                        radius: 120,
+                        backgroundImage: imageProvider,
+                      ),
+                      placeholder: (context, url) => const CircleAvatar(
+                        radius: 120,
+                        child: CircularProgressIndicator(strokeWidth: 3.0),
+                      ),
+                      errorWidget: (context, url, error) => CircleAvatar(
+                        radius: 120,
+                        backgroundColor: Colors.blue.shade200,
+                        child: Text(
+                          name.isNotEmpty ? name[0].toUpperCase() : '?',
+                          style: const TextStyle(fontSize: 60, color: Colors.white),
+                        ),
+                      ),
+                    ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+
 
   Widget _buildMediaPreview() {
     final mediaUrls = widget.content.mediaUrls;
@@ -2509,7 +2716,7 @@ class _OptimizedNetworkImage extends StatelessWidget {
 class FeedApiService {
   static const String baseUrl = 'http://182.93.94.210:3064';
 
-  static Future<List<FeedContent>> fetchContents(String? lastId) async {
+  static Future<List<FeedContent>> fetchContents(String? lastId, BuildContext context) async {
     try {
       final String? authToken = AppData().authToken;
       final Map<String, String> headers = {
@@ -2572,11 +2779,14 @@ class FeedApiService {
           return contents;
         }
       } else if (response.statusCode == 401) {
+        Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => LoginPage()), (route) => false);
         throw Exception('Authentication required');
+        
       }
 
       throw Exception('Failed to load data: ${response.statusCode}');
     } catch (e) {
+      Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => LoginPage()), (route) => false);
       throw Exception('Error: ${e.toString()}');
     }
   }

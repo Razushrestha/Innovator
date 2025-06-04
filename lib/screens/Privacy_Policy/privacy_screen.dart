@@ -26,12 +26,12 @@ class _PrivacyPolicyState extends State<PrivacyPolicy> with SingleTickerProvider
      backgroundColor: const Color(0xffEDF4FE),
      // backgroundColor: AppColors.background,
       appBar: AppBar(
-        
+        backgroundColor: Color.fromRGBO(244, 135, 6, 1),
         automaticallyImplyLeading: true,
         centerTitle: true,
         title: Text(
           'Privacy Policy',
-          style: TextStyle(fontWeight: FontWeight.bold),
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
         ),
         
       ),

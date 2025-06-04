@@ -91,7 +91,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           'Reports Management',
           style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
         ),
-        backgroundColor: Colors.indigo[600],
+        backgroundColor: Color.fromRGBO(244, 135, 6, 1),
         elevation: 0,
         
         leading: IconButton(onPressed: (){Navigator.pop(context);}, icon: Icon(Icons.arrow_back), color: Colors.white,),
@@ -131,13 +131,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.error_outline, size: 64, color: Colors.red[400]),
+            //Icon(Icons.error_outline, size: 64, color: Colors.red[400]),
             SizedBox(height: 16),
-            Text(
-              error!,
-              style: TextStyle(fontSize: 16, color: Colors.red[600]),
-              textAlign: TextAlign.center,
-            ),
+            Image.asset('animation/NoGallery.gif'),
+            // Text(
+            //   error!,
+            //   style: TextStyle(fontSize: 16, color: Colors.red[600]),
+            //   textAlign: TextAlign.center,
+            // ),
             SizedBox(height: 16),
             ElevatedButton(
               onPressed: fetchReports,

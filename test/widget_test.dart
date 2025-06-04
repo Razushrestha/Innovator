@@ -10,7 +10,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         child: MaterialApp(
-          home: InnovatorHomePage('Test App' as FCMNotificationService),
+          home: InnovatorHomePage(),
         ),
       ),
     );
@@ -77,7 +77,7 @@ void main() {
         child: MaterialApp(
           home: InnovatorHomePage(
             // Pass your mock data or required parameters
-            'Test Title' as FCMNotificationService,
+
             // userData: mockUserData,
           ),
         ),
@@ -101,7 +101,7 @@ void main() {
   testWidgets('Integration test', (WidgetTester tester) async {
     await tester.pumpWidget(
       ProviderScope(
-        child: InnovatorHomePage('Text App' as FCMNotificationService), // Test the entire app
+        child: InnovatorHomePage(), // Test the entire app
       ),
     );
 

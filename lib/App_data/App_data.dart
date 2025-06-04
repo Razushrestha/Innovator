@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:developer' as developer;
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:http/http.dart' as http;
+import 'package:innovator/Notification/FCM_Class.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:innovator/screens/comment/JWT_Helper.dart';
 
@@ -203,6 +205,38 @@ class AppData {
       developer.log('Error updating FCM token on backend: $e');
     }
   }
+
+  Future<void> initializeFcm() async {
+  try {
+    // Request permission for notifications (iOS)
+    await FirebaseMessaging.instance.requestPermission();
+    
+    // Get the FCM token
+    String? fcmToken = await FirebaseMessaging.instance.getToken();
+    if (fcmToken != null) {
+      await saveFcmToken(fcmToken);
+      developer.log('FCM token initialized and saved: $fcmToken');
+    }
+
+    // Listen for token refresh
+    FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
+      await saveFcmToken(newToken);
+      developer.log('FCM token refreshed: $newToken');
+    });
+
+    // Handle foreground messages
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      NotificationService().showNotification(
+        id: DateTime.now().millisecondsSinceEpoch % 1000,
+        title: message.notification?.title ?? 'New Notification',
+        body: message.notification?.body ?? 'You have a new notification!',
+        payload: message.data.toString(),
+      );
+    });
+  } catch (e) {
+    developer.log('Error initializing FCM: $e');
+  }
+}
   
   bool isCurrentUser(String userId) {
     final currentId = JwtHelper.extractUserId(_authToken);
@@ -234,4 +268,38 @@ class AppData {
     _currentUser = null;
     developer.log('User logged out - all data cleared');
   }
+
+
+  Future<List<dynamic>> fetchNotifications() async {
+  try {
+    final url = Uri.parse('http://182.93.94.210:3064/api/v1/notifications');
+    final headers = {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $_authToken',
+    };
+
+    final response = await http.get(url, headers: headers);
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      developer.log('Notifications fetched successfully: $data');
+
+      // Show local notifications for new notifications
+      for (var notification in data) {
+        await NotificationService().showNotification(
+          id: notification['id'] ?? DateTime.now().millisecondsSinceEpoch % 1000,
+          title: notification['title'] ?? 'New Notification',
+          body: notification['body'] ?? 'You have a new notification!',
+          payload: notification.toString(),
+        );
+      }
+      return data as List<dynamic>;
+    } else {
+      developer.log('Failed to fetch notifications: ${response.statusCode} - ${response.body}');
+      return [];
+    }
+  } catch (e) {
+    developer.log('Error fetching notifications: $e');
+    return [];
+  }
+}
 }

@@ -25,7 +25,7 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final Color preciseGreen = Color.fromRGBO(235, 111, 70, 1);
+  final Color preciseGreen = Color(0xFFEB6B46);
   bool _isPasswordVisible = false;
   bool isLogin = true;
   bool _isLoading = false;
@@ -527,29 +527,8 @@ class _LoginPageState extends State<LoginPage> {
     try {
       await _googleSignIn.signOut();
       await FirebaseAuth.instance.signOut();
-
-      showDialog(
-        context: context,
-        builder: (BuildContext context) {
-          return AlertDialog(
-            title: Text('Choose Account'),
-            content: Text('Select an account to sign in with Google'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  _handleGoogleSignIn();
-                },
-                child: Text('Choose Account'),
-              ),
-            ],
-          );
-        },
-      );
+_handleGoogleSignIn();
+      
     } catch (e) {
       developer.log('Error showing account picker: $e');
       _handleGoogleSignIn();
@@ -565,7 +544,7 @@ class _LoginPageState extends State<LoginPage> {
       child: Scaffold(
         appBar: AppBar(
           automaticallyImplyLeading: false,
-          backgroundColor: Color.fromRGBO(244, 135, 6, 1),
+          backgroundColor: Color(0xFFEB6B46),
           centerTitle: true,
         ),
         body: Stack(
@@ -574,7 +553,7 @@ class _LoginPageState extends State<LoginPage> {
               width: MediaQuery.of(context).size.width,
               height: MediaQuery.of(context).size.height / 2.0,
               decoration: const BoxDecoration(
-                color: Color.fromRGBO(244, 135, 6, 1),
+                color: Color(0xFFEB6B46),
                 borderRadius: BorderRadius.only(
                   bottomRight: Radius.circular(70),
                 ),

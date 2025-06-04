@@ -372,27 +372,13 @@ class _UserImageGalleryState extends State<UserImageGallery> {
       margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.red.withOpacity(0.1),
+        color: Colors.red.withAlpha(10),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.red.withOpacity(0.3)),
+        border: Border.all(color: Colors.red.withAlpha(30)),
       ),
       child: Column(
         children: [
-          const Icon(Icons.error_outline, size: 40, color: Colors.red),
-          const SizedBox(height: 10),
-          const Text(
-            'Failed to load gallery',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _error ?? 'Unknown error occurred',
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 14),
-          ),
+          Image.asset('animation/NoGallery.gif'),
           const SizedBox(height: 16),
           ElevatedButton.icon(
             onPressed: () => _loadImages(refresh: true),

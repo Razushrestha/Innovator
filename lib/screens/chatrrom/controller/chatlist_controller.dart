@@ -40,6 +40,7 @@ class ChatListController extends GetxController {
   @override
   void onInit() {
     super.onInit();
+    _initializeNotifications();
     fetchChats();
     initializeMQTT();
     
@@ -54,6 +55,52 @@ class ChatListController extends GetxController {
     searchController.dispose();
     mqttService.disconnect();
     super.onClose();
+  }
+
+  Future<void> _initializeNotifications() async {
+    const AndroidNotificationChannel channel = AndroidNotificationChannel(
+      'high_importance_channel',
+      'High Importance Notifications',
+      description: 'This channel is used for important notifications.',
+      importance: Importance.max,
+    );
+
+    await notificationsPlugin
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(channel);
+  }
+
+  // Show local notification
+  Future<void> _showLocalNotification(String senderId, String senderName, String messageText) async {
+    if (processedMessageIds.contains(senderId + messageText)) return;
+    processedMessageIds.add(senderId + messageText);
+
+    try {
+      await notificationsPlugin.show(
+        senderId.hashCode,
+        senderName,
+        messageText,
+        NotificationDetails(
+          android: AndroidNotificationDetails(
+            'high_importance_channel',
+            'High Importance Notifications',
+            channelDescription: 'This channel is used for important notifications.',
+            importance: Importance.max,
+            priority: Priority.high,
+            ticker: 'ticker',
+          ),
+          iOS: const DarwinNotificationDetails(),
+        ),
+        payload: jsonEncode({
+          'screen': 'chat',
+          'receiverId': senderId,
+          'receiverName': senderName,
+        }),
+      );
+      log('ChatListController: Notification shown for message from $senderName');
+    } catch (e) {
+      log('ChatListController: Error showing notification: $e');
+    }
   }
 
   
@@ -223,6 +270,10 @@ class ChatListController extends GetxController {
         } else {
           _updateExistingChat(chatIndex, senderId, messageText, messageData, senderName, isRead);
         }
+
+        if(senderId != AppData().currentUserId && !isRead){
+          _showLocalNotification(senderId, senderName, messageText);
+        }
       } else if (data['type'] == 'read_receipt') {
         _handleReadReceipt(data);
       }
@@ -254,7 +305,9 @@ class ChatListController extends GetxController {
     newMessageTimestamps[tempChatId] = DateTime.now().add(const Duration(seconds: 5));
     _onSearchChanged(); // Update filtered chats
     forceRefreshUI();
-    
+    if (!isRead && senderId != AppData().currentUserId) {
+      _showLocalNotification(senderId, senderName, messageText);
+    }
     // if (!isRead && senderId != AppData().currentUserId) {
     //   showNotification(tempChatId, senderName, messageText);
     // }

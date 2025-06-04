@@ -18,6 +18,7 @@ import 'package:innovator/screens/Privacy_Policy/privacy_screen.dart';
 import 'package:innovator/screens/Profile/profile_page.dart';
 import 'package:innovator/screens/Report/Report_screen.dart';
 import 'package:innovator/screens/chatrrom/Screen/chat_listscreen.dart';
+import 'package:lottie/lottie.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class CustomDrawer extends StatefulWidget {
@@ -128,6 +129,7 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
             _isLoading = false;
           });
         }
+        Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => LoginPage()), (route) => false);
         return;
       }
 
@@ -164,6 +166,7 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
             _isLoading = false;
           });
         }
+        Lottie.asset('animation/No_Internet.json');
       }
     } catch (e) {
       if (mounted) {
@@ -172,6 +175,8 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
           _isLoading = false;
         });
       }
+              Lottie.asset('animation/No_Internet.json');
+
     }
   }
 
@@ -204,7 +209,7 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.1),
+                color: Colors.black.withAlpha(10),
                 blurRadius: 20,
                 offset: const Offset(5, 0),
               ),
@@ -361,7 +366,7 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
           colors: [
             const Color(0xFFEB6B46),
             const Color(0xFFFF8A65),
-            const Color(0xFFEB6B46).withOpacity(0.8),
+            const Color(0xFFEB6B46).withAlpha(99999),
           ],
         ),
         borderRadius: const BorderRadius.only(
@@ -370,7 +375,7 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFEB6B46).withOpacity(0.3),
+            color: const Color(0xFFEB6B46).withAlpha(30),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -419,20 +424,17 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Icon(
-                                Icons.error_outline,
-                                color: Colors.white,
-                                size: 40,
-                              ),
-                              const SizedBox(height: 10),
-                              Text(
-                                'Error: $_errorMessage',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
+                            
+                                      Lottie.asset('animation/No-Content.json',),
+
+                              // Text(
+                              //   'Error: $_errorMessage',
+                              //   style: const TextStyle(
+                              //     color: Colors.white,
+                              //     fontSize: 14,
+                              //   ),
+                              //   textAlign: TextAlign.center,
+                              // ),
                             ],
                           ),
                         )
@@ -566,8 +568,8 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
                 gradient: isLogout
                     ? LinearGradient(
                         colors: [
-                          Colors.red.withOpacity(0.1),
-                          Colors.red.withOpacity(0.05),
+                          Colors.red.withAlpha(10),
+                          Colors.red.withAlpha(50),
                         ],
                       )
                     : null,
@@ -732,7 +734,7 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
+                  color: Colors.red.withAlpha(100),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(

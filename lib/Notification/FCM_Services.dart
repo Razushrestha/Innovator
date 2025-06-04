@@ -281,7 +281,7 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => Homepage())),
         ),
-        backgroundColor: Colors.deepOrange,
+        backgroundColor: Color.fromRGBO(244, 135, 6, 1),
         elevation: 0,
         actions: [
           if (notifications.isNotEmpty) ...[
@@ -378,11 +378,35 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
       ),
       direction: DismissDirection.endToStart,
       confirmDismiss: (direction) async {
-        return await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Delete Notification'),
-            content: const Text('Are you sure you want to delete this notification?'),
+        return await // ...existing code...
+ showGeneralDialog<bool>(
+  context: context,
+  barrierDismissible: true,
+  barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+  barrierColor: Colors.black.withOpacity(0.4),
+  transitionDuration: const Duration(milliseconds: 300),
+  pageBuilder: (context, animation, secondaryAnimation) {
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 24),
+        child: Material(
+          color: Colors.transparent,
+          child: AlertDialog(
+            backgroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            title: const Text(
+              'Delete Notification',
+              style: TextStyle(
+                color: Color(0xFFF48706),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            content: const Text(
+              'Are you sure you want to delete this notification?',
+              style: TextStyle(fontSize: 16),
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
@@ -390,11 +414,28 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
               ),
               TextButton(
                 onPressed: () => Navigator.pop(context, true),
-                child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                child: const Text(
+                  'Delete',
+                  style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                ),
               ),
             ],
           ),
-        );
+        ),
+      ),
+    );
+  },
+  transitionBuilder: (context, animation, secondaryAnimation, child) {
+    return ScaleTransition(
+      scale: CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutBack,
+      ),
+      child: child,
+    );
+  },
+);
+
       },
       onDismissed: (_) => deleteNotification(notification.id),
       child: InkWell(

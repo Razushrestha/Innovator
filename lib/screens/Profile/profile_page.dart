@@ -13,6 +13,7 @@ import 'package:innovator/screens/Follow/follow-Service.dart';
 import 'package:innovator/screens/Profile/Edit_Profile.dart';
 import 'package:innovator/screens/SHow_Specific_Profile/Show_Specific_Profile.dart';
 import 'package:innovator/widget/FloatingMenuwidget.dart';
+import 'package:lottie/lottie.dart';
 import 'package:path/path.dart' as path;
 import 'package:http_parser/http_parser.dart';
 
@@ -670,19 +671,18 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                           ),
                         ),
                         SizedBox(height: 8),
-                        Text(
-                          snapshot.error.toString(),
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.red),
-                        ),
-                        SizedBox(height: 24),
+Lottie.asset('animation/No-Content.json', fit: BoxFit.cover),
+                        // Text(
+                        //   snapshot.error.toString(),
+                        //   textAlign: TextAlign.center,
+                        //   style: TextStyle(color: Colors.red),
                         ElevatedButton(
                           onPressed: () {
                             setState(() {
                               _loadProfile();
                             });
                           },
-                          child: Text('Try Again'),
+                          child: Text('Try Again', style: TextStyle(color: Colors.white),),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Color.fromRGBO(235, 111, 70, 1),
                           ),
@@ -900,42 +900,43 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      SizedBox(height: 8),
-                      ProfileInfoCard(
-                        title: 'ID',
-                        value: profile.id,
-                        icon: Icons.fingerprint,
-                      ),
-                      ProfileInfoCard(
-                        title: 'Role',
-                        value: profile.role.toUpperCase(),
-                        icon: Icons.badge,
-                      ),
+                      // SizedBox(height: 8),
+                      // ProfileInfoCard(
+                      //   title: 'ID',
+                      //   value: profile.id,
+                      //   icon: Icons.fingerprint,
+                      // ),
+                      // ProfileInfoCard(
+                      //   title: 'Role',
+                      //   value: profile.role.toUpperCase(),
+                      //   icon: Icons.badge,
+                      // ),
                       ProfileInfoCard(
                         title: 'Member Since',
                         value: formatDate(profile.createdAt),
                         icon: Icons.access_time,
                       ),
-                      SizedBox(height: 24),
-                      Center(
-                        child: ElevatedButton(
-                          onPressed: () async {
-                            await AppData().clearAuthToken();
-                            Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(builder: (_) => LoginPage()),
-                            );
-                          },
-                          child: Text('Logout'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Color.fromRGBO(235, 111, 70, 1),
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 40,
-                              vertical: 12,
-                            ),
-                          ),
-                        ),
-                      ),
+                      
+                      // SizedBox(height: 24),
+                      // Center(
+                      //   child: ElevatedButton(
+                      //     onPressed: () async {
+                      //       await AppData().clearAuthToken();
+                      //       Navigator.pushReplacement(
+                      //         context,
+                      //         MaterialPageRoute(builder: (_) => LoginPage()),
+                      //       );
+                      //     },
+                      //     child: Text('Logout'),
+                      //     style: ElevatedButton.styleFrom(
+                      //       backgroundColor: Color.fromRGBO(235, 111, 70, 1),
+                      //       padding: EdgeInsets.symmetric(
+                      //         horizontal: 40,
+                      //         vertical: 12,
+                      //       ),
+                      //     ),
+                      //   ),
+                      // ),
                       SizedBox(height: 40),
                     ],
                   ),

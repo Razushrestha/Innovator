@@ -31,8 +31,7 @@ class ChatController extends GetxController {
   
   // Services
   final MQTTService _mqttService = MQTTService();
-  late FlutterLocalNotificationsPlugin _notificationsPlugin;
-  
+  final FlutterLocalNotificationsPlugin _notificationsPlugin = FlutterLocalNotificationsPlugin();
   // Chat properties
   String? chatTopic;
   String currentUserId = '';
@@ -47,10 +46,22 @@ class ChatController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    _initializeNotifications();
     _setupAppLifecycleListener();
+    _initializeNotifications();
   }
 
+Future<void> _initializeNotifications() async {
+    const AndroidNotificationChannel channel = AndroidNotificationChannel(
+      'high_importance_channel',
+      'High Importance Notifications',
+      description: 'This channel is used for important notifications.',
+      importance: Importance.max,
+    );
+
+    await _notificationsPlugin
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(channel);
+  }
   // Setup app lifecycle listener to track when app goes to background
   void _setupAppLifecycleListener() {
     WidgetsBinding.instance.addObserver(_AppLifecycleObserver(this));
@@ -137,33 +148,6 @@ class ChatController extends GetxController {
   }
 
   // Initialize notifications
-  Future<void> _initializeNotifications() async {
-    _notificationsPlugin = FlutterLocalNotificationsPlugin();
-
-    const androidSettings = AndroidInitializationSettings('app_icon');
-    const iosSettings = DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
-    );
-    const initializationSettings = InitializationSettings(
-      android: androidSettings,
-      iOS: iosSettings,
-    );
-
-    await _notificationsPlugin.initialize(initializationSettings);
-
-    await _notificationsPlugin
-        .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
-        ?.requestPermissions(
-          alert: true,
-          badge: true,
-          sound: true,
-        );
-  }
-
-  
-
   // Setup MQTT connection and subscriptions
   Future<void> validateAndSetupMQTT() async {
     if (mqttInitialized.value) {
@@ -201,6 +185,10 @@ class ChatController extends GetxController {
         await _handleUserMessage(payload);
       });
 
+      _mqttService.subscribe('user/$currentUserId/notifications', (String payload) {
+        _handleNotification(payload);
+      });
+
       // Subscribe to notifications
       // _mqttService.subscribe('user/$currentUserId/notifications', (String payload) {
       //   _handleNotification(payload);
@@ -211,6 +199,53 @@ class ChatController extends GetxController {
     } catch (e) {
       log('ChatController: Error setting up MQTT: $e');
       errorMessage.value = 'Failed to connect to chat service. Please try again.';
+    }
+  }
+
+  void _handleNotification(String payload) {
+    try {
+      log('ChatController: Received MQTT notification: $payload');
+      final data = jsonDecode(payload);
+      final message = ChatMessage.fromJson(data['message'] ?? data);
+      if (_isValidMessage(message) && message.senderId == receiverId && !_processedMessageIds.contains(message.id)) {
+        _showLocalNotification(message);
+      }
+    } catch (e) {
+      log('ChatController: Error processing notification: $e');
+    }
+  }
+
+  Future<void> _showLocalNotification(ChatMessage message) async {
+    if (_processedMessageIds.contains(message.id)) return;
+    _processedMessageIds.add(message.id);
+
+    try {
+      await _notificationsPlugin.show(
+        message.id.hashCode,
+        message.senderName,
+        message.content,
+        NotificationDetails(
+          android: AndroidNotificationDetails(
+            'high_importance_channel',
+            'High Importance Notifications',
+            channelDescription: 'This channel is used for important notifications.',
+            importance: Importance.max,
+            priority: Priority.high,
+            ticker: 'ticker',
+          ),
+          iOS: const DarwinNotificationDetails(),
+        ),
+        payload: jsonEncode({
+          'screen': 'chat',
+          'receiverId': message.senderId,
+          'receiverName': message.senderName,
+          'receiverPicture': message.senderPicture,
+          'receiverEmail': message.senderEmail,
+        }),
+      );
+      log('ChatController: Notification shown for message: ${message.id}');
+    } catch (e) {
+      log('ChatController: Error showing notification: $e');
     }
   }
 
@@ -338,11 +373,11 @@ class ChatController extends GetxController {
         // Show notification for messages from receiver
         if (message.senderId == receiverId && !message.read) {
           
-          
+          _showLocalNotification(message);
           
         }
      }
-      
+      _processedMessageIds.add(message.id);
       // Sort messages by timestamp
       messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
       
@@ -354,7 +389,7 @@ class ChatController extends GetxController {
       });
       
       // Mark message as read if from receiver
-      if (message.senderId == receiverId && !message.read) {
+      if (message.senderId == receiverId && !message.read && !isAppInBackground.value) {
         // Delay this to avoid state changes during build
         Future.microtask(() async {
           await markMessageAsRead(message.id);
