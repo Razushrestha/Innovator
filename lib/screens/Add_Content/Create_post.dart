@@ -646,11 +646,7 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                                       strokeWidth: 2,
                                     ),
                                   )
-                                : Icon(
-                                    Icons.psychology_rounded,
-                                    size: 24,
-                                    color: Colors.blue,
-                                  ),
+                                : Image.asset('animation/AI.gif', width: 50,),
                             tooltip: 'Enhance with ELIZA AI',
                           ),
                         ],

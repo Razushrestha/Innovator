@@ -18,6 +18,7 @@ import 'package:innovator/screens/Privacy_Policy/privacy_screen.dart';
 import 'package:innovator/screens/Profile/profile_page.dart';
 import 'package:innovator/screens/Report/Report_screen.dart';
 import 'package:innovator/screens/chatrrom/Screen/chat_listscreen.dart';
+import 'package:innovator/utils/Drawer/drawer_cache_manager.dart';
 import 'package:lottie/lottie.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -34,7 +35,8 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
   bool _isLoading = true;
   Map<String, dynamic>? _userData;
   String? _errorMessage;
-  
+    bool _isLoadingFromCache = false;
+
   late AnimationController _slideController;
   late AnimationController _fadeController;
   late Animation<double> _slideAnimation;
@@ -43,7 +45,8 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
   @override
   void initState() {
     super.initState();
-    
+        _initializeData();
+
     // Initialize animations
     _slideController = AnimationController(
       duration: const Duration(milliseconds: 800),
@@ -88,6 +91,111 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
     super.dispose();
   }
 
+  Future<void> _initializeData() async {
+    setState(() {
+      _isLoadingFromCache = true;
+    });
+
+    // Try to load cached profile first
+    final cachedProfile = await DrawerProfileCache.getCachedProfile();
+    if (cachedProfile != null) {
+      if (mounted) {
+        setState(() {
+          _userData = {
+            'name': cachedProfile.name,
+            'email': cachedProfile.email,
+            'picture': cachedProfile.picturePath,
+          };
+          _isLoading = false;
+          _isLoadingFromCache = false;
+        });
+      }
+    }
+
+    // Then fetch fresh data
+    await _fetchUserProfile();
+  }
+
+  Future<void> _fetchUserProfile() async {
+    try {
+      final String? authToken = AppData().authToken;
+      
+      if (authToken == null || authToken.isEmpty) {
+        _handleError('Authentication token not found');
+        return;
+      }
+
+      // Check internet connection
+      final bool hasInternet = await _checkInternetConnection();
+      if (!hasInternet) {
+        if (_userData != null) return; // Use cached data if available
+        _handleError('No internet connection');
+        return;
+      }
+
+      final response = await http.get(
+        Uri.parse('http://182.93.94.210:3064/api/v1/user-profile'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $authToken',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> responseData = json.decode(response.body);
+        if (responseData['status'] == 200 && responseData['data'] != null) {
+          final userData = responseData['data'];
+          
+          // Cache the profile data
+          await DrawerProfileCache.cacheProfile(
+            name: userData['name'] ?? '',
+            email: userData['email'] ?? '',
+            picturePath: userData['picture'],
+          );
+
+          if (mounted) {
+            setState(() {
+              _userData = userData;
+              _isLoading = false;
+              AppData().setCurrentUser(_userData!);
+            });
+          }
+        } else {
+          _handleError(responseData['message'] ?? 'Unknown error');
+        }
+      } else {
+        _handleError('Failed to load profile. Status: ${response.statusCode}');
+      }
+    } catch (e) {
+      _handleError('Network error: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingFromCache = false;
+        });
+      }
+    }
+  }
+
+  Future<bool> _checkInternetConnection() async {
+    try {
+      final result = await InternetAddress.lookup('google.com');
+      return result.isNotEmpty && result[0].rawAddress.isNotEmpty;
+    } on SocketException catch (_) {
+      return false;
+    }
+  }
+
+  void _handleError(String message) {
+    if (mounted) {
+      setState(() {
+        _errorMessage = message;
+        _isLoading = false;
+        _isLoadingFromCache = false;
+      });
+    }
+  }
+
   
   Future<void> _loadNotifications() async {
     try {
@@ -118,67 +226,7 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
   }
 
   
-  Future<void> _fetchUserProfile() async {
-    try {
-      final String? authToken = AppData().authToken;
-      
-      if (authToken == null || authToken.isEmpty) {
-        if (mounted) {
-          setState(() {
-            _errorMessage = 'Authentication token not found';
-            _isLoading = false;
-          });
-        }
-        Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => LoginPage()), (route) => false);
-        return;
-      }
-
-      final response = await http.get(
-        Uri.parse('http://182.93.94.210:3064/api/v1/user-profile'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $authToken',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> responseData = json.decode(response.body);
-        if (responseData['status'] == 200 && responseData['data'] != null) {
-          if (mounted) {
-            setState(() {
-              _userData = responseData['data'];
-              _isLoading = false;
-              AppData().setCurrentUser(_userData!);
-            });
-          }
-        } else {
-          if (mounted) {
-            setState(() {
-              _errorMessage = responseData['message'] ?? 'Unknown error';
-              _isLoading = false;
-            });
-          }
-        }
-      } else {
-        if (mounted) {
-          setState(() {
-            _errorMessage = 'Failed to load profile. Status: ${response.statusCode}';
-            _isLoading = false;
-          });
-        }
-        Lottie.asset('animation/No_Internet.json');
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _errorMessage = 'Network error: $e';
-          _isLoading = false;
-        });
-      }
-              Lottie.asset('animation/No_Internet.json');
-
-    }
-  }
+  
 
   @override
   Widget build(BuildContext context) {

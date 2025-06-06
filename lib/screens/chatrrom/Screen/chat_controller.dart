@@ -84,14 +84,12 @@ Future<void> _initializeNotifications() async {
     required String receiverPicture,
     required String receiverEmail,
   }) {
-    // Prevent multiple initializations
     if (isInitialized.value) {
       log('ChatController: Already initialized, skipping');
       return;
     }
 
-        _processedMessageIds.clear();
-
+    _processedMessageIds.clear();
 
     this.currentUserId = currentUserId;
     this.currentUserName = currentUserName;
@@ -104,12 +102,9 @@ Future<void> _initializeNotifications() async {
     
     log('ChatController: Initializing chat with currentUserId=$currentUserId, receiverId=$receiverId');
     
-    // Mark as initialized immediately to prevent re-initialization
     isInitialized.value = true;
     
-    // Load cached messages first for better UX
     _loadCachedMessages().then((_) {
-      // Then fetch fresh messages
       fetchMessages();
       validateAndSetupMQTT();
     });
@@ -340,7 +335,7 @@ Future<void> _initializeNotifications() async {
   // Process incoming message
   Future<void> _processIncomingMessage(ChatMessage message) async {
     bool isDuplicate = messages.any((m) => m.id == message.id);
-     if (_processedMessageIds.contains(message.id)) {
+    if (_processedMessageIds.contains(message.id)) {
       log('ChatController: Skipping duplicate message: ${message.id}');
       return;
     }
@@ -353,30 +348,35 @@ Future<void> _initializeNotifications() async {
           m.timestamp.difference(message.timestamp).inSeconds.abs() < 30);
       
       if (tempIndex != -1) {
-              final tempMessage = messages[tempIndex];
-
+        final tempMessage = messages[tempIndex];
         messages[tempIndex] = message;
         log('ChatController: Replaced temporary message with server message: ${message.id}');
       } else {
-       // Check if this exact message already exists (additional safety)
-      bool messageExists = messages.any((m) => 
-          m.id == message.id || 
-          (m.senderId == message.senderId && 
-           m.receiverId == message.receiverId &&
-           m.content.trim() == message.content.trim() &&
-           m.timestamp.difference(message.timestamp).inSeconds.abs() < 5));
+        // Check if this exact message already exists (additional safety)
+        bool messageExists = messages.any((m) => 
+            m.id == message.id || 
+            (m.senderId == message.senderId && 
+             m.receiverId == message.receiverId &&
+             m.content.trim() == message.content.trim() &&
+             m.timestamp.difference(message.timestamp).inSeconds.abs() < 5));
 
-      if (!messageExists) {
-        messages.add(message);
-        log('ChatController: Added new message to UI: ${message.content}');
-        
-        // Show notification for messages from receiver
-        if (message.senderId == receiverId && !message.read) {
+        if (!messageExists) {
+          messages.add(message);
+          log('ChatController: Added new message to UI: ${message.content}');
           
-          _showLocalNotification(message);
-          
+          // Show notification for messages from receiver
+          if (message.senderId == receiverId && !message.read) {
+            if (isAppInBackground.value) {
+              _showLocalNotification(message);
+            } else {
+              // If app is in foreground and message is from receiver, mark as read immediately
+              Future.microtask(() async {
+                await markMessageAsRead(message.id);
+              });
+            }
+          }
         }
-     }
+      }
       _processedMessageIds.add(message.id);
       // Sort messages by timestamp
       messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
@@ -387,17 +387,8 @@ Future<void> _initializeNotifications() async {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         scrollToBottom();
       });
-      
-      // Mark message as read if from receiver
-      if (message.senderId == receiverId && !message.read && !isAppInBackground.value) {
-        // Delay this to avoid state changes during build
-        Future.microtask(() async {
-          await markMessageAsRead(message.id);
-        });
-      }
     }
   }
-}
 
   // Handle read receipt
   void _handleReadReceipt(Map<String, dynamic> data) {
@@ -409,11 +400,24 @@ Future<void> _initializeNotifications() async {
         message.read = true;
         message.readAt = DateTime.parse(data['readAt'] ?? DateTime.now().toIso8601String());
         
-        // Schedule UI update after current frame
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          messages.refresh(); // Trigger UI update
-        });
+        // Force UI update immediately
+        messages[messageIndex] = ChatMessage(
+          id: message.id,
+          senderId: message.senderId,
+          senderName: message.senderName,
+          senderPicture: message.senderPicture,
+          senderEmail: message.senderEmail,
+          receiverId: message.receiverId,
+          receiverName: message.receiverName,
+          receiverPicture: message.receiverPicture,
+          receiverEmail: message.receiverEmail,
+          content: message.content,
+          timestamp: message.timestamp,
+          read: true,
+          readAt: message.readAt,
+        );
         
+        messages.refresh();
         log('ChatController: Updated read receipt for message: $messageId');
         _cacheMessages();
       }
@@ -671,6 +675,29 @@ Future<void> _initializeNotifications() async {
 
       if (response.statusCode == 200) {
         log('ChatController: Message marked as read: $messageId');
+        
+        // Publish MQTT message for instant read receipt
+        if (_mqttService.isConnected()) {
+          final readReceiptPayload = {
+            'type': 'read_receipt',
+            'messageId': messageId,
+            'readBy': currentUserId,
+            'readAt': DateTime.now().toIso8601String(),
+            'chatId': '${currentUserId}_$receiverId'
+          };
+          
+          // Send to both user-specific topics to ensure delivery
+          await _mqttService.publish('user/$receiverId/messages', readReceiptPayload);
+          await _mqttService.publish(chatTopic!, readReceiptPayload);
+          
+          // Update local message state
+          final messageIndex = messages.indexWhere((m) => m.id == messageId);
+          if (messageIndex != -1) {
+            messages[messageIndex].read = true;
+            messages[messageIndex].readAt = DateTime.now();
+            messages.refresh();
+          }
+        }
       }
     } catch (e) {
       log('ChatController: Error marking message as read: $e');
@@ -801,20 +828,16 @@ Future<void> _initializeNotifications() async {
   @override
   void onClose() {
     log('ChatController: Disposing controller');
-        _processedMessageIds.clear();
-
+    _processedMessageIds.clear();
     
-    // Remove app lifecycle observer
     WidgetsBinding.instance.removeObserver(_AppLifecycleObserver(this));
     
-    // Disconnect MQTT
     try {
       _mqttService.disconnect();
     } catch (e) {
       log('ChatController: Error disconnecting MQTT: $e');
     }
     
-    // Dispose controllers
     messageController.dispose();
     scrollController.dispose();
     
@@ -834,13 +857,13 @@ class _AppLifecycleObserver extends WidgetsBindingObserver {
     
     switch (state) {
       case AppLifecycleState.resumed:
-        _controller.updateAppState(false); // App in foreground
+        _controller.updateAppState(false);
         break;
       case AppLifecycleState.paused:
       case AppLifecycleState.inactive:
       case AppLifecycleState.hidden:
       case AppLifecycleState.detached:
-        _controller.updateAppState(true); // App in background/closed
+        _controller.updateAppState(true);
         break;
     }
   }

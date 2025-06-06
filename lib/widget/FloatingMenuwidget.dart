@@ -7,7 +7,9 @@ import 'package:innovator/screens/Course/home.dart';
 import 'package:innovator/screens/Search/Searchpage.dart';
 import 'package:innovator/screens/Search/Searchpage.dart';
 import 'package:innovator/screens/Shop/Shop_Page.dart';
-import 'package:innovator/utils/custom_drawer.dart';
+import 'package:innovator/utils/Drawer/custom_drawer.dart';
+import 'package:get/get.dart';
+import 'package:innovator/controllers/user_controller.dart';
 
 class FloatingMenuWidget extends StatefulWidget {
   final GlobalKey<ScaffoldState>? scaffoldKey;
@@ -27,6 +29,8 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
   // Track the position of the menu button
   double _buttonX = 0;
   double _buttonY = 0;
+
+  final UserController _userController = Get.find<UserController>();
 
   // Features to display above the menu button with their respective actions
   final List<Map<String, dynamic>> _topIcons = [

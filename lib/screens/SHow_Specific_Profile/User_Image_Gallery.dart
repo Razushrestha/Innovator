@@ -200,7 +200,7 @@ class _UserImageGalleryState extends State<UserImageGallery> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(left: 20, right: 20, bottom: 15, top: 5),
+          padding: const EdgeInsets.only(left: 20, right: 20),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -261,6 +261,7 @@ class _UserImageGalleryState extends State<UserImageGallery> {
               ),
             ),
           ),
+          Text("Content", style: TextStyle(fontSize: 18),)
       ],
     );
   }

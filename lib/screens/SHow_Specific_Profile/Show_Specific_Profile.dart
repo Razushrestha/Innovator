@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:http/http.dart' as http;
 import 'package:innovator/App_data/App_data.dart';
+import 'package:innovator/Authorization/Login.dart';
+import 'package:innovator/screens/Feed/Inner_Homepage.dart';
 import 'package:innovator/screens/Follow/follow_Button.dart';
 import 'package:flutter/services.dart';
 import 'package:innovator/screens/chatrrom/Screen/chat_listscreen.dart';
@@ -36,6 +38,14 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
 
+final List<FeedContent> _contents = [];
+  final ScrollController _scrollController = ScrollController();
+  bool _isLoading = false;
+  String? _lastId;
+  bool _hasError = false;
+  String _errorMessage = '';
+  bool _hasMoreData = true;
+  static const _loadTriggerThreshold = 500.0;
   @override
   void initState() {
     super.initState();
@@ -55,14 +65,121 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
     );
     _profileFuture = _fetchUserProfile();
     _animationController.forward();
+    _initializeFeed();
+    _scrollController.addListener(_scrollListener);
   }
 
   @override
   void dispose() {
     _animationController.dispose();
     _tabController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
+  void _initializeFeed() {
+    _loadMoreContent();
+  }
+
+  void _scrollListener() {
+    if (!_isLoading &&
+        _hasMoreData &&
+        _scrollController.position.pixels >=
+            _scrollController.position.maxScrollExtent - _loadTriggerThreshold) {
+      _loadMoreContent();
+    }
+  }
+
+  Future<void> _loadMoreContent() async {
+  if (_isLoading || !_hasMoreData) return;
+
+  setState(() {
+    _isLoading = true;
+    _hasError = false;
+  });
+
+  try {
+    final String? authToken = _appData.authToken;
+    if (authToken == null || authToken.isEmpty) {
+      setState(() {
+        _hasError = true;
+        _errorMessage = 'Authentication required. Please login.';
+      });
+      Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => LoginPage()),
+          (route) => false);
+      return;
+    }
+
+    final url = _lastId == null
+    ? 'http://182.93.94.210:3064/api/v1/getUserContent/${widget.userId}?page=0'
+    : 'http://182.93.94.210:3064/api/v1/getUserContent/${widget.userId}?page=${(_contents.length / 10).ceil()}';
+
+    final response = await http.get(
+      Uri.parse(url),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'authorization': 'Bearer $authToken',
+      },
+    ).timeout(Duration(seconds: 30));
+
+    if (response.statusCode == 200) {
+      final Map<String, dynamic> data = json.decode(response.body);
+      if (data['status'] == 200 && data['data'] != null) {
+        final List<dynamic> contentList = data['data']['contents'] ?? [];
+        final List<FeedContent> newContents =
+            contentList.map((item) => FeedContent.fromJson(item)).toList();
+        final pagination = data['data']['pagination'];
+
+        setState(() {
+          _contents.addAll(newContents);
+          _lastId = newContents.isNotEmpty ? newContents.last.id : _lastId;
+          _hasMoreData = pagination['hasMore'] ?? false;
+        });
+      } else {
+        setState(() {
+          _hasError = true;
+          _errorMessage = 'Invalid response from server.';
+        });
+      }
+    } else if (response.statusCode == 401) {
+      await _handleUnauthorizedError();
+    } else {
+      setState(() {
+        _hasError = true;
+        _errorMessage = 'Server error: ${response.statusCode}';
+      });
+    }
+  } catch (e) {
+    setState(() {
+      _hasError = true;
+      _errorMessage = 'Error: ${e.toString()}';
+    });
+  } finally {
+    setState(() {
+      _isLoading = false;
+    });
+  }
+}
+
+Future<void> _handleUnauthorizedError() async {
+  // Implement token refresh logic similar to Inner_HomePage
+  Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => LoginPage()),
+      (route) => false);
+}
+
+Future<void> _refreshFeed() async {
+  setState(() {
+    _contents.clear();
+    _lastId = null;
+    _hasError = false;
+    _hasMoreData = true;
+  });
+  await _loadMoreContent();
+}
 
   Future<Map<String, dynamic>> _fetchUserProfile() async {
     try {
@@ -120,7 +237,7 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDarkMode = theme.brightness == Brightness.dark;
-
+mq = MediaQuery.of(context).size;
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: isDarkMode ? const Color(0xFF0A0A0A) : const Color(0xFFF8F9FA),
@@ -129,7 +246,10 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
       body: Stack(
         children: [
           RefreshIndicator(
-            onRefresh: _refreshProfile,
+            onRefresh: () async {
+            await _refreshProfile();
+            await _refreshFeed();
+          },
             color: Theme.of(context).primaryColor,
             child: FutureBuilder<Map<String, dynamic>>(
               future: _profileFuture,
@@ -152,6 +272,7 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
                       child: SlideTransition(
                         position: _slideAnimation,
                         child: CustomScrollView(
+                          controller: _scrollController,
                           physics: const BouncingScrollPhysics(),
                           slivers: [
                             SliverToBoxAdapter(
@@ -175,8 +296,22 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
                                 userEmail: profileData['email'] ?? widget.userId,
                               ),
                             ),
-                            const SliverToBoxAdapter(child: SizedBox(height: 100)),
-                          ],
+SliverList(
+                            delegate: SliverChildBuilderDelegate(
+                              (context, index) {
+                                if (index == _contents.length) {
+                                  return _buildLoadingIndicator();
+                                }
+                                return _buildContentItem(index);
+                              },
+                              childCount: _contents.length + (_hasMoreData ? 1 : 0),
+                            ),
+                          ),
+                          if (_hasError)
+                            SliverFillRemaining(child: _buildFeedErrorView()),
+                          if (_contents.isEmpty && !_isLoading && !_hasError)
+                            SliverFillRemaining(child: _buildEmptyFeedView()),
+                          const SliverToBoxAdapter(child: SizedBox(height: 100)),                          ],
                         ),
                       ),
                     );
@@ -190,6 +325,77 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
       ),
     );
   }
+
+  Widget _buildContentItem(int index) {
+  final content = _contents[index];
+  return RepaintBoundary(
+    key: ValueKey(content.id),
+    child: FeedItem(
+      content: content,
+      onLikeToggled: (isLiked) {
+        setState(() {
+          content.isLiked = isLiked;
+          content.likes += isLiked ? 1 : -1;
+        });
+      },
+      onFollowToggled: (isFollowed) {
+        setState(() {
+          content.isFollowed = isFollowed;
+        });
+      },
+    ),
+  );
+}
+
+Widget _buildLoadingIndicator() {
+  return _isLoading
+      ? const Padding(
+          padding: EdgeInsets.all(16.0),
+          child: Center(child: CircularProgressIndicator()),
+        )
+      : const SizedBox.shrink();
+}
+
+Widget _buildFeedErrorView() {
+  return Center(
+    child: Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            _errorMessage,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.red),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: _refreshFeed,
+            child: const Text('Retry'),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+Widget _buildEmptyFeedView() {
+  return Center(
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Icon(Icons.inbox, size: 48, color: Colors.grey),
+        const SizedBox(height: 16),
+        const Text('No posts available'),
+        const SizedBox(height: 16),
+        ElevatedButton(
+          onPressed: _refreshFeed,
+          child: const Text('Refresh'),
+        ),
+      ],
+    ),
+  );
+}
 
   PreferredSizeWidget _buildAppBar(bool isDarkMode) {
     return AppBar(

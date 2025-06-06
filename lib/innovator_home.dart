@@ -4,7 +4,7 @@ import 'package:get/get.dart';
 import 'package:in_app_update/in_app_update.dart';
 import 'package:innovator/screens/Feed/Inner_Homepage.dart';
 import 'package:innovator/screens/chatrrom/controller/chatlist_controller.dart';
-import 'package:innovator/utils/custom_drawer.dart';
+import 'package:innovator/utils/Drawer/custom_drawer.dart';
 import 'package:innovator/widget/FloatingMenuwidget.dart';
 
 class Homepage extends StatefulWidget {

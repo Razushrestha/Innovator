@@ -187,7 +187,7 @@ class ChatListController extends GetxController {
       }
     } catch (e) {
       log('Error fetching chats: $e');
-      Get.snackbar('Error', 'Failed to fetch chats: $e');
+     // Get.snackbar('Error', 'Failed to fetch chats: $e');
     } finally {
       if (showLoader) {
         isLoading.value = false;

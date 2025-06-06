@@ -1,3 +1,4 @@
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -8,6 +9,7 @@ import 'package:http/http.dart' as http;
 import 'package:innovator/App_data/App_data.dart';
 import 'package:innovator/Authorization/Login.dart';
 import 'package:innovator/screens/Feed/OptimizeMediaScreen.dart';
+import 'package:innovator/screens/Feed/Services/Feed_Cache_service.dart';
 import 'package:innovator/screens/Follow/follow-Service.dart';
 import 'package:innovator/screens/Follow/follow_Button.dart';
 import 'package:innovator/screens/Likes/Content-Like-Service.dart';
@@ -232,6 +234,7 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
   static const _loadTriggerThreshold = 500.0;
   final AppData _appData = AppData();
   bool _isRefreshingToken = false;
+  bool _isOnline = true;
 
   @override
   void initState() {
@@ -239,6 +242,21 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
     _requestNotificationPermission();
     _initializeData();
     _scrollController.addListener(_scrollListener);
+        _checkConnectivity();
+
+  }
+
+  Future<void> _checkConnectivity() async {
+    try {
+      final result = await InternetAddress.lookup('google.com');
+      setState(() {
+        _isOnline = result.isNotEmpty && result[0].rawAddress.isNotEmpty;
+      });
+    } on SocketException catch (_) {
+      setState(() {
+        _isOnline = false;
+      });
+    }
   }
 
   Future<void> _initializeData() async {
@@ -265,15 +283,26 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
     });
 
     try {
-      if (!await _verifyToken()) {
+      if (!_isOnline) {
+        // Load cached data when offline
+        final cachedContents = await CacheManager.getCachedFeed();
+        setState(() {
+          if (cachedContents.isNotEmpty) {
+            _contents.clear();
+            _contents.addAll(cachedContents);
+            _hasMoreData = false;
+          }
+        });
         return;
       }
+
+      if (!await _verifyToken()) return;
 
       final response = await _makeApiRequest();
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
-        _handleSuccessfulResponse(data);
+        await _handleSuccessfulResponse(data);
       } else if (response.statusCode == 401) {
         await _handleUnauthorizedError();
       } else {
@@ -286,6 +315,28 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
     } finally {
       setState(() {
         _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _handleSuccessfulResponse(Map<String, dynamic> data) async {
+    if (data.containsKey('data') && data['data']['contents'] is List) {
+      final List<dynamic> contentList = data['data']['contents'] as List;
+      final List<FeedContent> newContents =
+          contentList.map((item) => FeedContent.fromJson(item)).toList();
+
+      // Cache new content
+      await CacheManager.cacheFeedContent(newContents);
+
+      setState(() {
+        _contents.addAll(newContents);
+        _lastId = newContents.isNotEmpty ? newContents.last.id : _lastId;
+        _hasMoreData = data['data']['hasMore'] ?? false;
+      });
+    } else {
+      setState(() {
+        _hasError = true;
+        _errorMessage = 'Please Contact To Our Support Team';
       });
     }
   }
@@ -337,8 +388,8 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
   Future<http.Response> _makeApiRequest() async {
     final url =
         _lastId == null
-            ? 'http://182.93.94.210:3064/api/v1/list-contents'
-            : 'http://182.93.94.210:3064/api/v1/list-contents?lastId=$_lastId';
+            ? 'http://182.93.94.210:3065/api/v1/list-contents'
+            : 'http://182.93.94.210:3065/api/v1/list-contents?lastId=$_lastId';
 
     debugPrint('Request URL: $url');
     final response = await http
@@ -355,24 +406,7 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
     return response;
   }
 
-  void _handleSuccessfulResponse(Map<String, dynamic> data) {
-    if (data.containsKey('data') && data['data']['contents'] is List) {
-      final List<dynamic> contentList = data['data']['contents'] as List;
-      final List<FeedContent> newContents =
-          contentList.map((item) => FeedContent.fromJson(item)).toList();
-
-      setState(() {
-        _contents.addAll(newContents);
-        _lastId = newContents.isNotEmpty ? newContents.last.id : _lastId;
-        _hasMoreData = data['data']['hasMore'] ?? false;
-      });
-    } else {
-      setState(() {
-        _hasError = true;
-        _errorMessage = 'Please Contact To Our Support Team';
-      });
-    }
-  }
+  
 
   Future<void> _handleUnauthorizedError() async {
     if (!_isRefreshingToken) {
@@ -480,7 +514,7 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
                 return _buildContentItem(index);
               }, childCount: _contents.length + (_hasMoreData ? 1 : 0)),
             ),
-            if (_hasError) SliverFillRemaining(child: _buildErrorView()),
+            if (_hasError) SliverFillRemaining(child: _buildErrorView() ),
             if (_contents.isEmpty && !_isLoading && !_hasError)
               SliverFillRemaining(child: _buildEmptyView()),
           ],
@@ -640,63 +674,47 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
         : const SizedBox.shrink();
   }
 
-  Widget _buildErrorView() {
+   Widget _buildErrorView() {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Icon(
-            //   _errorMessage.contains('expired') ||
-            //           _errorMessage.contains('Authentication')
-            //       ? Icons.warning_amber
-            //       : Icons.error_outline,
-            //   size: 48,
-            //   color:
-            //       _errorMessage.contains('expired') ||
-            //               _errorMessage.contains('Authentication')
-            //           ? Colors.orange
-            //           : Colors.red,
-            // ),
-            // const SizedBox(height: 16),
-            Text(
-              _errorMessage,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color:
-                    _errorMessage.contains('expired') ||
-                            _errorMessage.contains('Authentication')
-                        ? Colors.orange
-                        : Colors.red,
+            if (!_isOnline) ...[
+              Lottie.asset('animation/No_Internet.json'),
+              const Text(
+                'You\'re offline. ',
+                style: TextStyle(fontSize: 16),
               ),
-            ),
+            ] else ...[
+              Text(
+                _errorMessage,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: _errorMessage.contains('expired') ||
+                          _errorMessage.contains('Authentication')
+                      ? Colors.orange
+                      : Colors.red,
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
-            if (_errorMessage.contains('expired') ||
-                _errorMessage.contains('Authentication'))
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => LoginPage()), (route) => false);
-                },
-                child: const Text('Login'),
-              )
-            else
-            SizedBox(
-              //height: 200,
-              width: 500,
-              child: Lottie.asset('animation/No_Internet.json',)),
-            SizedBox(height: 10,),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-        backgroundColor: Colors.deepOrange,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(30),
-        ),
-      ),
-                onPressed: _refresh,
-                label: Icon(Icons.refresh, color: Colors.white,),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                backgroundColor: Colors.deepOrange,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(30),
+                ),
               ),
+              onPressed: () {
+                _checkConnectivity();
+                _refresh();
+              },
+              icon: const Icon(Icons.refresh, color: Colors.white),
+              label: const Text('Refresh', style: TextStyle(color: Colors.white),),
+            ),
           ],
         ),
       ),
@@ -786,8 +804,38 @@ class _FeedItemState extends State<FeedItem>
     super.dispose();
   }
 
+   Future<bool> _checkConnectivity() async {
+    try {
+      final List<ConnectivityResult> connectivityResult = 
+          await Connectivity().checkConnectivity();
+      
+      // Check if any connection is available (WiFi, Mobile, Ethernet)
+      return connectivityResult.contains(ConnectivityResult.wifi) ||
+             connectivityResult.contains(ConnectivityResult.mobile) ||
+             connectivityResult.contains(ConnectivityResult.ethernet);
+    } catch (e) {
+      developer.log('Error checking connectivity: $e');
+      return false;
+    }
+  }
+
   Future<void> _recordView() async {
     if (_hasRecordedView) return; // Prevent multiple calls
+
+    // Check connectivity before making API call
+    bool isConnected = await _checkConnectivity();
+    if (!isConnected) {
+      developer.log('No internet connection. Skipping view recording for content ID: ${widget.content.id}');
+      // Get.snackbar(
+      //   'No Internet',
+      //   'View will be recorded when connection is restored.',
+      //   backgroundColor: Colors.orange,
+      //   colorText: Colors.white,
+      //   duration: const Duration(seconds: 3),
+      // );
+      return;
+    }
+
     _hasRecordedView = true;
 
     try {
@@ -806,7 +854,7 @@ class _FeedItemState extends State<FeedItem>
       final response = await http
           .post(
             Uri.parse(
-              'http://182.93.94.210:3064/api/v1/content/view/${widget.content.id}',
+              'http://182.93.94.210:3065/api/v1/content/view/${widget.content.id}',
             ),
             headers: {
               'Content-Type': 'application/json',
@@ -833,7 +881,6 @@ class _FeedItemState extends State<FeedItem>
           );
         }
       } else if (response.statusCode == 401) {
-        //Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => LoginPage()), (route) => false);
         Get.snackbar(
           'Error',
           'Session expired. Please login again.',
@@ -856,9 +903,12 @@ class _FeedItemState extends State<FeedItem>
         );
       }
     } catch (e) {
+      // Reset the flag so it can retry later when connection is restored
+      _hasRecordedView = false;
+      
       Get.snackbar(
         'Error',
-        'Error recording view: ${e.toString()}',
+        'Error Please Contact to Support Team',
         backgroundColor: Colors.red,
         colorText: Colors.white,
         duration: const Duration(seconds: 3),
@@ -2714,7 +2764,7 @@ class _OptimizedNetworkImage extends StatelessWidget {
 }
 
 class FeedApiService {
-  static const String baseUrl = 'http://182.93.94.210:3064';
+  static const String baseUrl = 'http://182.93.94.210:3065';
 
   static Future<List<FeedContent>> fetchContents(String? lastId, BuildContext context) async {
     try {

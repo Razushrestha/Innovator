@@ -11,11 +11,14 @@ import 'package:innovator/screens/Feed/Inner_Homepage.dart';
 import 'package:innovator/screens/Follow/follow_Button.dart';
 import 'package:innovator/screens/Follow/follow-Service.dart';
 import 'package:innovator/screens/Profile/Edit_Profile.dart';
+import 'package:innovator/screens/Profile/ProfileCacheManager.dart';
 import 'package:innovator/screens/SHow_Specific_Profile/Show_Specific_Profile.dart';
 import 'package:innovator/widget/FloatingMenuwidget.dart';
 import 'package:lottie/lottie.dart';
 import 'package:path/path.dart' as path;
 import 'package:http_parser/http_parser.dart';
+import 'package:get/get.dart';
+import 'package:innovator/controllers/user_controller.dart';
 
 class UserProfile {
   final String id;
@@ -136,17 +139,22 @@ class UserProfileService {
   static const String baseUrl = 'http://182.93.94.210:3064/api/v1';
 
   static Future<UserProfile> getUserProfile() async {
-    final token = AppData().authToken;
-
-    log('Retrieved token from AppData: ${token != null ? "Token exists" : "No token found"}');
-
-    if (token == null || token.isEmpty) {
-      throw AuthException('No authentication token found');
-    }
-
-    final url = Uri.parse('$baseUrl/user-profile');
     try {
-      log('Sending profile request with token: Bearer $token');
+      final token = AppData().authToken;
+      if (token == null || token.isEmpty) {
+        throw AuthException('No authentication token found');
+      }
+
+      // Try to get cached profile first
+      final cachedProfile = await ProfileCacheManager.getCachedProfile();
+      if (!await _hasInternetConnection()) {
+        if (cachedProfile != null) {
+          return cachedProfile;
+        }
+        throw Exception('No internet connection and no cached profile available');
+      }
+
+      final url = Uri.parse('$baseUrl/user-profile');
       final response = await http.get(
         url,
         headers: {
@@ -155,33 +163,43 @@ class UserProfileService {
         },
       );
 
-      log('Profile API response status: ${response.statusCode}');
-      log('Profile API response body: ${response.body}');
-
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        log('User profile data: $data');
-
-        if (data['data'] != null) {
-          return UserProfile.fromJson(data['data']);
-        } else {
-          return UserProfile.fromJson(data);
-        }
+        final profile = data['data'] != null 
+            ? UserProfile.fromJson(data['data'])
+            : UserProfile.fromJson(data);
+            
+        // Cache the new profile
+        await ProfileCacheManager.cacheUserProfile(profile);
+        return profile;
       } else if (response.statusCode == 401) {
         await AppData().clearAuthToken();
         throw AuthException('Authentication token expired or invalid');
       } else {
+        // Return cached profile if available when API fails
+        if (cachedProfile != null) {
+          return cachedProfile;
+        }
         throw Exception('Failed to load profile: ${response.statusCode}');
       }
     } catch (e) {
-      log('Error fetching profile: $e');
-      if (e is AuthException) {
-        rethrow;
+      // Return cached profile if available on error
+      final cachedProfile = await ProfileCacheManager.getCachedProfile();
+      if (cachedProfile != null) {
+        return cachedProfile;
       }
-      throw Exception('Network error: $e');
+      rethrow;
     }
   }
 
+  static Future<bool> _hasInternetConnection() async {
+    try {
+      final result = await InternetAddress.lookup('google.com');
+      return result.isNotEmpty && result[0].rawAddress.isNotEmpty;
+    } on SocketException catch (_) {
+      return false;
+    }
+  }
   static Future<List<FollowerFollowing>> getFollowers() async {
     final token = AppData().authToken;
     if (token == null || token.isEmpty) {
@@ -314,7 +332,7 @@ class UserProfileService {
         throw Exception('Failed to upload avatar: ${response.statusCode}');
       }
     } catch (e) {
-      log('Error uploading avatar: $e');
+      log('Error uploading avatar: $e');
       throw Exception('Avatar upload failed: $e');
     }
   }
@@ -336,6 +354,9 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   int _currentPageFollowers = 1;
   int _currentPageFollowing = 1;
   final int _itemsPerPage = 10;
+  final UserController _userController = Get.put(UserController());
+    bool _isLoadingFromCache = false;
+
 
   @override
   void initState() {
@@ -352,7 +373,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     return "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
   }
 
-  Future<void> _pickAndUploadImage()  async {
+  Future<void> _pickAndUploadImage() async {
     try {
       final ImagePicker picker = ImagePicker();
       final XFile? image = await picker.pickImage(
@@ -370,7 +391,10 @@ class _UserProfileScreenState extends State<UserProfileScreen>
       });
 
       final File imageFile = File(image.path);
-      await UserProfileService.uploadProfilePicture(imageFile);
+      final String newPicturePath = await UserProfileService.uploadProfilePicture(imageFile);
+      
+      // Update the profile picture in UserController
+      _userController.updateProfilePicture(newPicturePath);
 
       setState(() {
         _profileFuture = UserProfileService.getUserProfile();
@@ -382,7 +406,8 @@ class _UserProfileScreenState extends State<UserProfileScreen>
         _errorMessage = 'Failed to upload image: $e';
       });
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to upload image: $e')));
+        SnackBar(content: Text('Failed to upload image: $e')),
+      );
     }
   }
 
@@ -652,6 +677,18 @@ class _UserProfileScreenState extends State<UserProfileScreen>
           FutureBuilder<UserProfile>(
             future: _profileFuture,
             builder: (context, snapshot) {
+              if (_isLoadingFromCache) {
+                return const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text('Loading Information'),
+                    ],
+                  ),
+                );
+              }
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return Center(child: CircularProgressIndicator());
               } else if (snapshot.hasError) {
@@ -671,11 +708,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                           ),
                         ),
                         SizedBox(height: 8),
-Lottie.asset('animation/No-Content.json', fit: BoxFit.cover),
-                        // Text(
-                        //   snapshot.error.toString(),
-                        //   textAlign: TextAlign.center,
-                        //   style: TextStyle(color: Colors.red),
+                        Lottie.asset('animation/No-Content.json', fit: BoxFit.cover),
                         ElevatedButton(
                           onPressed: () {
                             setState(() {
@@ -707,20 +740,20 @@ Lottie.asset('animation/No-Content.json', fit: BoxFit.cover),
                               children: [
                                 Stack(
                                   children: [
-                                    CircleAvatar(
+                                    Obx(() => CircleAvatar(
                                       radius: 60,
                                       backgroundColor: Color.fromRGBO(235, 111, 70, 0.2),
-                                      backgroundImage: profile.picture != null
-                                          ? NetworkImage('http://182.93.94.210:3064${profile.picture}')
+                                      backgroundImage: _userController.getFullProfilePicturePath() != null
+                                          ? NetworkImage(_userController.getFullProfilePicturePath()!)
                                           : null,
-                                      child: profile.picture == null
+                                      child: _userController.profilePicture.value == null
                                           ? Icon(
                                               Icons.person,
                                               size: 60,
                                               color: Color.fromRGBO(235, 111, 70, 1),
                                             )
                                           : null,
-                                    ),
+                                    )),
                                     Positioned(
                                       right: 0,
                                       bottom: 0,
@@ -753,13 +786,13 @@ Lottie.asset('animation/No-Content.json', fit: BoxFit.cover),
                                 ),
                                 Column(
                                   children: [
-                                    Text(
-                                      profile.name,
+                                    Obx(() => Text(
+                                      _userController.userName.value ?? profile.name,
                                       style: TextStyle(
                                         fontSize: 22,
                                         fontWeight: FontWeight.bold,
                                       ),
-                                    ),
+                                    )),
                                     ElevatedButton.icon(
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: Color.fromRGBO(235, 111, 70, 1),
@@ -900,43 +933,11 @@ Lottie.asset('animation/No-Content.json', fit: BoxFit.cover),
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      // SizedBox(height: 8),
-                      // ProfileInfoCard(
-                      //   title: 'ID',
-                      //   value: profile.id,
-                      //   icon: Icons.fingerprint,
-                      // ),
-                      // ProfileInfoCard(
-                      //   title: 'Role',
-                      //   value: profile.role.toUpperCase(),
-                      //   icon: Icons.badge,
-                      // ),
                       ProfileInfoCard(
                         title: 'Member Since',
                         value: formatDate(profile.createdAt),
                         icon: Icons.access_time,
                       ),
-                      
-                      // SizedBox(height: 24),
-                      // Center(
-                      //   child: ElevatedButton(
-                      //     onPressed: () async {
-                      //       await AppData().clearAuthToken();
-                      //       Navigator.pushReplacement(
-                      //         context,
-                      //         MaterialPageRoute(builder: (_) => LoginPage()),
-                      //       );
-                      //     },
-                      //     child: Text('Logout'),
-                      //     style: ElevatedButton.styleFrom(
-                      //       backgroundColor: Color.fromRGBO(235, 111, 70, 1),
-                      //       padding: EdgeInsets.symmetric(
-                      //         horizontal: 40,
-                      //         vertical: 12,
-                      //       ),
-                      //     ),
-                      //   ),
-                      // ),
                       SizedBox(height: 40),
                     ],
                   ),

@@ -25,7 +25,7 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final Color preciseGreen = Color(0xFFEB6B46);
+  final Color preciseGreen = Color.fromRGBO(235, 111, 70, 1);
   bool _isPasswordVisible = false;
   bool isLogin = true;
   bool _isLoading = false;
@@ -544,7 +544,7 @@ _handleGoogleSignIn();
       child: Scaffold(
         appBar: AppBar(
           automaticallyImplyLeading: false,
-          backgroundColor: Color(0xFFEB6B46),
+          backgroundColor: Color.fromRGBO(244, 135, 6, 1),
           centerTitle: true,
         ),
         body: Stack(
@@ -553,7 +553,7 @@ _handleGoogleSignIn();
               width: MediaQuery.of(context).size.width,
               height: MediaQuery.of(context).size.height / 2.0,
               decoration: const BoxDecoration(
-                color: Color(0xFFEB6B46),
+                color: Color.fromRGBO(244, 135, 6, 1),
                 borderRadius: BorderRadius.only(
                   bottomRight: Radius.circular(70),
                 ),

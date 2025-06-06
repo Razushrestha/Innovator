@@ -5,6 +5,10 @@ import 'package:http/http.dart' as http;
 import 'package:innovator/App_data/App_data.dart';
 import 'package:innovator/innovator_home.dart';
 import 'package:intl/intl.dart';
+import 'package:innovator/screens/chatrrom/Screen/chatscreen.dart';
+import 'package:innovator/screens/comment/comment_screen.dart';
+import 'package:innovator/screens/Feed/post_detail_screen.dart';
+import 'package:innovator/screens/Profile/profile_screen.dart';
 
 class NotificationListScreen extends StatefulWidget {
   const NotificationListScreen({super.key});
@@ -378,64 +382,62 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
       ),
       direction: DismissDirection.endToStart,
       confirmDismiss: (direction) async {
-        return await // ...existing code...
- showGeneralDialog<bool>(
-  context: context,
-  barrierDismissible: true,
-  barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
-  barrierColor: Colors.black.withOpacity(0.4),
-  transitionDuration: const Duration(milliseconds: 300),
-  pageBuilder: (context, animation, secondaryAnimation) {
-    return Center(
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 24),
-        child: Material(
-          color: Colors.transparent,
-          child: AlertDialog(
-            backgroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            title: const Text(
-              'Delete Notification',
-              style: TextStyle(
-                color: Color(0xFFF48706),
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            content: const Text(
-              'Are you sure you want to delete this notification?',
-              style: TextStyle(fontSize: 16),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text(
-                  'Delete',
-                  style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+        return await showGeneralDialog<bool>(
+          context: context,
+          barrierDismissible: true,
+          barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+          barrierColor: Colors.black.withOpacity(0.4),
+          transitionDuration: const Duration(milliseconds: 300),
+          pageBuilder: (context, animation, secondaryAnimation) {
+            return Center(
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 24),
+                child: Material(
+                  color: Colors.transparent,
+                  child: AlertDialog(
+                    backgroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    title: const Text(
+                      'Delete Notification',
+                      style: TextStyle(
+                        color: Color(0xFFF48706),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    content: const Text(
+                      'Are you sure you want to delete this notification?',
+                      style: TextStyle(fontSize: 16),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text(
+                          'Delete',
+                          style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ],
-          ),
-        ),
-      ),
-    );
-  },
-  transitionBuilder: (context, animation, secondaryAnimation, child) {
-    return ScaleTransition(
-      scale: CurvedAnimation(
-        parent: animation,
-        curve: Curves.easeOutBack,
-      ),
-      child: child,
-    );
-  },
-);
-
+            );
+          },
+          transitionBuilder: (context, animation, secondaryAnimation, child) {
+            return ScaleTransition(
+              scale: CurvedAnimation(
+                parent: animation,
+                curve: Curves.easeOutBack,
+              ),
+              child: child,
+            );
+          },
+        );
       },
       onDismissed: (_) => deleteNotification(notification.id),
       child: InkWell(
@@ -545,21 +547,116 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
   }
 
   void _navigateToNotificationDetails(NotificationModel notification) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => NotificationDetailScreen(
-          notification: RemoteMessage(
-            data: {
-              'type': notification.type,
-              'content': notification.content,
-              'sender': notification.sender?.name ?? 'Unknown',
-              'createdAt': notification.createdAt,
-            },
+    // Handle navigation based on notification type
+    switch (notification.type.toLowerCase()) {
+      case 'message':
+        if (notification.sender != null) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ChatScreen(
+                currentUserId: AppData().currentUserId ?? '',
+                currentUserName: AppData().currentUserName ?? '',
+                currentUserPicture: AppData().currentUserProfilePicture ?? '',
+                currentUserEmail: AppData().currentUserEmail ?? '',
+                receiverId: notification.sender!.id,
+                receiverName: notification.sender!.name ?? 'Unknown',
+                receiverPicture: notification.sender!.picture ?? '',
+                receiverEmail: notification.sender!.email,
+              ),
+            ),
+          );
+        }
+        break;
+
+      case 'comment':
+        // Extract post ID from notification content or data
+        final postId = notification.data?['postId'];
+        if (postId != null) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => CommentScreen(postId: postId),
+            ),
+          );
+        }
+        break;
+
+      case 'like':
+        // Navigate to the liked post
+        final postId = notification.data?['postId'];
+        if (postId != null) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => PostDetailScreen(postId: postId),
+            ),
+          );
+        }
+        break;
+
+      case 'friend_request':
+        // Navigate to friend request screen or profile
+        if (notification.sender != null) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ProfileScreen(userId: notification.sender!.id),
+            ),
+          );
+        }
+        break;
+
+      case 'mention':
+        // Navigate to the post or comment where user was mentioned
+        final postId = notification.data?['postId'];
+        final commentId = notification.data?['commentId'];
+        if (postId != null) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => PostDetailScreen(
+                postId: postId,
+                highlightCommentId: commentId,
+              ),
+            ),
+          );
+        }
+        break;
+
+      case 'share':
+        // Navigate to the shared post
+        final postId = notification.data?['postId'];
+        if (postId != null) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => PostDetailScreen(postId: postId),
+            ),
+          );
+        }
+        break;
+
+      default:
+        // Fallback to generic notification details screen
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => NotificationDetailScreen(
+              notification: RemoteMessage(
+                data: {
+                  'type': notification.type,
+                  'content': notification.content,
+                  'sender': notification.sender?.name ?? 'Unknown',
+                  'createdAt': notification.createdAt,
+                  ...?notification.data, // Include any additional data
+                },
+              ),
+            ),
           ),
-        ),
-      ),
-    );
+        );
+        break;
+    }
   }
 
   IconData _getNotificationIcon(String type) {
@@ -789,6 +886,7 @@ class NotificationModel {
   final bool read;
   final String createdAt;
   final Sender? sender;
+  final Map<String, dynamic>? data;
 
   NotificationModel({
     required this.id,
@@ -797,6 +895,7 @@ class NotificationModel {
     required this.read,
     required this.createdAt,
     this.sender,
+    this.data,
   });
 
   factory NotificationModel.fromJson(Map<String, dynamic> json) {
@@ -807,6 +906,7 @@ class NotificationModel {
       read: json['read'] ?? false,
       createdAt: json['createdAt'],
       sender: json['sender'] != null ? Sender.fromJson(json['sender']) : null,
+      data: json['data'] as Map<String, dynamic>?,
     );
   }
 
@@ -817,6 +917,7 @@ class NotificationModel {
     bool? read,
     String? createdAt,
     Sender? sender,
+    Map<String, dynamic>? data,
   }) {
     return NotificationModel(
       id: id ?? this.id,
@@ -825,6 +926,7 @@ class NotificationModel {
       read: read ?? this.read,
       createdAt: createdAt ?? this.createdAt,
       sender: sender ?? this.sender,
+      data: data ?? this.data,
     );
   }
 }
