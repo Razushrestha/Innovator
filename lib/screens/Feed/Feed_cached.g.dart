@@ -61,4 +61,7 @@ class AuthorAdapter extends TypeAdapter<Author> {
     writer.write(obj.email);
     writer.write(obj.picture);
   }
+
+  
 }
+

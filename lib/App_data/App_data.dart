@@ -2,9 +2,11 @@ import 'dart:convert';
 import 'dart:developer' as developer;
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:http/http.dart' as http;
-import 'package:innovator/Notification/FCM_Class.dart';
+import 'package:innovator/main.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:innovator/screens/comment/JWT_Helper.dart';
+
+import '../services/Notification_services.dart';
 
 class AppData {
   // Singleton instance
@@ -146,9 +148,16 @@ class AppData {
   }
   
   // Update profile picture
-  Future<void> updateProfilePicture(String pictureUrl) async {
-    await updateCurrentUserField('profilePicture', pictureUrl);
-    developer.log('Profile picture updated: $pictureUrl');
+ Future<void> updateProfilePicture(String pictureUrl) async {
+    if (_currentUser == null) return;
+    
+    _currentUser!['picture'] = pictureUrl;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_currentUserKey, jsonEncode(_currentUser));
+    } catch (e) {
+      developer.log('Error updating profile picture: $e');
+    }
   }
   
   // New method to save or update FCM token
@@ -197,9 +206,9 @@ class AppData {
       
       final response = await http.post(url, headers: headers, body: body);
       if (response.statusCode == 200 || response.statusCode == 201) {
-        developer.log('FCM token updated successfully on backend');
+        developer.log('FCM token updated on backend');
       } else {
-        developer.log('Failed to update FCM token on backend: ${response.statusCode} - ${response.body}');
+        developer.log('Failed to update FCM token on backend: ${response.statusCode}');
       }
     } catch (e) {
       developer.log('Error updating FCM token on backend: $e');
@@ -207,36 +216,67 @@ class AppData {
   }
 
   Future<void> initializeFcm() async {
-  try {
-    // Request permission for notifications (iOS)
-    await FirebaseMessaging.instance.requestPermission();
-    
-    // Get the FCM token
-    String? fcmToken = await FirebaseMessaging.instance.getToken();
-    if (fcmToken != null) {
-      await saveFcmToken(fcmToken);
-      developer.log('FCM token initialized and saved: $fcmToken');
-    }
-
-    // Listen for token refresh
-    FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
-      await saveFcmToken(newToken);
-      developer.log('FCM token refreshed: $newToken');
-    });
-
-    // Handle foreground messages
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      NotificationService().showNotification(
-        id: DateTime.now().millisecondsSinceEpoch % 1000,
-        title: message.notification?.title ?? 'New Notification',
-        body: message.notification?.body ?? 'You have a new notification!',
-        payload: message.data.toString(),
+    try {
+      developer.log('🔥 Initializing FCM...');
+      
+      // Request permissions
+      final settings = await FirebaseMessaging.instance.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+        provisional: false,
       );
-    });
-  } catch (e) {
-    developer.log('Error initializing FCM: $e');
+      
+      developer.log('🔥 FCM Permission status: ${settings.authorizationStatus}');
+      
+      // Get FCM token
+      String? fcmToken = await FirebaseMessaging.instance.getToken();
+      if (fcmToken != null) {
+        await saveFcmToken(fcmToken);
+        developer.log('🔥 FCM token saved: ${fcmToken.substring(0, 20)}...');
+        
+        // Subscribe to user topic
+        if (currentUserId != null) {
+          await FirebaseMessaging.instance.subscribeToTopic('user_$currentUserId');
+          developer.log('🔥 Subscribed to topic: user_$currentUserId');
+        }
+      }
+      
+      // Listen for token refresh
+      FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
+        await saveFcmToken(newToken);
+        developer.log('🔥 FCM token refreshed');
+        
+        if (currentUserId != null) {
+          await FirebaseMessaging.instance.subscribeToTopic('user_$currentUserId');
+        }
+      });
+      
+      // Handle foreground messages
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        developer.log('🔥 Received foreground message: ${message.messageId}');
+        NotificationService().handleForegroundMessage(message);
+      });
+      
+      // Handle messages when app is opened from notification
+      FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+        developer.log('🔥 App opened from notification: ${message.messageId}');
+        NotificationService().handleForegroundMessage(message);
+      });
+      
+      // Check for initial message when app is launched from terminated state
+      final initialMessage = await FirebaseMessaging.instance.getInitialMessage();
+      if (initialMessage != null) {
+        developer.log('🔥 App launched from notification: ${initialMessage.messageId}');
+        NotificationService().handleForegroundMessage(initialMessage);
+      }
+      
+      developer.log('✅ FCM initialized successfully');
+    } catch (e) {
+      developer.log('❌ Error initializing FCM: $e');
+    }
   }
-}
+  
   
   bool isCurrentUser(String userId) {
     final currentId = JwtHelper.extractUserId(_authToken);
@@ -259,6 +299,9 @@ class AppData {
     return result;
   }
   
+
+
+
   bool get isAuthenticated => _authToken != null && _authToken!.isNotEmpty;
   
   Future<void> logout() async {

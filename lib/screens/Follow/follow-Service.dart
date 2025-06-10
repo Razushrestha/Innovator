@@ -4,7 +4,7 @@ import 'package:innovator/App_data/App_data.dart';
 
 class FollowService {
   static const String _baseUrl = 'http://182.93.94.210:3064/api/v1';
-  static const String _checkUrl = 'http://182.93.94.210:3065/api/v1/check';
+  static const String _checkUrl = 'http://182.93.94.210:3064/api/v1/check';
 
   static Future<Map<String, dynamic>> sendFollowRequest(String email) async {
     try {

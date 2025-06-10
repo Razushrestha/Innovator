@@ -10,8 +10,12 @@ class CacheManager {
   static Future<void> initialize() async {
     final appDir = await getApplicationDocumentsDirectory();
     await Hive.initFlutter(appDir.path);
-    Hive.registerAdapter(FeedContentAdapter());
-    Hive.registerAdapter(AuthorAdapter());
+   if (!Hive.isAdapterRegistered(0)) {
+      Hive.registerAdapter(FeedContentAdapter());
+    }
+    if (!Hive.isAdapterRegistered(1)) {
+      Hive.registerAdapter(AuthorAdapter());
+    }
     await Hive.openBox<FeedContent>(feedBoxName);
   }
 

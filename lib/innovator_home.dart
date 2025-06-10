@@ -2,9 +2,12 @@ import 'dart:developer';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:in_app_update/in_app_update.dart';
+import 'package:innovator/main.dart';
 import 'package:innovator/screens/Feed/Inner_Homepage.dart';
+import 'package:innovator/screens/Feed/Video_Feed.dart';
 import 'package:innovator/screens/chatrrom/controller/chatlist_controller.dart';
 import 'package:innovator/utils/Drawer/custom_drawer.dart';
+import 'package:innovator/widget/Feed&Post.dart';
 import 'package:innovator/widget/FloatingMenuwidget.dart';
 
 class Homepage extends StatefulWidget {
@@ -96,9 +99,14 @@ class _HomepageState extends State<Homepage> with SingleTickerProviderStateMixin
       // drawer: const CustomDrawer(),
       body: Stack(
         children: [
+      
           Inner_HomePage(),
           // Add the floating menu widget
           FloatingMenuWidget(),
+          Positioned(
+            top: mq.height * 0.01,
+            right: mq.width *.03,            
+            child: FeedToggleButton(onToggle: (bool isPost) { Navigator.push(context, MaterialPageRoute(builder: (_) => VideoFeedPage()));},))
         ],
       ),
     );

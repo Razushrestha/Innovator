@@ -23,7 +23,6 @@ class SpecificUserProfilePage extends StatefulWidget {
       _SpecificUserProfilePageState();
 }
 
-
 late Size mq;
 
 class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
@@ -296,7 +295,7 @@ mq = MediaQuery.of(context).size;
                                 userEmail: profileData['email'] ?? widget.userId,
                               ),
                             ),
-SliverList(
+                            SliverList(
                             delegate: SliverChildBuilderDelegate(
                               (context, index) {
                                 if (index == _contents.length) {
@@ -430,40 +429,7 @@ Widget _buildEmptyFeedView() {
         ),
         onPressed: () => Navigator.of(context).pop(),
       ),
-      // actions: [
-      //   IconButton(
-      //     icon: Container(
-      //       padding: const EdgeInsets.all(8),
-      //       decoration: BoxDecoration(
-      //         color: isDarkMode 
-      //             ? Colors.black.withOpacity(0.5) 
-      //             : Colors.white.withOpacity(0.9),
-      //         shape: BoxShape.circle,
-      //         boxShadow: [
-      //           BoxShadow(
-      //             color: Colors.black.withOpacity(0.1),
-      //             blurRadius: 10,
-      //             offset: const Offset(0, 2),
-      //           ),
-      //         ],
-      //       ),
-      //       child: Icon(
-      //         Icons.more_horiz,
-      //         color: isDarkMode ? Colors.white : Colors.black,
-      //         size: 20,
-      //       ),
-      //     ),
-      //     onPressed: () {
-      //       showModalBottomSheet(
-      //         context: context,
-      //         isScrollControlled: true,
-      //         backgroundColor: Colors.transparent,
-      //         builder: (context) => _buildOptionsSheet(),
-      //       );
-      //     },
-      //   ),
-      //   const SizedBox(width: 8),
-      // ],
+     
     );
   }
 
@@ -774,8 +740,8 @@ Widget _buildEmptyFeedView() {
         boxShadow: [
           BoxShadow(
             color: isDarkMode 
-                ? Colors.black.withOpacity(0.3) 
-                : Colors.grey.withOpacity(0.1),
+                ? Colors.black.withAlpha(30) 
+                : Colors.grey.withAlpha(10),
             blurRadius: 20,
             spreadRadius: 5,
             offset: const Offset(0, 10),
@@ -838,13 +804,13 @@ Widget _buildEmptyFeedView() {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              color.withOpacity(0.1),
-              color.withOpacity(0.05),
+              color.withAlpha(10),
+              color.withAlpha(5),
             ],
           ),
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
-            color: color.withOpacity(0.2),
+            color: color.withAlpha(30),
             width: 1,
           ),
         ),
@@ -853,7 +819,7 @@ Widget _buildEmptyFeedView() {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.15),
+                color: color.withAlpha(15),
                 shape: BoxShape.circle,
               ),
               child: Icon(icon, color: color, size: 24),
@@ -1006,8 +972,8 @@ Widget _buildEmptyFeedView() {
         boxShadow: [
           BoxShadow(
             color: isDarkMode 
-                ? Colors.black.withOpacity(0.3) 
-                : Colors.grey.withOpacity(0.1),
+                ? Colors.black.withAlpha(30) 
+                : Colors.grey.withAlpha(10),
             blurRadius: 20,
             spreadRadius: 5,
             offset: const Offset(0, 10),

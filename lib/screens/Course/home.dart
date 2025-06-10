@@ -363,20 +363,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Widget _buildCategoryCard(Category category) {
     return GestureDetector(
       onTap: () {
-        // Navigate to BasicElectronic screen for any category tap
-       showDialog(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('Category Tapped'),
-      content: Text('You tapped on "${category.title}".'),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('OK'),
-        ),
-      ],
-    ),
-  );
+      Navigator.push(context, MaterialPageRoute(builder: (_) => CourseDetailPage()));
       },
       child: Container(
         decoration: BoxDecoration(

@@ -259,15 +259,11 @@ class _ChatListScreenState extends State<ChatListScreen>
                     ),
                   ],
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    CircleAvatar(
-                      backgroundColor: Colors.blue,
-                      radius: 24,
-                      child: Icon(Icons.smart_toy, color: Colors.white),
-                    ),
-                    SizedBox(width: 12),
-                    Expanded(
+                    Image.asset('animation/AI.gif', height: 50,),
+                    const SizedBox(width: 12),
+                    const Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [

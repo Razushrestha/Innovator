@@ -35,18 +35,18 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
   // Features to display above the menu button with their respective actions
   final List<Map<String, dynamic>> _topIcons = [
     {
-      'icon': Icons.library_books,
-      'name': 'Golf Course',
+      'icon': Icons.home,
+      'name': 'FEED',
       'action': 'navigate_golf',
     },
-    {'icon': Icons.school, 'name': 'Search', 'action': 'open_search'},
-    {'icon': Icons.add_a_photo, 'name': 'Search', 'action': 'add_photo'},
+    {'icon': Icons.school, 'name': 'COURSE', 'action': 'open_search'},
+    {'icon': Icons.add_a_photo, 'name': 'ADD POST', 'action': 'add_photo'},
   ];
 
   // Features to display below the menu button with their respective actions
   final List<Map<String, dynamic>> _bottomIcons = [
-    {'icon': Icons.shop, 'name': 'Settings', 'action': 'open_settings'},
-    {'icon': Icons.search, 'name': 'Profile', 'action': 'view_profile'},
+    {'icon': Icons.shop, 'name': 'SHOP', 'action': 'open_settings'},
+    {'icon': Icons.search, 'name': 'SEARCH', 'action': 'view_profile'},
     {'icon': Icons.menu, 'name': 'Drawer', 'action': 'drawer'},
   ];
 

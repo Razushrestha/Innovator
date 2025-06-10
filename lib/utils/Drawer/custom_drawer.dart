@@ -5,11 +5,13 @@ import 'dart:math' as math;
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:get/get.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:innovator/App_data/App_data.dart';
 import 'package:innovator/Authorization/Login.dart';
 import 'package:innovator/Notification/FCM_Services.dart';
+import 'package:innovator/controllers/user_controller.dart';
 import 'package:innovator/main.dart';
 import 'package:innovator/screens/Course/home.dart';
 import 'package:innovator/screens/Eliza_ChatBot/Elizahomescreen.dart';
@@ -117,65 +119,67 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
   }
 
   Future<void> _fetchUserProfile() async {
-    try {
-      final String? authToken = AppData().authToken;
-      
-      if (authToken == null || authToken.isEmpty) {
-        _handleError('Authentication token not found');
-        return;
-      }
+  try {
+    final String? authToken = AppData().authToken;
+    
+    if (authToken == null || authToken.isEmpty) {
+      _handleError('Authentication token not found');
+      return;
+    }
 
-      // Check internet connection
-      final bool hasInternet = await _checkInternetConnection();
-      if (!hasInternet) {
-        if (_userData != null) return; // Use cached data if available
-        _handleError('No internet connection');
-        return;
-      }
+    final bool hasInternet = await _checkInternetConnection();
+    if (!hasInternet) {
+      if (_userData != null) return;
+      _handleError('No internet connection');
+      return;
+    }
 
-      final response = await http.get(
-        Uri.parse('http://182.93.94.210:3064/api/v1/user-profile'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $authToken',
-        },
-      );
+    final response = await http.get(
+      Uri.parse('http://182.93.94.210:3064/api/v1/user-profile'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $authToken',
+      },
+    );
 
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> responseData = json.decode(response.body);
-        if (responseData['status'] == 200 && responseData['data'] != null) {
-          final userData = responseData['data'];
-          
-          // Cache the profile data
-          await DrawerProfileCache.cacheProfile(
-            name: userData['name'] ?? '',
-            email: userData['email'] ?? '',
-            picturePath: userData['picture'],
-          );
+    if (response.statusCode == 200) {
+      final Map<String, dynamic> responseData = json.decode(response.body);
+      if (responseData['status'] == 200 && responseData['data'] != null) {
+        final userData = responseData['data'];
+        
+        await DrawerProfileCache.cacheProfile(
+          name: userData['name'] ?? '',
+          email: userData['email'] ?? '',
+          picturePath: userData['picture'],
+        );
 
-          if (mounted) {
-            setState(() {
-              _userData = userData;
-              _isLoading = false;
-              AppData().setCurrentUser(_userData!);
-            });
-          }
-        } else {
-          _handleError(responseData['message'] ?? 'Unknown error');
+        // Update the controller
+        final userController = Get.find<UserController>();
+        userController.updateProfilePicture(userData['picture']);
+
+        if (mounted) {
+          setState(() {
+            _userData = userData;
+            _isLoading = false;
+            AppData().setCurrentUser(_userData!);
+          });
         }
       } else {
-        _handleError('Failed to load profile. Status: ${response.statusCode}');
+        _handleError(responseData['message'] ?? 'Unknown error');
       }
-    } catch (e) {
-      _handleError('Network error: $e');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoadingFromCache = false;
-        });
-      }
+    } else {
+      _handleError('Failed to load profile. Status: ${response.statusCode}');
+    }
+  } catch (e) {
+    _handleError('Network error: $e');
+  } finally {
+    if (mounted) {
+      setState(() {
+        _isLoadingFromCache = false;
+      });
     }
   }
+}
 
   Future<bool> _checkInternetConnection() async {
     try {
@@ -334,7 +338,7 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => ProviderScope(child: UserProfileScreen()),
+                          builder: (_) => ProviderScope(child: UserProfileScreen(userId: AppData().currentUserId ?? '',)),
                         ),
                       );
                     },
@@ -494,50 +498,54 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
     );
   }
 
+  final UserController userController = Get.put(UserController());
+
+
   Widget _buildAdvancedProfileHeader() {
   final userData = AppData().currentUser ?? _userData;
   final String name = userData?['name'] ?? 'User';
   final String email = userData?['email'] ?? '';
-  final String? picturePath = userData?['picture'];
   const String baseUrl = 'http://182.93.94.210:3064';
 
   return DefaultTextStyle(
     style: const TextStyle(
       decoration: TextDecoration.none,
-      fontFamily: 'Roboto', // or your app's default font
+      fontFamily: 'Roboto',
     ),
     child: Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        // Animated profile picture with glow effect
-        Container(
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.white.withAlpha(30),
-                blurRadius: 20,
-                spreadRadius: 2,
-              ),
-            ],
-          ),
-          child: CircleAvatar(
-            radius: 35,
-            backgroundColor: Colors.white.withAlpha(20),
-            backgroundImage: picturePath != null
-                ? NetworkImage('$baseUrl$picturePath')
-                : null,
-            child: picturePath == null
-                ? const Icon(
-                    Icons.person,
-                    size: 35,
-                    color: Colors.white,
-                  )
-                : null,
-          ),
-        ),
+        // Wrap the CircleAvatar with Obx to react to changes
+        Obx(() {
+          final picturePath = userController.profilePicture;
+          return Container(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.white.withAlpha(30),
+                  blurRadius: 20,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: CircleAvatar(
+              radius: 35,
+              backgroundColor: Colors.white.withAlpha(20),
+              backgroundImage: picturePath != null
+                  ? NetworkImage('$baseUrl$picturePath')
+                  : null,
+              child: picturePath == null
+                  ? const Icon(
+                      Icons.person,
+                      size: 35,
+                      color: Colors.white,
+                    )
+                  : null,
+            ),
+          );
+        }),
         const SizedBox(height: 20),
-        // Animated welcome text
         Text(
           'Welcome Back',
           style: const TextStyle(
@@ -546,11 +554,10 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
             fontWeight: FontWeight.w500,
             letterSpacing: 1.5,
             decoration: TextDecoration.none,
-            fontFamily: 'Roboto', // Specify font family
+            fontFamily: 'Roboto',
           ),
         ),
         const SizedBox(height: 8),
-        // Name text with proper styling
         Text(
           name,
           style: const TextStyle(
@@ -559,7 +566,7 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
             fontWeight: FontWeight.bold,
             letterSpacing: 1.2,
             decoration: TextDecoration.none,
-            fontFamily: 'Roboto', // Specify font family
+            fontFamily: 'Roboto',
           ),
           textAlign: TextAlign.center,
           maxLines: 1,
@@ -583,7 +590,7 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
                 fontSize: 12,
                 fontWeight: FontWeight.w400,
                 decoration: TextDecoration.none,
-                fontFamily: 'Roboto', // Specify font family
+                fontFamily: 'Roboto',
               ),
             ),
           ),

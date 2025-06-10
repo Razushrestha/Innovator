@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:innovator/screens/Course/Notes/Course_Notes.dart';
 import 'package:innovator/screens/Course/home.dart';
 import 'package:video_player/video_player.dart';
 import 'package:flutter/services.dart';
@@ -23,7 +24,7 @@ class _CourseDetailPageState extends State<CourseDetailPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _initializeVideoPlayer();
   }
 
@@ -184,6 +185,7 @@ class _CourseDetailPageState extends State<CourseDetailPage>
               unselectedLabelColor: Colors.grey,
               indicatorColor: Colors.purple,
               tabs: const [
+                Tab(text: 'Notes',),
                 Tab(text: 'Playlist (22)'),
                 Tab(text: 'Description'),
               ],
@@ -194,6 +196,8 @@ class _CourseDetailPageState extends State<CourseDetailPage>
             child: TabBarView(
               controller: _tabController,
               children: [
+                    NotesTab(),
+
                 // Playlist tab
                 ListView(
                   padding: const EdgeInsets.all(16),

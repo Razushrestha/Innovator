@@ -31,12 +31,12 @@ class UserProfile {
   final DateTime createdAt;
   final DateTime updatedAt;
   final String? picture;
-  final String? gender; // Added
-  final String? location; // Added
-  final String? bio; // Added
-  final String? education; // Added
-  final String? profession; // Added
-  final String? achievements; // Added
+  final String? gender;
+  final String? location;
+  final String? bio;
+  final String? education;
+  final String? profession;
+  final String? achievements;
 
   UserProfile({
     required this.id,
@@ -145,15 +145,6 @@ class UserProfileService {
         throw AuthException('No authentication token found');
       }
 
-      // Try to get cached profile first
-      final cachedProfile = await ProfileCacheManager.getCachedProfile();
-      if (!await _hasInternetConnection()) {
-        if (cachedProfile != null) {
-          return cachedProfile;
-        }
-        throw Exception('No internet connection and no cached profile available');
-      }
-
       final url = Uri.parse('$baseUrl/user-profile');
       final response = await http.get(
         url,
@@ -168,38 +159,18 @@ class UserProfileService {
         final profile = data['data'] != null 
             ? UserProfile.fromJson(data['data'])
             : UserProfile.fromJson(data);
-            
-        // Cache the new profile
-        await ProfileCacheManager.cacheUserProfile(profile);
         return profile;
       } else if (response.statusCode == 401) {
         await AppData().clearAuthToken();
         throw AuthException('Authentication token expired or invalid');
       } else {
-        // Return cached profile if available when API fails
-        if (cachedProfile != null) {
-          return cachedProfile;
-        }
         throw Exception('Failed to load profile: ${response.statusCode}');
       }
     } catch (e) {
-      // Return cached profile if available on error
-      final cachedProfile = await ProfileCacheManager.getCachedProfile();
-      if (cachedProfile != null) {
-        return cachedProfile;
-      }
       rethrow;
     }
   }
 
-  static Future<bool> _hasInternetConnection() async {
-    try {
-      final result = await InternetAddress.lookup('google.com');
-      return result.isNotEmpty && result[0].rawAddress.isNotEmpty;
-    } on SocketException catch (_) {
-      return false;
-    }
-  }
   static Future<List<FollowerFollowing>> getFollowers() async {
     final token = AppData().authToken;
     if (token == null || token.isEmpty) {
@@ -339,7 +310,9 @@ class UserProfileService {
 }
 
 class UserProfileScreen extends StatefulWidget {
-  const UserProfileScreen({Key? key}) : super(key: key);
+  final String userId;
+
+  const UserProfileScreen({Key? key, required this.userId}) : super(key: key);
 
   @override
   _UserProfileScreenState createState() => _UserProfileScreenState();
@@ -347,6 +320,8 @@ class UserProfileScreen extends StatefulWidget {
 
 class _UserProfileScreenState extends State<UserProfileScreen>
     with SingleTickerProviderStateMixin {
+  final AppData _appData = AppData();
+  static const _loadTriggerThreshold = 500.0;
   late Future<UserProfile> _profileFuture;
   bool _isUploading = false;
   String? _errorMessage;
@@ -355,14 +330,125 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   int _currentPageFollowing = 1;
   final int _itemsPerPage = 10;
   final UserController _userController = Get.put(UserController());
-    bool _isLoadingFromCache = false;
-
+  bool _isLoadingFromCache = false;
+  final List<FeedContent> _contents = [];
+  final ScrollController _scrollController = ScrollController();
+  bool _isLoading = false;
+  String? _lastId;
+  bool _hasError = false;
+  bool _hasMoreData = true;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _loadProfile();
+    _initializeFeed();
+    _scrollController.addListener(_scrollListener);
+  }
+
+  void _initializeFeed() {
+    _loadMoreContent();
+  }
+
+  void _scrollListener() {
+    if (!_isLoading &&
+        _hasMoreData &&
+        _scrollController.position.pixels >=
+            _scrollController.position.maxScrollExtent - _loadTriggerThreshold) {
+      _loadMoreContent();
+    }
+  }
+
+  Future<void> _loadMoreContent() async {
+    if (_isLoading || !_hasMoreData) return;
+
+    setState(() {
+      _isLoading = true;
+      _hasError = false;
+    });
+
+    try {
+      final String? authToken = _appData.authToken;
+      if (authToken == null || authToken.isEmpty) {
+        setState(() {
+          _hasError = true;
+          _errorMessage = 'Authentication required. Please login.';
+        });
+        Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (_) => LoginPage()),
+            (route) => false);
+        return;
+      }
+
+      final url = _lastId == null
+          ? 'http://182.93.94.210:3064/api/v1/getUserContent/${widget.userId}?page=0'
+          : 'http://182.93.94.210:3064/api/v1/getUserContent/${widget.userId}?page=${(_contents.length / 10).ceil()}';
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'authorization': 'Bearer $authToken',
+        },
+      ).timeout(Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        if (data['status'] == 200 && data['data'] != null) {
+          final List<dynamic> contentList = data['data']['contents'] ?? [];
+          final List<FeedContent> newContents =
+              contentList.map((item) => FeedContent.fromJson(item)).toList();
+          final pagination = data['data']['pagination'];
+
+          setState(() {
+            _contents.addAll(newContents);
+            _lastId = newContents.isNotEmpty ? newContents.last.id : _lastId;
+            _hasMoreData = pagination['hasMore'] ?? false;
+          });
+        } else {
+          setState(() {
+            _hasError = true;
+            _errorMessage = 'Invalid response from server.';
+          });
+        }
+      } else if (response.statusCode == 401) {
+        await _handleUnauthorizedError();
+      } else {
+        setState(() {
+          _hasError = true;
+          _errorMessage = 'Server error: ${response.statusCode}';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _hasError = true;
+        _errorMessage = 'Error: ${e.toString()}';
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _handleUnauthorizedError() async {
+    Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => LoginPage()),
+        (route) => false);
+  }
+
+  Future<void> _refreshFeed() async {
+    setState(() {
+      _contents.clear();
+      _lastId = null;
+      _hasError = false;
+      _hasMoreData = true;
+    });
+    await _loadMoreContent();
   }
 
   void _loadProfile() {
@@ -393,13 +479,14 @@ class _UserProfileScreenState extends State<UserProfileScreen>
       final File imageFile = File(image.path);
       final String newPicturePath = await UserProfileService.uploadProfilePicture(imageFile);
       
-      // Update the profile picture in UserController
       _userController.updateProfilePicture(newPicturePath);
+      await AppData().updateProfilePicture(newPicturePath);
 
       setState(() {
-        _profileFuture = UserProfileService.getUserProfile();
         _isUploading = false;
       });
+      
+      _loadProfile();
     } catch (e) {
       setState(() {
         _isUploading = false;
@@ -669,293 +756,348 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     );
   }
 
+  Widget _buildProfileSection(UserProfile profile) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        
+        SizedBox(height: 40),
+        Center(
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  Stack(
+                    children: [
+                      Obx(() => CircleAvatar(
+                        radius: 60,
+                        backgroundColor: Color.fromRGBO(235, 111, 70, 0.2),
+                        backgroundImage: _userController.getFullProfilePicturePath() != null
+                            ? NetworkImage(_userController.getFullProfilePicturePath()!)
+                            : null,
+                        child: _userController.profilePicture.value == null
+                            ? Icon(
+                                Icons.person,
+                                size: 60,
+                                color: Color.fromRGBO(235, 111, 70, 1),
+                              )
+                            : null,
+                      )),
+                      Positioned(
+                        right: 0,
+                        bottom: 0,
+                        child: GestureDetector(
+                          onTap: _isUploading ? null : _pickAndUploadImage,
+                          child: Container(
+                            padding: EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Color.fromRGBO(235, 111, 70, 1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: _isUploading
+                                ? SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Icon(
+                                    Icons.edit,
+                                    color: Colors.white,
+                                    size: 16,
+                                  ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  Column(
+                    children: [
+                      Obx(() => Text(
+                        _userController.userName.value ?? profile.name,
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      )),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Color.fromRGBO(235, 111, 70, 1),
+                        ),
+                        onPressed: () {
+                          Navigator.of(context).pushReplacement(
+                            MaterialPageRoute(
+                              builder: (_) => EditProfileScreen(),
+                            ),
+                          );
+                        },
+                        label: Text(
+                          'Edit Profile',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.white,
+                          ),
+                        ),
+                        icon: Icon(
+                          Icons.edit,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              SizedBox(height: 12),
+              if (_errorMessage != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8.0),
+                  child: Text(
+                    _errorMessage!,
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              SizedBox(height: 4),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  GestureDetector(
+                    onTap: () => _showFollowersFollowingDialog(context),
+                    child: Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Color.fromRGBO(235, 111, 70, 0.2),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Text(
+                        'Followers',
+                        style: TextStyle(
+                          color: Color.fromRGBO(235, 111, 70, 1),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () {
+                      _tabController.index = 1;
+                      _showFollowersFollowingDialog(context);
+                    },
+                    child: Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Color.fromRGBO(235, 111, 70, 0.2),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Text(
+                        'Following',
+                        style: TextStyle(
+                          color: Color.fromRGBO(235, 111, 70, 1),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Color.fromRGBO(235, 111, 70, 0.2),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Text(
+                      '${profile.level.toUpperCase()} LEVEL',
+                      style: TextStyle(
+                        color: Color.fromRGBO(235, 111, 70, 1),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        SizedBox(height: 24),
+        Padding(
+          padding: EdgeInsets.all(12),
+          child: Text(
+            'Personal Information',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        SizedBox(height: 8),
+        ProfileInfoCard(
+          title: 'Email',
+          value: profile.email,
+          icon: Icons.email,
+        ),
+        ProfileInfoCard(
+          title: 'Phone',
+          value: profile.phone,
+          icon: Icons.phone,
+        ),
+        ProfileInfoCard(
+          title: 'Date of Birth',
+          value: formatDate(profile.dob),
+          icon: Icons.calendar_today,
+        ),
+        
+        ProfileInfoCard(
+          title: 'Member Since',
+          value: formatDate(profile.createdAt),
+          icon: Icons.access_time,
+        ),
+        SizedBox(height: 24),
+        Divider(thickness: 1),
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Text(
+            'My Feed',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildContentItem(int index) {
+    final content = _contents[index];
+    return RepaintBoundary(
+      key: ValueKey(content.id),
+      child: FeedItem(
+        content: content,
+        onLikeToggled: (isLiked) {
+          setState(() {
+            content.isLiked = isLiked;
+            content.likes += isLiked ? 1 : -1;
+          });
+        },
+        onFollowToggled: (isFollowed) {
+          setState(() {
+            content.isFollowed = isFollowed;
+          });
+        },
+      ),
+    );
+  }
+
+  Widget _buildLoadingIndicator() {
+    return _isLoading
+        ? const Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Center(child: CircularProgressIndicator()),
+          )
+        : const SizedBox.shrink();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Stack(
-        children: [
-          FutureBuilder<UserProfile>(
-            future: _profileFuture,
-            builder: (context, snapshot) {
-              if (_isLoadingFromCache) {
-                return const Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      CircularProgressIndicator(),
-                      SizedBox(height: 16),
-                      Text('Loading Information'),
-                    ],
-                  ),
-                );
-              }
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return Center(child: CircularProgressIndicator());
-              } else if (snapshot.hasError) {
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
+      body: CustomScrollView(
+        controller: _scrollController,
+        physics: BouncingScrollPhysics(),
+        slivers: [
+          SliverToBoxAdapter(
+            child: FutureBuilder<UserProfile>(
+              future: _profileFuture,
+              builder: (context, snapshot) {
+                if (_isLoadingFromCache) {
+                  return const Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.error_outline, size: 48, color: Colors.red),
+                        CircularProgressIndicator(),
                         SizedBox(height: 16),
-                        Text(
-                          'Error loading profile',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        SizedBox(height: 8),
-                        Lottie.asset('animation/No-Content.json', fit: BoxFit.cover),
-                        ElevatedButton(
-                          onPressed: () {
-                            setState(() {
-                              _loadProfile();
-                            });
-                          },
-                          child: Text('Try Again', style: TextStyle(color: Colors.white),),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Color.fromRGBO(235, 111, 70, 1),
-                          ),
-                        ),
+                        Text('Loading Information'),
                       ],
                     ),
-                  ),
-                );
-              } else if (snapshot.hasData) {
-                final profile = snapshot.data!;
-                return SingleChildScrollView(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(height: 40),
-                      Center(
-                        child: Column(
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                              children: [
-                                Stack(
-                                  children: [
-                                    Obx(() => CircleAvatar(
-                                      radius: 60,
-                                      backgroundColor: Color.fromRGBO(235, 111, 70, 0.2),
-                                      backgroundImage: _userController.getFullProfilePicturePath() != null
-                                          ? NetworkImage(_userController.getFullProfilePicturePath()!)
-                                          : null,
-                                      child: _userController.profilePicture.value == null
-                                          ? Icon(
-                                              Icons.person,
-                                              size: 60,
-                                              color: Color.fromRGBO(235, 111, 70, 1),
-                                            )
-                                          : null,
-                                    )),
-                                    Positioned(
-                                      right: 0,
-                                      bottom: 0,
-                                      child: GestureDetector(
-                                        onTap: _isUploading ? null : _pickAndUploadImage,
-                                        child: Container(
-                                          padding: EdgeInsets.all(8),
-                                          decoration: BoxDecoration(
-                                            color: Color.fromRGBO(235, 111, 70, 1),
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: _isUploading
-                                              ? SizedBox(
-                                                  width: 16,
-                                                  height: 16,
-                                                  child: CircularProgressIndicator(
-                                                    color: Colors.white,
-                                                    strokeWidth: 2,
-                                                  ),
-                                                )
-                                              : Icon(
-                                                  Icons.edit,
-                                                  color: Colors.white,
-                                                  size: 16,
-                                                ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                Column(
-                                  children: [
-                                    Obx(() => Text(
-                                      _userController.userName.value ?? profile.name,
-                                      style: TextStyle(
-                                        fontSize: 22,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    )),
-                                    ElevatedButton.icon(
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Color.fromRGBO(235, 111, 70, 1),
-                                      ),
-                                      onPressed: () {
-                                        Navigator.of(context).pushReplacement(
-                                          MaterialPageRoute(
-                                            builder: (_) => EditProfileScreen(),
-                                          ),
-                                        );
-                                      },
-                                      label: Text(
-                                        'Edit Profile',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                      icon: Icon(
-                                        Icons.edit,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
+                  );
+                }
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return Center(child: CircularProgressIndicator());
+                } else if (snapshot.hasError) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.error_outline, size: 48, color: Colors.red),
+                          SizedBox(height: 16),
+                          Text(
+                            'Error loading profile',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
                             ),
-                            SizedBox(height: 12),
-                            if (_errorMessage != null)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 8.0),
-                                child: Text(
-                                  _errorMessage!,
-                                  style: TextStyle(
-                                    color: Colors.red,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                            SizedBox(height: 4),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                              children: [
-                                GestureDetector(
-                                  onTap: () => _showFollowersFollowingDialog(context),
-                                  child: Container(
-                                    padding: EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 8,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Color.fromRGBO(235, 111, 70, 0.2),
-                                      borderRadius: BorderRadius.circular(16),
-                                    ),
-                                    child: Text(
-                                      'Followers',
-                                      style: TextStyle(
-                                        color: Color.fromRGBO(235, 111, 70, 1),
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                GestureDetector(
-                                  onTap: () {
-                                    _tabController.index = 1;
-                                    _showFollowersFollowingDialog(context);
-                                  },
-                                  child: Container(
-                                    padding: EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 8,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Color.fromRGBO(235, 111, 70, 0.2),
-                                      borderRadius: BorderRadius.circular(16),
-                                    ),
-                                    child: Text(
-                                      'Following',
-                                      style: TextStyle(
-                                        color: Color.fromRGBO(235, 111, 70, 1),
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                Container(
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 8,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Color.fromRGBO(235, 111, 70, 0.2),
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  child: Text(
-                                    '${profile.level.toUpperCase()} LEVEL',
-                                    style: TextStyle(
-                                      color: Color.fromRGBO(235, 111, 70, 1),
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                          ),
+                          SizedBox(height: 8),
+                          Lottie.asset('animation/No-Content.json', fit: BoxFit.cover),
+                          ElevatedButton(
+                            onPressed: () {
+                              setState(() {
+                                _loadProfile();
+                              });
+                            },
+                            child: Text('Try Again', style: TextStyle(color: Colors.white),),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Color.fromRGBO(235, 111, 70, 1),
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                      SizedBox(height: 24),
-                      Text(
-                        'Personal Information',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      SizedBox(height: 8),
-                      ProfileInfoCard(
-                        title: 'Email',
-                        value: profile.email,
-                        icon: Icons.email,
-                      ),
-                      ProfileInfoCard(
-                        title: 'Phone',
-                        value: profile.phone,
-                        icon: Icons.phone,
-                      ),
-                      ProfileInfoCard(
-                        title: 'Date of Birth',
-                        value: formatDate(profile.dob),
-                        icon: Icons.calendar_today,
-                      ),
-                      SizedBox(height: 16),
-                      Text(
-                        'Account Information',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      ProfileInfoCard(
-                        title: 'Member Since',
-                        value: formatDate(profile.createdAt),
-                        icon: Icons.access_time,
-                      ),
-                      SizedBox(height: 40),
-                    ],
-                  ),
-                );
-              } else {
-                return Center(child: Text('No profile data found'));
-              }
-            },
+                    ),
+                  );
+                } else if (snapshot.hasData) {
+                  final profile = snapshot.data!;
+                  return _buildProfileSection(profile);
+                } else {
+                  return Center(child: Text(''));
+                }
+              },
+            ),
           ),
-          FloatingMenuWidget(),
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                if (index == _contents.length) {
+                  return _buildLoadingIndicator();
+                }
+                return _buildContentItem(index);
+              },
+              childCount: _contents.length + (_hasMoreData ? 1 : 0),
+            ),
+          ),
         ],
       ),
+      floatingActionButton: FloatingMenuWidget(),
     );
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 }

@@ -261,7 +261,7 @@ class _UserImageGalleryState extends State<UserImageGallery> {
               ),
             ),
           ),
-          Text("Content", style: TextStyle(fontSize: 18),)
+
       ],
     );
   }

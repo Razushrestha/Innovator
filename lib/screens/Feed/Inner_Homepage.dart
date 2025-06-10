@@ -8,6 +8,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:innovator/App_data/App_data.dart';
 import 'package:innovator/Authorization/Login.dart';
+import 'package:innovator/controllers/user_controller.dart';
 import 'package:innovator/screens/Feed/OptimizeMediaScreen.dart';
 import 'package:innovator/screens/Feed/Services/Feed_Cache_service.dart';
 import 'package:innovator/screens/Follow/follow-Service.dart';
@@ -31,6 +32,7 @@ import 'dart:typed_data';
 import 'dart:developer' as developer;
 import 'package:share_plus/share_plus.dart'; // <-- Add this import
 import 'package:url_launcher/url_launcher.dart';
+
 
 // Enhanced Author model
 class Author {
@@ -251,6 +253,7 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
       final result = await InternetAddress.lookup('google.com');
       setState(() {
         _isOnline = result.isNotEmpty && result[0].rawAddress.isNotEmpty;
+        _refresh();
       });
     } on SocketException catch (_) {
       setState(() {
@@ -388,8 +391,8 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
   Future<http.Response> _makeApiRequest() async {
     final url =
         _lastId == null
-            ? 'http://182.93.94.210:3065/api/v1/list-contents'
-            : 'http://182.93.94.210:3065/api/v1/list-contents?lastId=$_lastId';
+            ? 'http://182.93.94.210:3064/api/v1/list-contents'
+            : 'http://182.93.94.210:3064/api/v1/list-contents?lastId=$_lastId';
 
     debugPrint('Request URL: $url');
     final response = await http
@@ -514,7 +517,7 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
                 return _buildContentItem(index);
               }, childCount: _contents.length + (_hasMoreData ? 1 : 0)),
             ),
-            if (_hasError) SliverFillRemaining(child: _buildErrorView() ),
+            if (_hasError) SliverFillRemaining(child: _buildErrorView()),
             if (_contents.isEmpty && !_isLoading && !_hasError)
               SliverFillRemaining(child: _buildEmptyView()),
           ],
@@ -819,6 +822,8 @@ class _FeedItemState extends State<FeedItem>
     }
   }
 
+ 
+
   Future<void> _recordView() async {
     if (_hasRecordedView) return; // Prevent multiple calls
 
@@ -854,7 +859,7 @@ class _FeedItemState extends State<FeedItem>
       final response = await http
           .post(
             Uri.parse(
-              'http://182.93.94.210:3065/api/v1/content/view/${widget.content.id}',
+              'http://182.93.94.210:3064/api/v1/content/view/${widget.content.id}',
             ),
             headers: {
               'Content-Type': 'application/json',
@@ -962,13 +967,13 @@ class _FeedItemState extends State<FeedItem>
         borderRadius: BorderRadius.circular(20.0),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
+            color: Colors.black.withAlpha(8),
             blurRadius: 20.0,
             offset: const Offset(0, 4),
             spreadRadius: 0,
           ),
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withAlpha(4),
             blurRadius: 8.0,
             offset: const Offset(0, 2),
             spreadRadius: 0,
@@ -1169,7 +1174,7 @@ class _FeedItemState extends State<FeedItem>
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 20.0,
-                  vertical: 8.0,
+                  vertical: 5.0,
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1249,9 +1254,8 @@ class _FeedItemState extends State<FeedItem>
             // Media Section
             if (widget.content.files.isNotEmpty)
               Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16.0),
+                margin:  EdgeInsets.symmetric(horizontal: 5.0),
                 child: ClipRRect(
-
                   borderRadius: BorderRadius.circular(16.0),
                   child: _buildMediaPreview(),
                 ),
@@ -1259,7 +1263,7 @@ class _FeedItemState extends State<FeedItem>
 
             // Action Buttons Section
             Container(
-              padding: const EdgeInsets.all(16.0),
+             // padding: const EdgeInsets.all(.0),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -1268,15 +1272,19 @@ class _FeedItemState extends State<FeedItem>
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        LikeButton(
-                          contentId: widget.content.id,
-                          initialLikeStatus: widget.content.isLiked,
-                          likeService: likeService,
-                          onLikeToggled: (isLiked) {
-                            widget.onLikeToggled(isLiked);
-                            SoundPlayer player = SoundPlayer();
-                            player.playlikeSound();
-                          },
+                        Column(
+                          children: [
+                            LikeButton(
+                              contentId: widget.content.id,
+                              initialLikeStatus: widget.content.isLiked,
+                              likeService: likeService,
+                              onLikeToggled: (isLiked) {
+                                widget.onLikeToggled(isLiked);
+                                SoundPlayer player = SoundPlayer();
+                                player.playlikeSound();
+                              },
+                            ),
+                          ],
                         ),
                         const SizedBox(width: 8.0),
                         Text(
@@ -1294,33 +1302,37 @@ class _FeedItemState extends State<FeedItem>
 
                   // Comment Button
                   _buildActionButton(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
+                    child: Column(
                       children: [
-                        AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          child: Icon(
-                            _showComments
-                                ? Icons.chat_bubble
-                                : Icons.chat_bubble_outline,
-                            color:
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              child: Icon(
                                 _showComments
-                                    ? Colors.blue.shade600
-                                    : Colors.grey.shade600,
-                            size: 20.0,
-                          ),
-                        ),
-                        const SizedBox(width: 8.0),
-                        Text(
-                          '${widget.content.comments}',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color:
-                                _showComments
-                                    ? Colors.blue.shade600
-                                    : Colors.grey.shade700,
-                            fontSize: 14.0,
-                          ),
+                                    ? Icons.chat_bubble
+                                    : Icons.chat_bubble_outline,
+                                color:
+                                    _showComments
+                                        ? Colors.blue.shade600
+                                        : Colors.grey.shade600,
+                                size: 20.0,
+                              ),
+                            ),
+                            const SizedBox(width: 8.0),
+                            Text(
+                              '${widget.content.comments}',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color:
+                                    _showComments
+                                        ? Colors.blue.shade600
+                                        : Colors.grey.shade700,
+                                fontSize: 14.0,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -2431,46 +2443,73 @@ showGeneralDialog(
 
   // ...existing code...
   Widget _buildAuthorAvatar() {
-    if (widget.content.author.picture.isEmpty) {
+  final userController = Get.find<UserController>();
+  
+  // Check if this is the current user's post
+  if (_isAuthorCurrentUser()) {
+    return Obx(() {
+      final picturePath = userController.getFullProfilePicturePath();
       return GestureDetector(
         onTap: () {
-          _showBigAvatarDialog(context, null, widget.content.author.name);
+          _showBigAvatarDialog(context, picturePath, widget.content.author.name);
         },
         child: CircleAvatar(
-          child: Text(
-            widget.content.author.name.isNotEmpty
-                ? widget.content.author.name[0].toUpperCase()
-                : '?',
-          ),
+          backgroundImage: picturePath != null 
+              ? NetworkImage(picturePath) 
+              : null,
+          child: picturePath == null
+              ? Text(
+                  widget.content.author.name.isNotEmpty
+                      ? widget.content.author.name[0].toUpperCase()
+                      : '?',
+                )
+              : null,
         ),
       );
-    }
+    });
+  }
 
+  // For other users' posts
+  if (widget.content.author.picture.isEmpty) {
     return GestureDetector(
       onTap: () {
-        _showBigAvatarDialog(
-          context,
-          'http://182.93.94.210:3064${widget.content.author.picture}',
-          widget.content.author.name,
-        );
+        _showBigAvatarDialog(context, null, widget.content.author.name);
       },
-      child: CachedNetworkImage(
-        imageUrl: 'http://182.93.94.210:3064${widget.content.author.picture}',
-        imageBuilder: (context, imageProvider) =>
-            CircleAvatar(backgroundImage: imageProvider),
-        placeholder: (context, url) => const CircleAvatar(
-          child: CircularProgressIndicator(strokeWidth: 2.0),
-        ),
-        errorWidget: (context, url, error) => CircleAvatar(
-          child: Text(
-            widget.content.author.name.isNotEmpty
-                ? widget.content.author.name[0].toUpperCase()
-                : '?',
-          ),
+      child: CircleAvatar(
+        child: Text(
+          widget.content.author.name.isNotEmpty
+              ? widget.content.author.name[0].toUpperCase()
+              : '?',
         ),
       ),
     );
   }
+
+  return GestureDetector(
+    onTap: () {
+      _showBigAvatarDialog(
+        context,
+        'http://182.93.94.210:3064${widget.content.author.picture}',
+        widget.content.author.name,
+      );
+    },
+    child: CachedNetworkImage(
+      imageUrl: 'http://182.93.94.210:3064${widget.content.author.picture}',
+      imageBuilder: (context, imageProvider) =>
+          CircleAvatar(backgroundImage: imageProvider),
+      placeholder: (context, url) => const CircleAvatar(
+        child: CircularProgressIndicator(strokeWidth: 2.0),
+      ),
+      errorWidget: (context, url, error) => CircleAvatar(
+        child: Text(
+          widget.content.author.name.isNotEmpty
+              ? widget.content.author.name[0].toUpperCase()
+              : '?',
+        ),
+      ),
+    ),
+  );
+}
 
   // ...existing code...
   void _showBigAvatarDialog(BuildContext context, String? imageUrl, String name) {
@@ -2532,7 +2571,7 @@ showGeneralDialog(
 
       if (FileTypeHelper.isImage(fileUrl)) {
         return LimitedBox(
-          maxHeight: 250.0,
+          maxHeight: 450.0,
           child: GestureDetector(
             onTap: () => _showMediaGallery(context, mediaUrls, 0),
             child: _OptimizedNetworkImage(url: fileUrl, height: 250.0),
@@ -2764,7 +2803,7 @@ class _OptimizedNetworkImage extends StatelessWidget {
 }
 
 class FeedApiService {
-  static const String baseUrl = 'http://182.93.94.210:3065';
+  static const String baseUrl = 'http://182.93.94.210:3064';
 
   static Future<List<FeedContent>> fetchContents(String? lastId, BuildContext context) async {
     try {
@@ -3024,3 +3063,5 @@ class _LinkifyText extends StatelessWidget {
     );
   }
 }
+
+
