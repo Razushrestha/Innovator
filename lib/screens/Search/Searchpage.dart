@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:innovator/App_data/App_data.dart';
@@ -7,6 +8,8 @@ import 'package:innovator/screens/Follow/follow-Service.dart';
 import 'package:innovator/screens/Follow/follow_Button.dart';
 import 'package:innovator/screens/show_Specific_Profile/Show_Specific_Profile.dart';
 import 'package:innovator/widget/FloatingMenuwidget.dart';
+
+import '../../controllers/user_controller.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({Key? key}) : super(key: key);
@@ -255,99 +258,121 @@ class _SearchPageState extends State<SearchPage>
 
   Widget _buildUserTile(Map<String, dynamic> user, BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-
+final userController = Get.find<UserController>(); // Access UserController
+  final isCurrentUser = user['_id'] == AppData().currentUserId;
     return InkWell(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => SpecificUserProfilePage(userId: user['_id']),
+    onTap: () {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => SpecificUserProfilePage(userId: user['_id']),
+        ),
+      );
+    },
+    child: Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDarkMode ? Colors.grey[850] : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
-        );
-      },
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: isDarkMode ? Colors.grey[850] : Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 30,
-              backgroundColor: isDarkMode ? Colors.grey[700] : Colors.grey[300],
-              backgroundImage: user['picture'] != null && user['picture'].isNotEmpty
-                  ? CachedNetworkImageProvider(
-                      'http://182.93.94.210:3064${user['picture']}',
-                    )
-                  : null,
-              child: user['picture'] == null || user['picture'].isEmpty
-                  ? Text(
-                      user['name']?[0] ?? '?',
-                      style: const TextStyle(fontSize: 24),
-                    )
-                  : null,
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    user['name'] ?? 'Unknown',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: isDarkMode ? Colors.white : Colors.black,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    user['email'] ?? 'No email',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            FutureBuilder<bool>(
-              future: FollowService.checkFollowStatus(user['email'] ?? ''),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const SizedBox(
-                    width: 36,
-                    height: 36,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  );
-                }
-
-                final isFollowing = snapshot.data ?? false;
-                return FollowButton(
-                  targetUserEmail: user['email'] ?? '',
-                  initialFollowStatus: isFollowing,
-                  onFollowSuccess: () {
-                    setState(() {});
-                  },
-                  onUnfollowSuccess: () {
-                    setState(() {});
-                  },
-                  size: 36,
-                );
-              },
-            ),
-          ],
-        ),
+        ],
       ),
-    );
+      child: Row(
+        children: [
+          isCurrentUser
+              ? Obx(
+                  () => CircleAvatar(
+                    radius: 30,
+                    backgroundColor: isDarkMode ? Colors.grey[700] : Colors.grey[300],
+                    key: ValueKey('search_avatar_${user['_id']}_${userController.profilePictureVersion.value}'),
+                    backgroundImage: userController.profilePicture.value != null &&
+                            userController.profilePicture.value!.isNotEmpty
+                        ? CachedNetworkImageProvider(
+                            '${userController.getFullProfilePicturePath()}?v=${userController.profilePictureVersion.value}',
+                          )
+                        : null,
+                    child: userController.profilePicture.value == null ||
+                            userController.profilePicture.value!.isEmpty
+                        ? Text(
+                            user['name']?[0] ?? '?',
+                            style: const TextStyle(fontSize: 24),
+                          )
+                        : null,
+                  ),
+                )
+              : CircleAvatar(
+                  radius: 30,
+                  backgroundColor: isDarkMode ? Colors.grey[700] : Colors.grey[300],
+                  backgroundImage: user['picture'] != null && user['picture'].isNotEmpty
+                      ? CachedNetworkImageProvider(
+                          'http://182.93.94.210:3064${user['picture']}?t=${DateTime.now().millisecondsSinceEpoch}',
+                        )
+                      : null,
+                  child: user['picture'] == null || user['picture'].isEmpty
+                      ? Text(
+                          user['name']?[0] ?? '?',
+                          style: const TextStyle(fontSize: 24),
+                        )
+                      : null,
+                ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  user['name'] ?? 'Unknown',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: isDarkMode ? Colors.white : Colors.black,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  user['email'] ?? 'No email',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          FutureBuilder<bool>(
+            future: FollowService.checkFollowStatus(user['email'] ?? ''),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const SizedBox(
+                  width: 36,
+                  height: 36,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                );
+              }
+
+              final isFollowing = snapshot.data ?? false;
+              return FollowButton(
+                targetUserEmail: user['email'] ?? '',
+                initialFollowStatus: isFollowing,
+                onFollowSuccess: () {
+                  setState(() {});
+                },
+                onUnfollowSuccess: () {
+                  setState(() {});
+                },
+                size: 36,
+              );
+            },
+          ),
+        ],
+      ),
+    ),
+  );
   }
 } 

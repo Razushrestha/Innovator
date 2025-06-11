@@ -1,9 +1,11 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 import 'package:innovator/App_data/App_data.dart';
 import 'package:innovator/Authorization/Login.dart';
+import 'package:innovator/controllers/user_controller.dart';
 import 'package:innovator/screens/Feed/Inner_Homepage.dart';
 import 'package:innovator/screens/Follow/follow_Button.dart';
 import 'package:flutter/services.dart';
@@ -16,7 +18,7 @@ class SpecificUserProfilePage extends StatefulWidget {
   final String userId;
 
   const SpecificUserProfilePage({Key? key, required this.userId})
-      : super(key: key);
+    : super(key: key);
 
   @override
   _SpecificUserProfilePageState createState() =>
@@ -28,7 +30,7 @@ late Size mq;
 class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
     with TickerProviderStateMixin {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-
+  final UserController _userController = UserController.to;
   late Future<Map<String, dynamic>> _profileFuture;
   final AppData _appData = AppData();
   bool _isRefreshing = false;
@@ -37,7 +39,7 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
 
-final List<FeedContent> _contents = [];
+  final List<FeedContent> _contents = [];
   final ScrollController _scrollController = ScrollController();
   bool _isLoading = false;
   String? _lastId;
@@ -75,6 +77,7 @@ final List<FeedContent> _contents = [];
     _scrollController.dispose();
     super.dispose();
   }
+
   void _initializeFeed() {
     _loadMoreContent();
   }
@@ -83,102 +86,108 @@ final List<FeedContent> _contents = [];
     if (!_isLoading &&
         _hasMoreData &&
         _scrollController.position.pixels >=
-            _scrollController.position.maxScrollExtent - _loadTriggerThreshold) {
+            _scrollController.position.maxScrollExtent -
+                _loadTriggerThreshold) {
       _loadMoreContent();
     }
   }
 
   Future<void> _loadMoreContent() async {
-  if (_isLoading || !_hasMoreData) return;
+    if (_isLoading || !_hasMoreData) return;
 
-  setState(() {
-    _isLoading = true;
-    _hasError = false;
-  });
+    setState(() {
+      _isLoading = true;
+      _hasError = false;
+    });
 
-  try {
-    final String? authToken = _appData.authToken;
-    if (authToken == null || authToken.isEmpty) {
-      setState(() {
-        _hasError = true;
-        _errorMessage = 'Authentication required. Please login.';
-      });
-      Navigator.pushAndRemoveUntil(
+    try {
+      final String? authToken = _appData.authToken;
+      if (authToken == null || authToken.isEmpty) {
+        setState(() {
+          _hasError = true;
+          _errorMessage = 'Authentication required. Please login.';
+        });
+        Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => LoginPage()),
-          (route) => false);
-      return;
-    }
+          (route) => false,
+        );
+        return;
+      }
 
-    final url = _lastId == null
-    ? 'http://182.93.94.210:3064/api/v1/getUserContent/${widget.userId}?page=0'
-    : 'http://182.93.94.210:3064/api/v1/getUserContent/${widget.userId}?page=${(_contents.length / 10).ceil()}';
+      final url =
+          _lastId == null
+              ? 'http://182.93.94.210:3064/api/v1/getUserContent/${widget.userId}?page=0'
+              : 'http://182.93.94.210:3064/api/v1/getUserContent/${widget.userId}?page=${(_contents.length / 10).ceil()}';
 
-    final response = await http.get(
-      Uri.parse(url),
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'authorization': 'Bearer $authToken',
-      },
-    ).timeout(Duration(seconds: 30));
+      final response = await http
+          .get(
+            Uri.parse(url),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'authorization': 'Bearer $authToken',
+            },
+          )
+          .timeout(Duration(seconds: 30));
 
-    if (response.statusCode == 200) {
-      final Map<String, dynamic> data = json.decode(response.body);
-      if (data['status'] == 200 && data['data'] != null) {
-        final List<dynamic> contentList = data['data']['contents'] ?? [];
-        final List<FeedContent> newContents =
-            contentList.map((item) => FeedContent.fromJson(item)).toList();
-        final pagination = data['data']['pagination'];
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        if (data['status'] == 200 && data['data'] != null) {
+          final List<dynamic> contentList = data['data']['contents'] ?? [];
+          final List<FeedContent> newContents =
+              contentList.map((item) => FeedContent.fromJson(item)).toList();
+          final pagination = data['data']['pagination'];
 
-        setState(() {
-          _contents.addAll(newContents);
-          _lastId = newContents.isNotEmpty ? newContents.last.id : _lastId;
-          _hasMoreData = pagination['hasMore'] ?? false;
-        });
+          setState(() {
+            _contents.addAll(newContents);
+            _lastId = newContents.isNotEmpty ? newContents.last.id : _lastId;
+            _hasMoreData = pagination['hasMore'] ?? false;
+          });
+        } else {
+          setState(() {
+            _hasError = true;
+            _errorMessage = 'Invalid response from server.';
+          });
+        }
+      } else if (response.statusCode == 401) {
+        await _handleUnauthorizedError();
       } else {
         setState(() {
           _hasError = true;
-          _errorMessage = 'Invalid response from server.';
+          _errorMessage = 'Server error: ${response.statusCode}';
         });
       }
-    } else if (response.statusCode == 401) {
-      await _handleUnauthorizedError();
-    } else {
+    } catch (e) {
       setState(() {
         _hasError = true;
-        _errorMessage = 'Server error: ${response.statusCode}';
+        _errorMessage = 'Error: ${e.toString()}';
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
       });
     }
-  } catch (e) {
-    setState(() {
-      _hasError = true;
-      _errorMessage = 'Error: ${e.toString()}';
-    });
-  } finally {
-    setState(() {
-      _isLoading = false;
-    });
   }
-}
 
-Future<void> _handleUnauthorizedError() async {
-  // Implement token refresh logic similar to Inner_HomePage
-  Navigator.pushAndRemoveUntil(
+  Future<void> _handleUnauthorizedError() async {
+    // Implement token refresh logic similar to Inner_HomePage
+    Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (_) => LoginPage()),
-      (route) => false);
-}
+      (route) => false,
+    );
+  }
 
-Future<void> _refreshFeed() async {
-  setState(() {
-    _contents.clear();
-    _lastId = null;
-    _hasError = false;
-    _hasMoreData = true;
-  });
-  await _loadMoreContent();
-}
+  Future<void> _refreshFeed() async {
+    setState(() {
+      _contents.clear();
+      _lastId = null;
+      _hasError = false;
+      _hasMoreData = true;
+    });
+    await _loadMoreContent();
+  }
 
   Future<Map<String, dynamic>> _fetchUserProfile() async {
     try {
@@ -196,7 +205,7 @@ Future<void> _refreshFeed() async {
       if (response.statusCode == 200) {
         return json.decode(response.body)['data'];
       } else {
-          Image.asset('animation/NoGallery.gif');
+        Image.asset('animation/NoGallery.gif');
         throw Exception('Failed to load profile: ${response.statusCode}');
       }
     } catch (e) {
@@ -236,19 +245,20 @@ Future<void> _refreshFeed() async {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDarkMode = theme.brightness == Brightness.dark;
-mq = MediaQuery.of(context).size;
+    mq = MediaQuery.of(context).size;
     return Scaffold(
       key: _scaffoldKey,
-      backgroundColor: isDarkMode ? const Color(0xFF0A0A0A) : const Color(0xFFF8F9FA),
+      backgroundColor:
+          isDarkMode ? const Color(0xFF0A0A0A) : const Color(0xFFF8F9FA),
       extendBodyBehindAppBar: true,
       appBar: _buildAppBar(isDarkMode),
       body: Stack(
         children: [
           RefreshIndicator(
             onRefresh: () async {
-            await _refreshProfile();
-            await _refreshFeed();
-          },
+              await _refreshProfile();
+              await _refreshFeed();
+            },
             color: Theme.of(context).primaryColor,
             child: FutureBuilder<Map<String, dynamic>>(
               future: _profileFuture,
@@ -287,30 +297,40 @@ mq = MediaQuery.of(context).size;
                               child: _buildPersonalInfo(profileData, context),
                             ),
                             SliverToBoxAdapter(
-                              child: _buildProfessionalInfo(profileData, context),
+                              child: _buildProfessionalInfo(
+                                profileData,
+                                context,
+                              ),
                             ),
-                            const SliverToBoxAdapter(child: SizedBox(height: 30)),
+                            const SliverToBoxAdapter(
+                              child: SizedBox(height: 30),
+                            ),
                             SliverToBoxAdapter(
                               child: UserImageGallery(
-                                userEmail: profileData['email'] ?? widget.userId,
+                                userEmail:
+                                    profileData['email'] ?? widget.userId,
                               ),
                             ),
                             SliverList(
-                            delegate: SliverChildBuilderDelegate(
-                              (context, index) {
-                                if (index == _contents.length) {
-                                  return _buildLoadingIndicator();
-                                }
-                                return _buildContentItem(index);
-                              },
-                              childCount: _contents.length + (_hasMoreData ? 1 : 0),
+                              delegate: SliverChildBuilderDelegate(
+                                (context, index) {
+                                  if (index == _contents.length) {
+                                    return _buildLoadingIndicator();
+                                  }
+                                  return _buildContentItem(index);
+                                },
+                                childCount:
+                                    _contents.length + (_hasMoreData ? 1 : 0),
+                              ),
                             ),
-                          ),
-                          if (_hasError)
-                            SliverFillRemaining(child: _buildFeedErrorView()),
-                          if (_contents.isEmpty && !_isLoading && !_hasError)
-                            SliverFillRemaining(child: _buildEmptyFeedView()),
-                          const SliverToBoxAdapter(child: SizedBox(height: 100)),                          ],
+                            if (_hasError)
+                              SliverFillRemaining(child: _buildFeedErrorView()),
+                            if (_contents.isEmpty && !_isLoading && !_hasError)
+                              SliverFillRemaining(child: _buildEmptyFeedView()),
+                            const SliverToBoxAdapter(
+                              child: SizedBox(height: 100),
+                            ),
+                          ],
                         ),
                       ),
                     );
@@ -326,75 +346,69 @@ mq = MediaQuery.of(context).size;
   }
 
   Widget _buildContentItem(int index) {
-  final content = _contents[index];
-  return RepaintBoundary(
-    key: ValueKey(content.id),
-    child: FeedItem(
-      content: content,
-      onLikeToggled: (isLiked) {
-        setState(() {
-          content.isLiked = isLiked;
-          content.likes += isLiked ? 1 : -1;
-        });
-      },
-      onFollowToggled: (isFollowed) {
-        setState(() {
-          content.isFollowed = isFollowed;
-        });
-      },
-    ),
-  );
-}
+    final content = _contents[index];
+    return RepaintBoundary(
+      key: ValueKey(content.id),
+      child: FeedItem(
+        content: content,
+        onLikeToggled: (isLiked) {
+          setState(() {
+            content.isLiked = isLiked;
+            content.likes += isLiked ? 1 : -1;
+          });
+        },
+        onFollowToggled: (isFollowed) {
+          setState(() {
+            content.isFollowed = isFollowed;
+          });
+        },
+      ),
+    );
+  }
 
-Widget _buildLoadingIndicator() {
-  return _isLoading
-      ? const Padding(
+  Widget _buildLoadingIndicator() {
+    return _isLoading
+        ? const Padding(
           padding: EdgeInsets.all(16.0),
           child: Center(child: CircularProgressIndicator()),
         )
-      : const SizedBox.shrink();
-}
+        : const SizedBox.shrink();
+  }
 
-Widget _buildFeedErrorView() {
-  return Center(
-    child: Padding(
-      padding: const EdgeInsets.all(16.0),
+  Widget _buildFeedErrorView() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              _errorMessage,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.red),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(onPressed: _refreshFeed, child: const Text('Retry')),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyFeedView() {
+    return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(
-            _errorMessage,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.red),
-          ),
+          const Icon(Icons.inbox, size: 48, color: Colors.grey),
           const SizedBox(height: 16),
-          ElevatedButton(
-            onPressed: _refreshFeed,
-            child: const Text('Retry'),
-          ),
+          const Text('No posts available'),
+          const SizedBox(height: 16),
+          ElevatedButton(onPressed: _refreshFeed, child: const Text('Refresh')),
         ],
       ),
-    ),
-  );
-}
-
-Widget _buildEmptyFeedView() {
-  return Center(
-    child: Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const Icon(Icons.inbox, size: 48, color: Colors.grey),
-        const SizedBox(height: 16),
-        const Text('No posts available'),
-        const SizedBox(height: 16),
-        ElevatedButton(
-          onPressed: _refreshFeed,
-          child: const Text('Refresh'),
-        ),
-      ],
-    ),
-  );
-}
+    );
+  }
 
   PreferredSizeWidget _buildAppBar(bool isDarkMode) {
     return AppBar(
@@ -409,9 +423,10 @@ Widget _buildEmptyFeedView() {
         icon: Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: isDarkMode 
-                ? Colors.black.withOpacity(0.5) 
-                : Colors.white.withOpacity(0.9),
+            color:
+                isDarkMode
+                    ? Colors.black.withOpacity(0.5)
+                    : Colors.white.withOpacity(0.9),
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
@@ -429,7 +444,6 @@ Widget _buildEmptyFeedView() {
         ),
         onPressed: () => Navigator.of(context).pop(),
       ),
-     
     );
   }
 
@@ -472,31 +486,34 @@ Widget _buildEmptyFeedView() {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final primaryColor = Theme.of(context).primaryColor;
     final headerHeight = MediaQuery.of(context).size.height * 0.55;
-
+    final isCurrentUser =
+        widget.userId ==
+        _appData.currentUserId; // Check if this is the current user's profile
     return Container(
       height: headerHeight,
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: isDarkMode
-              ? [
-                  const Color(0xFF1A1A1A),
-                  const Color(0xFF2D2D2D),
-                  primaryColor.withAlpha(300),
-                ]
-              : [
-                  primaryColor.withAlpha(800),
-                  primaryColor.withAlpha(600),
-                  const Color(0xFFFFFFFF),
-                ],
+          colors:
+              isDarkMode
+                  ? [
+                    const Color(0xFF1A1A1A),
+                    const Color(0xFF2D2D2D),
+                    primaryColor.withAlpha(300),
+                  ]
+                  : [
+                    primaryColor.withAlpha(800),
+                    primaryColor.withAlpha(600),
+                    const Color(0xFFFFFFFF),
+                  ],
         ),
       ),
       child: Stack(
         children: [
           // Animated background elements
           ...List.generate(6, (index) => _buildFloatingElement(index)),
-          
+
           // Main content
           SafeArea(
             child: Padding(
@@ -505,77 +522,102 @@ Widget _buildEmptyFeedView() {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   //const SizedBox(height: 10),
-                  
+
                   // Profile picture with verification badge
                   Stack(
                     children: [
                       Hero(
-                        tag: 'profile_picture_${profileData['_id']}',
-                        child: Container(
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: LinearGradient(
-                              colors: [
-                                primaryColor,
-                                primaryColor.withOpacity(0.7),
-                              ],
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: primaryColor.withOpacity(0.3),
-                                blurRadius: 20,
-                                spreadRadius: 5,
-                                offset: const Offset(0, 8),
-                              ),
+                      tag: 'profile_picture_${profileData['_id']}',
+                      child: Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: LinearGradient(
+                            colors: [
+                              primaryColor,
+                              primaryColor.withAlpha(70),
                             ],
                           ),
-                          padding: const EdgeInsets.all(4),
-                          child: CircleAvatar(
-                            radius: 70,
-                            backgroundColor: Colors.white,
-                            backgroundImage: profileData['picture'] != null &&
-                                    profileData['picture'].isNotEmpty
-                                ? CachedNetworkImageProvider(
-                                    'http://182.93.94.210:3064${profileData['picture']}',
-                                  )
-                                : null,
-                            child: profileData['picture'] == null ||
-                                    profileData['picture'].isEmpty
-                                ? Text(
-                                    profileData['name']?[0]?.toUpperCase() ?? '?',
-                                    style: TextStyle(
-                                      fontSize: 45,
-                                      fontWeight: FontWeight.bold,
-                                      color: primaryColor,
-                                    ),
-                                  )
-                                : null,
+                          boxShadow: [
+                            BoxShadow(
+                              color: primaryColor.withAlpha(30),
+                              blurRadius: 20,
+                              spreadRadius: 5,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        padding: const EdgeInsets.all(4),
+                        child: isCurrentUser
+                            ? Obx(
+                                () => CircleAvatar(
+                                  radius: 70,
+                                  backgroundColor: Colors.white,
+                                  key: ValueKey(
+                                    'profile_${_userController.profilePictureVersion.value}',
+                                  ),
+                                  backgroundImage: _userController.profilePicture.value != null &&
+                                          _userController.profilePicture.value!.isNotEmpty
+                                      ? CachedNetworkImageProvider(
+                                          '${_userController.getFullProfilePicturePath()}?v=${_userController.profilePictureVersion.value}',
+                                        )
+                                      : null,
+                                  child: _userController.profilePicture.value == null ||
+                                          _userController.profilePicture.value!.isEmpty
+                                      ? Text(
+                                          profileData['name']?[0]?.toUpperCase() ?? '?',
+                                          style: TextStyle(
+                                            fontSize: 45,
+                                            fontWeight: FontWeight.bold,
+                                            color: primaryColor,
+                                          ),
+                                        )
+                                      : null,
+                                ),
+                              )
+                            : CircleAvatar(
+                                radius: 70,
+                                backgroundColor: Colors.white,
+                                backgroundImage: profileData['picture'] != null &&
+                                        profileData['picture'].isNotEmpty
+                                    ? CachedNetworkImageProvider(
+                                        'http://182.93.94.210:3064${profileData['picture']}',
+                                      )
+                                    : null,
+                                child: profileData['picture'] == null ||
+                                        profileData['picture'].isEmpty
+                                    ? Text(
+                                        profileData['name']?[0]?.toUpperCase() ?? '?',
+                                        style: TextStyle(
+                                          fontSize: 45,
+                                          fontWeight: FontWeight.bold,
+                                          color: primaryColor,
+                                        ),
+                                      )
+                                    : null,
+                              ),
+                      ),
+                    ),
+                    if (profileData['isVerified'] == true)
+                      Positioned(
+                        bottom: 1,
+                        right: 5,
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: const BoxDecoration(
+                            color: Colors.blue,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.verified,
+                            color: Colors.white,
+                            size: 20,
                           ),
                         ),
                       ),
-                      
-                      // Verification badge
-                      if (profileData['isVerified'] == true)
-                        Positioned(
-                          bottom: 1,
-                          right: 5,
-                          child: Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: const BoxDecoration(
-                              color: Colors.blue,
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.verified,
-                              color: Colors.white,
-                              size: 20,
-                            ),
-                          ),
-                        ),
                     ],
                   ),
 
-                 // const SizedBox(height: 10),
+                  // const SizedBox(height: 10),
 
                   // Name with greeting
                   Column(
@@ -613,18 +655,19 @@ Widget _buildEmptyFeedView() {
                   // Level and Status Row
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _buildLevelBadge(profileData['level']),
-                     
-                    ], 
+                    children: [_buildLevelBadge(profileData['level'])],
                   ),
 
                   const SizedBox(height: 20),
 
                   // Bio preview
-                  if (profileData['bio'] != null && profileData['bio'].isNotEmpty)
+                  if (profileData['bio'] != null &&
+                      profileData['bio'].isNotEmpty)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(20),
@@ -704,11 +747,7 @@ Widget _buildEmptyFeedView() {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            _getLevelIcon(level),
-            size: 18,
-            color: Colors.white,
-          ),
+          Icon(_getLevelIcon(level), size: 18, color: Colors.white),
           const SizedBox(width: 6),
           Text(
             level?.toUpperCase() ?? 'NO LEVEL',
@@ -722,8 +761,6 @@ Widget _buildEmptyFeedView() {
       ),
     );
   }
-
- 
 
   Widget _buildProfileInfo(
     Map<String, dynamic> profileData,
@@ -739,9 +776,10 @@ Widget _buildEmptyFeedView() {
         borderRadius: BorderRadius.circular(25),
         boxShadow: [
           BoxShadow(
-            color: isDarkMode 
-                ? Colors.black.withAlpha(30) 
-                : Colors.grey.withAlpha(10),
+            color:
+                isDarkMode
+                    ? Colors.black.withAlpha(30)
+                    : Colors.grey.withAlpha(10),
             blurRadius: 20,
             spreadRadius: 5,
             offset: const Offset(0, 10),
@@ -759,7 +797,9 @@ Widget _buildEmptyFeedView() {
                   'Followers',
                   Icons.people_outline,
                   Colors.blue,
-                  onTap: () => showFollowersFollowingDialog(context, widget.userId),
+                  onTap:
+                      () =>
+                          showFollowersFollowingDialog(context, widget.userId),
                 ),
               ),
               const SizedBox(width: 15),
@@ -769,7 +809,9 @@ Widget _buildEmptyFeedView() {
                   'Following',
                   Icons.person_add_outlined,
                   Colors.green,
-                  onTap: () => showFollowersFollowingDialog(context, widget.userId),
+                  onTap:
+                      () =>
+                          showFollowersFollowingDialog(context, widget.userId),
                 ),
               ),
               const SizedBox(width: 15),
@@ -803,16 +845,10 @@ Widget _buildEmptyFeedView() {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              color.withAlpha(10),
-              color.withAlpha(5),
-            ],
+            colors: [color.withAlpha(10), color.withAlpha(5)],
           ),
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: color.withAlpha(30),
-            width: 1,
-          ),
+          border: Border.all(color: color.withAlpha(30), width: 1),
         ),
         child: Column(
           children: [
@@ -827,7 +863,7 @@ Widget _buildEmptyFeedView() {
             const SizedBox(height: 12),
             Text(
               value,
-              style: TextStyle( 
+              style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
                 color: color,
@@ -838,9 +874,10 @@ Widget _buildEmptyFeedView() {
               label,
               style: TextStyle(
                 fontSize: 12,
-                color: Theme.of(context).brightness == Brightness.dark 
-                    ? Colors.grey[400] 
-                    : Colors.grey[600],
+                color:
+                    Theme.of(context).brightness == Brightness.dark
+                        ? Colors.grey[400]
+                        : Colors.grey[600],
                 fontWeight: FontWeight.w500,
               ),
               textAlign: TextAlign.center,
@@ -891,7 +928,20 @@ Widget _buildEmptyFeedView() {
                   'Message',
                   Icons.message_outlined,
                   () {
-                   Navigator.push(context, MaterialPageRoute(builder: (_) => ChatListScreen(currentUserId: AppData().currentUserId ?? '', currentUserName: AppData().currentUserName ?? '', currentUserPicture: AppData().currentUserProfilePicture ?? '', currentUserEmail: AppData().currentUserEmail ?? '')));
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder:
+                            (_) => ChatListScreen(
+                              currentUserId: AppData().currentUserId ?? '',
+                              currentUserName: AppData().currentUserName ?? '',
+                              currentUserPicture:
+                                  AppData().currentUserProfilePicture ?? '',
+                              currentUserEmail:
+                                  AppData().currentUserEmail ?? '',
+                            ),
+                      ),
+                    );
                   },
                 ),
               ),
@@ -917,9 +967,13 @@ Widget _buildEmptyFeedView() {
     );
   }
 
-  Widget _buildSecondaryButton(String text, IconData icon, VoidCallback onPressed) {
+  Widget _buildSecondaryButton(
+    String text,
+    IconData icon,
+    VoidCallback onPressed,
+  ) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Container(
       height: 50,
       decoration: BoxDecoration(
@@ -937,11 +991,7 @@ Widget _buildEmptyFeedView() {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                icon,
-                size: 20,
-                color: Theme.of(context).primaryColor,
-              ),
+              Icon(icon, size: 20, color: Theme.of(context).primaryColor),
               const SizedBox(width: 8),
               Text(
                 text,
@@ -971,9 +1021,10 @@ Widget _buildEmptyFeedView() {
         borderRadius: BorderRadius.circular(25),
         boxShadow: [
           BoxShadow(
-            color: isDarkMode 
-                ? Colors.black.withAlpha(30) 
-                : Colors.grey.withAlpha(10),
+            color:
+                isDarkMode
+                    ? Colors.black.withAlpha(30)
+                    : Colors.grey.withAlpha(10),
             blurRadius: 20,
             spreadRadius: 5,
             offset: const Offset(0, 10),
@@ -1000,14 +1051,11 @@ Widget _buildEmptyFeedView() {
               const SizedBox(width: 15),
               const Text(
                 'Personal Information',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
             ],
           ),
-          
+
           const SizedBox(height: 25),
 
           _buildInfoRow(
@@ -1027,7 +1075,8 @@ Widget _buildEmptyFeedView() {
               onTap: () => _copyToClipboard(profileData['phone'], 'Phone'),
             ),
 
-          if (profileData['location'] != null && profileData['location'].isNotEmpty)
+          if (profileData['location'] != null &&
+              profileData['location'].isNotEmpty)
             _buildInfoRow(
               Icons.location_on_outlined,
               'Location',
@@ -1061,8 +1110,8 @@ Widget _buildEmptyFeedView() {
   ) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
-    if (profileData['profession'] == null && 
-        profileData['education'] == null && 
+    if (profileData['profession'] == null &&
+        profileData['education'] == null &&
         profileData['achievements'] == null) {
       return const SizedBox.shrink();
     }
@@ -1075,9 +1124,10 @@ Widget _buildEmptyFeedView() {
         borderRadius: BorderRadius.circular(25),
         boxShadow: [
           BoxShadow(
-            color: isDarkMode 
-                ? Colors.black.withOpacity(0.3) 
-                : Colors.grey.withOpacity(0.1),
+            color:
+                isDarkMode
+                    ? Colors.black.withOpacity(0.3)
+                    : Colors.grey.withOpacity(0.1),
             blurRadius: 20,
             spreadRadius: 5,
             offset: const Offset(0, 10),
@@ -1104,17 +1154,15 @@ Widget _buildEmptyFeedView() {
               const SizedBox(width: 15),
               const Text(
                 'Professional Information',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
             ],
           ),
-          
+
           const SizedBox(height: 25),
 
-if (profileData['profession'] != null && profileData['profession'].isNotEmpty)
+          if (profileData['profession'] != null &&
+              profileData['profession'].isNotEmpty)
             _buildInfoRow(
               Icons.work_outline,
               'Profession',
@@ -1122,7 +1170,8 @@ if (profileData['profession'] != null && profileData['profession'].isNotEmpty)
               Colors.orange,
             ),
 
-          if (profileData['education'] != null && profileData['education'].isNotEmpty)
+          if (profileData['education'] != null &&
+              profileData['education'].isNotEmpty)
             _buildInfoRow(
               Icons.school_outlined,
               'Education',
@@ -1130,7 +1179,8 @@ if (profileData['profession'] != null && profileData['profession'].isNotEmpty)
               Colors.indigo,
             ),
 
-          if (profileData['achievements'] != null && profileData['achievements'].isNotEmpty)
+          if (profileData['achievements'] != null &&
+              profileData['achievements'].isNotEmpty)
             _buildInfoRow(
               Icons.emoji_events_outlined,
               'Achievements',
@@ -1150,7 +1200,7 @@ if (profileData['profession'] != null && profileData['profession'].isNotEmpty)
     VoidCallback? onTap,
   }) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 18),
       child: GestureDetector(
@@ -1160,10 +1210,7 @@ if (profileData['profession'] != null && profileData['profession'].isNotEmpty)
           decoration: BoxDecoration(
             color: color.withOpacity(0.05),
             borderRadius: BorderRadius.circular(15),
-            border: Border.all(
-              color: color.withOpacity(0.2),
-              width: 1,
-            ),
+            border: Border.all(color: color.withOpacity(0.2), width: 1),
           ),
           child: Row(
             children: [
@@ -1173,11 +1220,7 @@ if (profileData['profession'] != null && profileData['profession'].isNotEmpty)
                   color: color.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(
-                  icon,
-                  color: color,
-                  size: 20,
-                ),
+                child: Icon(icon, color: color, size: 20),
               ),
               const SizedBox(width: 15),
               Expanded(
@@ -1205,11 +1248,7 @@ if (profileData['profession'] != null && profileData['profession'].isNotEmpty)
                 ),
               ),
               if (onTap != null)
-                Icon(
-                  Icons.copy_outlined,
-                  color: color,
-                  size: 18,
-                ),
+                Icon(Icons.copy_outlined, color: color, size: 18),
             ],
           ),
         ),
@@ -1239,18 +1278,12 @@ if (profileData['profession'] != null && profileData['profession'].isNotEmpty)
             const SizedBox(height: 20),
             const Text(
               'Oops! Something went wrong',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 10),
             Text(
               'Unable to load profile information',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[600],
-              ),
+              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 20),
@@ -1258,7 +1291,10 @@ if (profileData['profession'] != null && profileData['profession'].isNotEmpty)
               onPressed: _refreshProfile,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Theme.of(context).primaryColor,
-                padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 30,
+                  vertical: 12,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(25),
                 ),
@@ -1279,7 +1315,7 @@ if (profileData['profession'] != null && profileData['profession'].isNotEmpty)
 
   Widget _buildOptionsSheet() {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Container(
       decoration: BoxDecoration(
         color: isDarkMode ? const Color(0xFF1A1A1A) : Colors.white,
@@ -1302,48 +1338,29 @@ if (profileData['profession'] != null && profileData['profession'].isNotEmpty)
               padding: EdgeInsets.all(16),
               child: Text(
                 'Options',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
             ),
-            _buildOptionTile(
-              Icons.share_outlined,
-              'Share Profile',
-              () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Share feature coming soon')),
-                );
-              },
-            ),
-            _buildOptionTile(
-              Icons.bookmark_outline,
-              'Save Profile',
-              () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Profile saved')),
-                );
-              },
-            ),
-            _buildOptionTile(
-              Icons.report_outlined,
-              'Report User',
-              () {
-                Navigator.pop(context);
-                _showReportDialog();
-              },
-            ),
-            _buildOptionTile(
-              Icons.block_outlined,
-              'Block User',
-              () {
-                Navigator.pop(context);
-                _showBlockDialog();
-              },
-            ),
+            _buildOptionTile(Icons.share_outlined, 'Share Profile', () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Share feature coming soon')),
+              );
+            }),
+            _buildOptionTile(Icons.bookmark_outline, 'Save Profile', () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(const SnackBar(content: Text('Profile saved')));
+            }),
+            _buildOptionTile(Icons.report_outlined, 'Report User', () {
+              Navigator.pop(context);
+              _showReportDialog();
+            }),
+            _buildOptionTile(Icons.block_outlined, 'Block User', () {
+              Navigator.pop(context);
+              _showBlockDialog();
+            }),
             const SizedBox(height: 20),
           ],
         ),
@@ -1363,59 +1380,61 @@ if (profileData['profession'] != null && profileData['profession'].isNotEmpty)
   void _showReportDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Report User'),
-        content: const Text('Are you sure you want to report this user?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Report User'),
+            content: const Text('Are you sure you want to report this user?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('User reported')),
+                  );
+                },
+                child: const Text('Report'),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('User reported')),
-              );
-            },
-            child: const Text('Report'),
-          ),
-        ],
-      ),
     );
   }
 
   void _showBlockDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Block User'),
-        content: const Text('Are you sure you want to block this user?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Block User'),
+            content: const Text('Are you sure you want to block this user?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(const SnackBar(content: Text('User blocked')));
+                },
+                child: const Text('Block'),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('User blocked')),
-              );
-            },
-            child: const Text('Block'),
-          ),
-        ],
-      ),
     );
   }
 
   void _copyToClipboard(String? text, String type) {
     if (text != null && text.isNotEmpty) {
       Clipboard.setData(ClipboardData(text: text));
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$type copied to clipboard')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('$type copied to clipboard')));
     }
   }
 
@@ -1424,8 +1443,18 @@ if (profileData['profession'] != null && profileData['profession'].isNotEmpty)
     try {
       final date = DateTime.parse(dateString);
       final months = [
-        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
       ];
       return '${date.day} ${months[date.month - 1]} ${date.year}';
     } catch (e) {

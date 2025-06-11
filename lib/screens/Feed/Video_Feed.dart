@@ -80,7 +80,7 @@ class FeedContent {
   }) {
     _mediaUrls = files.map((file) {
       if (file.startsWith('http')) return file;
-      return 'http://182.93.94.210:3064$file';
+      return 'http://182.93.94.210:3065$file';
     }).toList();
 
     _hasVideos = files.any((file) => file.toLowerCase().endsWith('.mp4') ||
@@ -253,8 +253,8 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
 
   Future<http.Response> _makeApiRequest() async {
     final url = _nextVideoCursor == null
-        ? 'http://182.93.94.210:3064/api/v1/list-contents'
-        : 'http://182.93.94.210:3064/api/v1/list-contents';
+        ? 'http://182.93.94.210:3065/api/v1/list-contents'
+        : 'http://182.93.94.210:3065/api/v1/list-contents';
 
     return await http.get(
       Uri.parse(url),
@@ -532,7 +532,7 @@ class _VideoFeedItemState extends State<VideoFeedItem> with SingleTickerProvider
     }
   }
     final ContentLikeService likeService = ContentLikeService(
-    baseUrl: 'http://182.93.94.210:3064',
+    baseUrl: 'http://182.93.94.210:3065',
   );
 
   bool _isAuthorCurrentUser() {
@@ -943,7 +943,7 @@ class _VideoFeedItemState extends State<VideoFeedItem> with SingleTickerProvider
     }
 
     return CachedNetworkImage(
-      imageUrl: 'http://182.93.94.210:3064${widget.content.author.picture}',
+      imageUrl: 'http://182.93.94.210:3065${widget.content.author.picture}',
       imageBuilder: (context, imageProvider) => CircleAvatar(
         backgroundImage: imageProvider,
       ),
@@ -962,7 +962,7 @@ class _VideoFeedItemState extends State<VideoFeedItem> with SingleTickerProvider
 
   Future<void> _submitComment(String comment) async {
     try {
-      final url = Uri.parse('http://182.93.94.210:3064/api/v1/add-comment');
+      final url = Uri.parse('http://182.93.94.210:3065/api/v1/add-comment');
       final response = await http.post(
         url,
         headers: {
@@ -1053,7 +1053,7 @@ class _VideoFeedItemState extends State<VideoFeedItem> with SingleTickerProvider
 
   void _copyLink() {
     Clipboard.setData(ClipboardData(
-      text: 'http://182.93.94.210:3064/content/${widget.content.id}',
+      text: 'http://182.93.94.210:3065/content/${widget.content.id}',
     ));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Link copied to clipboard')),
@@ -1069,7 +1069,7 @@ class _VideoFeedItemState extends State<VideoFeedItem> with SingleTickerProvider
     }
 
     try {
-      final url = Uri.parse('http://182.93.94.210:3064/api/v1/delete-content/${widget.content.id}');
+      final url = Uri.parse('http://182.93.94.210:3065/api/v1/delete-content/${widget.content.id}');
       final response = await http.delete(
         url,
         headers: {

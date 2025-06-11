@@ -66,12 +66,14 @@ class UserProfile {
       dob: json['dob'] != null ? DateTime.parse(json['dob']) : DateTime.now(),
       role: json['role'] ?? '',
       level: json['level'] ?? '',
-      createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'])
-          : DateTime.now(),
-      updatedAt: json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'])
-          : DateTime.now(),
+      createdAt:
+          json['createdAt'] != null
+              ? DateTime.parse(json['createdAt'])
+              : DateTime.now(),
+      updatedAt:
+          json['updatedAt'] != null
+              ? DateTime.parse(json['updatedAt'])
+              : DateTime.now(),
       picture: json['picture'],
       gender: json['gender'],
       location: json['location'],
@@ -156,9 +158,10 @@ class UserProfileService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        final profile = data['data'] != null 
-            ? UserProfile.fromJson(data['data'])
-            : UserProfile.fromJson(data);
+        final profile =
+            data['data'] != null
+                ? UserProfile.fromJson(data['data'])
+                : UserProfile.fromJson(data);
         return profile;
       } else if (response.statusCode == 401) {
         await AppData().clearAuthToken();
@@ -229,7 +232,7 @@ class UserProfileService {
       );
 
       log('Following API response: ${response.body}');
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['data'] != null && data['data'] is List) {
@@ -355,7 +358,8 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     if (!_isLoading &&
         _hasMoreData &&
         _scrollController.position.pixels >=
-            _scrollController.position.maxScrollExtent - _loadTriggerThreshold) {
+            _scrollController.position.maxScrollExtent -
+                _loadTriggerThreshold) {
       _loadMoreContent();
     }
   }
@@ -376,24 +380,28 @@ class _UserProfileScreenState extends State<UserProfileScreen>
           _errorMessage = 'Authentication required. Please login.';
         });
         Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(builder: (_) => LoginPage()),
-            (route) => false);
+          context,
+          MaterialPageRoute(builder: (_) => LoginPage()),
+          (route) => false,
+        );
         return;
       }
 
-      final url = _lastId == null
-          ? 'http://182.93.94.210:3064/api/v1/getUserContent/${widget.userId}?page=0'
-          : 'http://182.93.94.210:3064/api/v1/getUserContent/${widget.userId}?page=${(_contents.length / 10).ceil()}';
+      final url =
+          _lastId == null
+              ? 'http://182.93.94.210:3064/api/v1/getUserContent/${widget.userId}?page=0'
+              : 'http://182.93.94.210:3064/api/v1/getUserContent/${widget.userId}?page=${(_contents.length / 10).ceil()}';
 
-      final response = await http.get(
-        Uri.parse(url),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'authorization': 'Bearer $authToken',
-        },
-      ).timeout(Duration(seconds: 30));
+      final response = await http
+          .get(
+            Uri.parse(url),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'authorization': 'Bearer $authToken',
+            },
+          )
+          .timeout(Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
@@ -436,9 +444,10 @@ class _UserProfileScreenState extends State<UserProfileScreen>
 
   Future<void> _handleUnauthorizedError() async {
     Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => LoginPage()),
-        (route) => false);
+      context,
+      MaterialPageRoute(builder: (_) => LoginPage()),
+      (route) => false,
+    );
   }
 
   Future<void> _refreshFeed() async {
@@ -476,25 +485,46 @@ class _UserProfileScreenState extends State<UserProfileScreen>
         _errorMessage = null;
       });
 
+      // Clear existing image cache before upload
+      final oldImagePath = _userController.getFullProfilePicturePath();
+      if (oldImagePath != null) {
+        imageCache.evict(NetworkImage(oldImagePath));
+        // Also clear with version parameter
+        imageCache.evict(
+          NetworkImage(
+            '$oldImagePath?v=${_userController.profilePictureVersion.value}',
+          ),
+        );
+      }
+
       final File imageFile = File(image.path);
-      final String newPicturePath = await UserProfileService.uploadProfilePicture(imageFile);
-      
+      final String newPicturePath =
+          await UserProfileService.uploadProfilePicture(imageFile);
+
+      // Update controller with new path and increment version
       _userController.updateProfilePicture(newPicturePath);
       await AppData().updateProfilePicture(newPicturePath);
+
+      // Force image cache clear for new image as well
+      imageCache.evict(NetworkImage(newPicturePath));
+
+      // Increment version to force UI rebuild
+      _userController.profilePictureVersion.value++;
 
       setState(() {
         _isUploading = false;
       });
-      
-      _loadProfile();
+
+      // Remove _loadProfile() call since controller is already updated
+      // _loadProfile();
     } catch (e) {
       setState(() {
         _isUploading = false;
         _errorMessage = 'Failed to upload image: $e';
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to upload image: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to upload image: $e')));
     }
   }
 
@@ -506,7 +536,9 @@ class _UserProfileScreenState extends State<UserProfileScreen>
           insetPadding: EdgeInsets.all(16),
           child: Container(
             padding: EdgeInsets.all(16),
-            constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.7),
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.7,
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -514,18 +546,12 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                   controller: _tabController,
                   labelColor: Color.fromRGBO(235, 111, 70, 1),
                   unselectedLabelColor: Colors.grey,
-                  tabs: [
-                    Tab(text: 'Followers'),
-                    Tab(text: 'Following'),
-                  ],
+                  tabs: [Tab(text: 'Followers'), Tab(text: 'Following')],
                 ),
                 Expanded(
                   child: TabBarView(
                     controller: _tabController,
-                    children: [
-                      _buildFollowersList(),
-                      _buildFollowingList(),
-                    ],
+                    children: [_buildFollowersList(), _buildFollowingList()],
                   ),
                 ),
               ],
@@ -555,7 +581,9 @@ class _UserProfileScreenState extends State<UserProfileScreen>
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Center(child: CircularProgressIndicator());
         } else if (snapshot.hasError) {
-          return Center(child: Text('Error loading following: ${snapshot.error}'));
+          return Center(
+            child: Text('Error loading following: ${snapshot.error}'),
+          );
         } else if (snapshot.hasData && snapshot.data!.isNotEmpty) {
           final following = snapshot.data!;
           return Column(
@@ -568,7 +596,8 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                     return FutureBuilder<bool>(
                       future: FollowService.checkFollowStatus(follow.email),
                       builder: (context, followSnapshot) {
-                        if (followSnapshot.connectionState == ConnectionState.waiting) {
+                        if (followSnapshot.connectionState ==
+                            ConnectionState.waiting) {
                           return ListTile(
                             leading: CircularProgressIndicator(),
                             title: Text(follow.name),
@@ -585,12 +614,19 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                           leading: CircleAvatar(
                             radius: 24,
                             backgroundColor: Color.fromRGBO(235, 111, 70, 0.2),
-                            backgroundImage: follow.picture != null
-                                ? NetworkImage('http://182.93.94.210:3064${follow.picture}')
-                                : null,
-                            child: follow.picture == null
-                                ? Icon(Icons.person, color: Color.fromRGBO(235, 111, 70, 1))
-                                : null,
+                            backgroundImage:
+                                follow.picture != null
+                                    ? NetworkImage(
+                                      'http://182.93.94.210:3064${follow.picture}',
+                                    )
+                                    : null,
+                            child:
+                                follow.picture == null
+                                    ? Icon(
+                                      Icons.person,
+                                      color: Color.fromRGBO(235, 111, 70, 1),
+                                    )
+                                    : null,
                           ),
                           title: GestureDetector(
                             child: Text(follow.name),
@@ -598,7 +634,10 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => SpecificUserProfilePage(userId: follow.id),
+                                  builder:
+                                      (_) => SpecificUserProfilePage(
+                                        userId: follow.id,
+                                      ),
                                 ),
                               );
                             },
@@ -622,24 +661,26 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                 children: [
                   IconButton(
                     icon: Icon(Icons.arrow_back),
-                    onPressed: _currentPageFollowing > 1
-                        ? () {
-                            setState(() {
-                              _currentPageFollowing--;
-                            });
-                          }
-                        : null,
+                    onPressed:
+                        _currentPageFollowing > 1
+                            ? () {
+                              setState(() {
+                                _currentPageFollowing--;
+                              });
+                            }
+                            : null,
                   ),
                   Text('Page $_currentPageFollowing'),
                   IconButton(
                     icon: Icon(Icons.arrow_forward),
-                    onPressed: following.length == _itemsPerPage
-                        ? () {
-                            setState(() {
-                              _currentPageFollowing++;
-                            });
-                          }
-                        : null,
+                    onPressed:
+                        following.length == _itemsPerPage
+                            ? () {
+                              setState(() {
+                                _currentPageFollowing++;
+                              });
+                            }
+                            : null,
                   ),
                 ],
               ),
@@ -659,7 +700,9 @@ class _UserProfileScreenState extends State<UserProfileScreen>
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Center(child: CircularProgressIndicator());
         } else if (snapshot.hasError) {
-          return Center(child: Text('Error loading followers: ${snapshot.error}'));
+          return Center(
+            child: Text('Error loading followers: ${snapshot.error}'),
+          );
         } else if (snapshot.hasData && snapshot.data!.isNotEmpty) {
           final followers = snapshot.data!;
           return Column(
@@ -672,7 +715,8 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                     return FutureBuilder<bool>(
                       future: FollowService.checkFollowStatus(follower.email),
                       builder: (context, followSnapshot) {
-                        if (followSnapshot.connectionState == ConnectionState.waiting) {
+                        if (followSnapshot.connectionState ==
+                            ConnectionState.waiting) {
                           return ListTile(
                             leading: CircularProgressIndicator(),
                             title: Text(follower.name),
@@ -689,12 +733,19 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                           leading: CircleAvatar(
                             radius: 24,
                             backgroundColor: Color.fromRGBO(235, 111, 70, 0.2),
-                            backgroundImage: follower.picture != null
-                                ? NetworkImage('http://182.93.94.210:3064${follower.picture}')
-                                : NetworkImage(''),
-                            child: follower.picture == null
-                                ? Icon(Icons.person, color: Color.fromRGBO(235, 111, 70, 1))
-                                : null,
+                            backgroundImage:
+                                follower.picture != null
+                                    ? NetworkImage(
+                                      'http://182.93.94.210:3064${follower.picture}',
+                                    )
+                                    : NetworkImage(''),
+                            child:
+                                follower.picture == null
+                                    ? Icon(
+                                      Icons.person,
+                                      color: Color.fromRGBO(235, 111, 70, 1),
+                                    )
+                                    : null,
                           ),
                           title: GestureDetector(
                             child: Text(follower.name),
@@ -702,7 +753,10 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => SpecificUserProfilePage(userId: follower.id),
+                                  builder:
+                                      (context) => SpecificUserProfilePage(
+                                        userId: follower.id,
+                                      ),
                                 ),
                               );
                             },
@@ -726,24 +780,26 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                 children: [
                   IconButton(
                     icon: Icon(Icons.arrow_back),
-                    onPressed: _currentPageFollowers > 1
-                        ? () {
-                            setState(() {
-                              _currentPageFollowers--;
-                            });
-                          }
-                        : null,
+                    onPressed:
+                        _currentPageFollowers > 1
+                            ? () {
+                              setState(() {
+                                _currentPageFollowers--;
+                              });
+                            }
+                            : null,
                   ),
                   Text('Page $_currentPageFollowers'),
                   IconButton(
                     icon: Icon(Icons.arrow_forward),
-                    onPressed: followers.length == _itemsPerPage
-                        ? () {
-                            setState(() {
-                              _currentPageFollowers++;
-                            });
-                          }
-                        : null,
+                    onPressed:
+                        followers.length == _itemsPerPage
+                            ? () {
+                              setState(() {
+                                _currentPageFollowers++;
+                              });
+                            }
+                            : null,
                   ),
                 ],
               ),
@@ -760,7 +816,6 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        
         SizedBox(height: 40),
         Center(
           child: Column(
@@ -770,20 +825,31 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                 children: [
                   Stack(
                     children: [
-                      Obx(() => CircleAvatar(
-                        radius: 60,
-                        backgroundColor: Color.fromRGBO(235, 111, 70, 0.2),
-                        backgroundImage: _userController.getFullProfilePicturePath() != null
-                            ? NetworkImage(_userController.getFullProfilePicturePath()!)
-                            : null,
-                        child: _userController.profilePicture.value == null
-                            ? Icon(
-                                Icons.person,
-                                size: 60,
-                                color: Color.fromRGBO(235, 111, 70, 1),
-                              )
-                            : null,
-                      )),
+                      Obx(
+                        () => CircleAvatar(
+                          radius: 60,
+                          backgroundColor: Color.fromRGBO(235, 111, 70, 0.2),
+                          key: ValueKey(
+                            'profile_${_userController.profilePictureVersion.value}',
+                          ), // Forces rebuild
+                          backgroundImage:
+                              _userController.getFullProfilePicturePath() !=
+                                      null
+                                  ? NetworkImage(
+                                    '${_userController.getFullProfilePicturePath()!}?v=${_userController.profilePictureVersion.value}',
+                                  ) // Add version parameter to URL
+                                  : null,
+                          child:
+                              _userController.profilePicture.value == null ||
+                                      _userController.profilePicture.value == ''
+                                  ? Icon(
+                                    Icons.person,
+                                    size: 60,
+                                    color: Color.fromRGBO(235, 111, 70, 1),
+                                  )
+                                  : null,
+                        ),
+                      ),
                       Positioned(
                         right: 0,
                         bottom: 0,
@@ -795,20 +861,21 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                               color: Color.fromRGBO(235, 111, 70, 1),
                               shape: BoxShape.circle,
                             ),
-                            child: _isUploading
-                                ? SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
+                            child:
+                                _isUploading
+                                    ? SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                    : Icon(
+                                      Icons.edit,
                                       color: Colors.white,
-                                      strokeWidth: 2,
+                                      size: 16,
                                     ),
-                                  )
-                                : Icon(
-                                    Icons.edit,
-                                    color: Colors.white,
-                                    size: 16,
-                                  ),
                           ),
                         ),
                       ),
@@ -816,13 +883,15 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                   ),
                   Column(
                     children: [
-                      Obx(() => Text(
-                        _userController.userName.value ?? profile.name,
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
+                      Obx(
+                        () => Text(
+                          _userController.userName.value ?? profile.name,
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      )),
+                      ),
                       ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Color.fromRGBO(235, 111, 70, 1),
@@ -836,15 +905,9 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                         },
                         label: Text(
                           'Edit Profile',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.white,
-                          ),
+                          style: TextStyle(fontSize: 16, color: Colors.white),
                         ),
-                        icon: Icon(
-                          Icons.edit,
-                          color: Colors.white,
-                        ),
+                        icon: Icon(Icons.edit, color: Colors.white),
                       ),
                     ],
                   ),
@@ -856,10 +919,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                   padding: const EdgeInsets.only(bottom: 8.0),
                   child: Text(
                     _errorMessage!,
-                    style: TextStyle(
-                      color: Colors.red,
-                      fontSize: 12,
-                    ),
+                    style: TextStyle(color: Colors.red, fontSize: 12),
                   ),
                 ),
               SizedBox(height: 4),
@@ -910,10 +970,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                     ),
                   ),
                   Container(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
                       color: Color.fromRGBO(235, 111, 70, 0.2),
                       borderRadius: BorderRadius.circular(16),
@@ -936,10 +993,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
           padding: EdgeInsets.all(12),
           child: Text(
             'Personal Information',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
         ),
         SizedBox(height: 8),
@@ -958,7 +1012,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
           value: formatDate(profile.dob),
           icon: Icons.calendar_today,
         ),
-        
+
         ProfileInfoCard(
           title: 'Member Since',
           value: formatDate(profile.createdAt),
@@ -970,10 +1024,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
           padding: const EdgeInsets.all(12),
           child: Text(
             'My Feed',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
         ),
       ],
@@ -1004,9 +1055,9 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   Widget _buildLoadingIndicator() {
     return _isLoading
         ? const Padding(
-            padding: EdgeInsets.all(16.0),
-            child: Center(child: CircularProgressIndicator()),
-          )
+          padding: EdgeInsets.all(16.0),
+          child: Center(child: CircularProgressIndicator()),
+        )
         : const SizedBox.shrink();
   }
 
@@ -1042,7 +1093,11 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.error_outline, size: 48, color: Colors.red),
+                          Icon(
+                            Icons.error_outline,
+                            size: 48,
+                            color: Colors.red,
+                          ),
                           SizedBox(height: 16),
                           Text(
                             'Error loading profile',
@@ -1052,14 +1107,20 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                             ),
                           ),
                           SizedBox(height: 8),
-                          Lottie.asset('animation/No-Content.json', fit: BoxFit.cover),
+                          Lottie.asset(
+                            'animation/No-Content.json',
+                            fit: BoxFit.cover,
+                          ),
                           ElevatedButton(
                             onPressed: () {
                               setState(() {
                                 _loadProfile();
                               });
                             },
-                            child: Text('Try Again', style: TextStyle(color: Colors.white),),
+                            child: Text(
+                              'Try Again',
+                              style: TextStyle(color: Colors.white),
+                            ),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Color.fromRGBO(235, 111, 70, 1),
                             ),
@@ -1078,15 +1139,12 @@ class _UserProfileScreenState extends State<UserProfileScreen>
             ),
           ),
           SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, index) {
-                if (index == _contents.length) {
-                  return _buildLoadingIndicator();
-                }
-                return _buildContentItem(index);
-              },
-              childCount: _contents.length + (_hasMoreData ? 1 : 0),
-            ),
+            delegate: SliverChildBuilderDelegate((context, index) {
+              if (index == _contents.length) {
+                return _buildLoadingIndicator();
+              }
+              return _buildContentItem(index);
+            }, childCount: _contents.length + (_hasMoreData ? 1 : 0)),
           ),
         ],
       ),

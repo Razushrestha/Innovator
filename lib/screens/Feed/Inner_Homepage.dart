@@ -96,7 +96,7 @@ class FeedContent {
       _mediaUrls =
           files.map((file) {
             if (file.startsWith('http')) return file;
-            return 'http://182.93.94.210:3064${file.startsWith('/') ? file : '/$file'}';
+            return 'http://182.93.94.210:3065${file.startsWith('/') ? file : '/$file'}';
           }).toList();
 
       _hasImages = files.any((file) {
@@ -175,6 +175,64 @@ class FeedContent {
   bool get hasWordDocs => _hasWordDocs;
 }
 
+
+// Add at the top of inner_home_page.dart, below existing imports
+class ContentResponse {
+  final int status;
+  final ContentData data;
+  final dynamic error;
+  final String message;
+
+  ContentResponse({
+    required this.status,
+    required this.data,
+    this.error,
+    required this.message,
+  });
+
+  factory ContentResponse.fromJson(Map<String, dynamic> json) {
+    return ContentResponse(
+      status: json['status'] as int,
+      data: ContentData.fromJson(json['data'] ?? {}),
+      error: json['error'],
+      message: json['message'] as String? ?? '',
+    );
+  }
+}
+
+class ContentData {
+  final List<FeedContent> videoContents;
+  final List<FeedContent> normalContents;
+  final bool hasMoreVideos;
+  final bool hasMoreNormal;
+  final String? nextVideoCursor;
+  final String? nextNormalCursor;
+
+  ContentData({
+    required this.videoContents,
+    required this.normalContents,
+    required this.hasMoreVideos,
+    required this.hasMoreNormal,
+    this.nextVideoCursor,
+    this.nextNormalCursor,
+  });
+
+  factory ContentData.fromJson(Map<String, dynamic> json) {
+    return ContentData(
+      videoContents: (json['videoContents'] as List<dynamic>? ?? [])
+          .map((item) => FeedContent.fromJson(item as Map<String, dynamic>))
+          .toList(),
+      normalContents: (json['normalContents'] as List<dynamic>? ?? [])
+          .map((item) => FeedContent.fromJson(item as Map<String, dynamic>))
+          .toList(),
+      hasMoreVideos: json['hasMoreVideos'] as bool? ?? false,
+      hasMoreNormal: json['hasMoreNormal'] as bool? ?? false,
+      nextVideoCursor: json['nextVideoCursor'] as String?,
+      nextNormalCursor: json['nextNormalCursor'] as String?,
+    );
+  }
+}
+
 class FileTypeHelper {
   static bool isImage(String url) {
     try {
@@ -225,15 +283,18 @@ class Inner_HomePage extends StatefulWidget {
 }
 
 class _Inner_HomePageState extends State<Inner_HomePage> {
-  final ChatListController chatController = Get.put(ChatListController());
+final ChatListController chatController = Get.put(ChatListController());
 
-  final List<FeedContent> _contents = [];
+  final List<FeedContent> _videoContents = [];
+  final List<FeedContent> _normalContents = [];
   final ScrollController _scrollController = ScrollController();
   bool _isLoading = false;
-  String? _lastId;
+  String? _nextVideoCursor;
+  String? _nextNormalCursor;
   bool _hasError = false;
   String _errorMessage = '';
-  bool _hasMoreData = true;
+  bool _hasMoreVideos = true;
+  bool _hasMoreNormal = true;
   static const _loadTriggerThreshold = 500.0;
   final AppData _appData = AppData();
   bool _isRefreshingToken = false;
@@ -269,7 +330,7 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
 
   void _scrollListener() {
     if (!_isLoading &&
-        _hasMoreData &&
+        (_hasMoreVideos || _hasMoreNormal) &&
         _scrollController.position.pixels >=
             _scrollController.position.maxScrollExtent -
                 _loadTriggerThreshold) {
@@ -278,7 +339,7 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
   }
 
   Future<void> _loadMoreContent() async {
-    if (_isLoading || !_hasMoreData || _isRefreshingToken) return;
+    if (_isLoading || (!_hasMoreNormal && !_hasMoreVideos) || _isRefreshingToken) return;
 
     setState(() {
       _isLoading = true;
@@ -291,26 +352,38 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
         final cachedContents = await CacheManager.getCachedFeed();
         setState(() {
           if (cachedContents.isNotEmpty) {
-            _contents.clear();
-            _contents.addAll(cachedContents);
-            _hasMoreData = false;
+            _videoContents.clear();
+            _normalContents.clear();
+            _videoContents.addAll(cachedContents.where((c) => c.hasVideos));
+            _normalContents.addAll(cachedContents.where((c) => !c.hasVideos));
+            _hasMoreVideos = false;
+            _hasMoreNormal = false;
           }
         });
         return;
       }
+      
 
       if (!await _verifyToken()) return;
 
-      final response = await _makeApiRequest();
+     final contentData = await FeedApiService.fetchContents(
+        lastId: _nextVideoCursor ?? _nextNormalCursor,
+        context: context,
+      );
 
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> data = json.decode(response.body);
-        await _handleSuccessfulResponse(data);
-      } else if (response.statusCode == 401) {
-        await _handleUnauthorizedError();
-      } else {
-        _handleApiError(response.statusCode);
-      }
+      await CacheManager.cacheFeedContent([
+        ...contentData.videoContents,
+        ...contentData.normalContents,
+      ]);
+
+      setState(() {
+        _videoContents.addAll(contentData.videoContents);
+        _normalContents.addAll(contentData.normalContents);
+        _nextVideoCursor = contentData.nextVideoCursor;
+        _nextNormalCursor = contentData.nextNormalCursor;
+        _hasMoreVideos = contentData.hasMoreVideos;
+        _hasMoreNormal = contentData.hasMoreNormal;
+      });
     } on SocketException {
       _handleNetworkError();
     } catch (e) {
@@ -322,27 +395,7 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
     }
   }
 
-  Future<void> _handleSuccessfulResponse(Map<String, dynamic> data) async {
-    if (data.containsKey('data') && data['data']['contents'] is List) {
-      final List<dynamic> contentList = data['data']['contents'] as List;
-      final List<FeedContent> newContents =
-          contentList.map((item) => FeedContent.fromJson(item)).toList();
-
-      // Cache new content
-      await CacheManager.cacheFeedContent(newContents);
-
-      setState(() {
-        _contents.addAll(newContents);
-        _lastId = newContents.isNotEmpty ? newContents.last.id : _lastId;
-        _hasMoreData = data['data']['hasMore'] ?? false;
-      });
-    } else {
-      setState(() {
-        _hasError = true;
-        _errorMessage = 'Please Contact To Our Support Team';
-      });
-    }
-  }
+  
 
   Future<void> _requestNotificationPermission() async {
     try {
@@ -394,49 +447,49 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
     return true;
   }
 
-  Future<http.Response> _makeApiRequest() async {
-    final url =
-        _lastId == null
-            ? 'http://182.93.94.210:3064/api/v1/list-contents'
-            : 'http://182.93.94.210:3064/api/v1/list-contents?lastId=$_lastId';
+  // Future<http.Response> _makeApiRequest() async {
+  //   final url =
+  //       _lastId == null
+  //           ? 'http://182.93.94.210:3065/api/v1/list-contents'
+  //           : 'http://182.93.94.210:3065/api/v1/list-contents?lastId=$_lastId';
 
-    debugPrint('Request URL: $url');
-    final response = await http
-        .get(
-          Uri.parse(url),
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'authorization': 'Bearer ${_appData.authToken}',
-          },
-        )
-        .timeout(Duration(seconds: 30));
-    debugPrint('Response: ${response.body}');
-    return response;
-  }
+  //   debugPrint('Request URL: $url');
+  //   final response = await http
+  //       .get(
+  //         Uri.parse(url),
+  //         headers: {
+  //           'Content-Type': 'application/json',
+  //           'Accept': 'application/json',
+  //           'authorization': 'Bearer ${_appData.authToken}',
+  //         },
+  //       )
+  //       .timeout(Duration(seconds: 30));
+  //   debugPrint('Response: ${response.body}');
+  //   return response;
+  // }
 
-  Future<void> _handleUnauthorizedError() async {
-    if (!_isRefreshingToken) {
-      _isRefreshingToken = true;
-      final success = await _refreshToken();
-      _isRefreshingToken = false;
+  // Future<void> _handleUnauthorizedError() async {
+  //   if (!_isRefreshingToken) {
+  //     _isRefreshingToken = true;
+  //     final success = await _refreshToken();
+  //     _isRefreshingToken = false;
 
-      if (success) {
-        await _loadMoreContent();
-      } else {
-        await _appData.logout();
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (_) => LoginPage()),
-          (route) => false,
-        );
-        setState(() {
-          _hasError = true;
-          _errorMessage = 'Session expired. Please login again.';
-        });
-      }
-    }
-  }
+  //     if (success) {
+  //       await _loadMoreContent();
+  //     } else {
+  //       await _appData.logout();
+  //       Navigator.pushAndRemoveUntil(
+  //         context,
+  //         MaterialPageRoute(builder: (_) => LoginPage()),
+  //         (route) => false,
+  //       );
+  //       setState(() {
+  //         _hasError = true;
+  //         _errorMessage = 'Session expired. Please login again.';
+  //       });
+  //     }
+  //   }
+  // }
 
   Future<bool> _refreshToken() async {
     try {
@@ -444,7 +497,7 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
       if (refreshToken == null) return false;
 
       final response = await http.post(
-        Uri.parse('http://182.93.94.210:3064/api/v1/refresh-token'),
+        Uri.parse('http://182.93.94.210:3065/api/v1/refresh-token'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({'refreshToken': refreshToken}),
       );
@@ -496,10 +549,13 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
 
   Future<void> _refresh() async {
     setState(() {
-      _contents.clear();
-      _lastId = null;
+      _videoContents.clear();
+      _normalContents.clear();
+      _nextVideoCursor = null;
+      _nextNormalCursor = null;
       _hasError = false;
-      _hasMoreData = true;
+      _hasMoreVideos = true;
+      _hasMoreNormal = true;
     });
     await _loadMoreContent();
   }
@@ -519,15 +575,43 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
           controller: _scrollController,
           slivers: [
             SliverList(
-              delegate: SliverChildBuilderDelegate((context, index) {
-                if (index == _contents.length) {
-                  return _buildLoadingIndicator();
-                }
-                return _buildContentItem(index);
-              }, childCount: _contents.length + (_hasMoreData ? 1 : 0)),
+              delegate: SliverChildListDelegate([
+              // Videos Section
+              // if (_videoContents.isNotEmpty)
+              //   const Padding(
+              //     padding: EdgeInsets.all(16.0),
+              //     child: Text(
+              //       'Videos',
+              //       style: TextStyle(
+              //         fontSize: 20,
+              //         fontWeight: FontWeight.bold,
+              //         color: Colors.black87,
+              //       ),
+              //     ),
+              //   ),
+              ..._videoContents.map((content) => _buildContentItem(content)),
+              // Posts Section
+              // if (_normalContents.isNotEmpty)
+              //   const Padding(
+              //     padding: EdgeInsets.all(16.0),
+              //     child: Text(
+              //       'Posts',
+              //       style: TextStyle(
+              //         fontSize: 20,
+              //         fontWeight: FontWeight.bold,
+              //         color: Colors.black87,
+              //       ),
+              //     ),
+              //   ),
+              ..._normalContents.map((content) => _buildContentItem(content)),
+              
+              // Loading Indicator
+              _buildLoadingIndicator(),
+            ]),
             ),
             if (_hasError) SliverFillRemaining(child: _buildErrorView()),
-            if (_contents.isEmpty && !_isLoading && !_hasError)
+            if (_videoContents.isEmpty && _normalContents.isEmpty &&!_isLoading && !_hasError)
+            
               SliverFillRemaining(child: _buildEmptyView()),
           ],
         ),
@@ -563,7 +647,7 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
                           }
 
                           // Navigate to ChatListScreen
-                          final result = await Navigator.push(
+                           await Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder:
@@ -626,8 +710,7 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
     );
   }
 
-  Widget _buildContentItem(int index) {
-    final content = _contents[index];
+  Widget _buildContentItem(FeedContent content) {
     return RepaintBoundary(
       key: ValueKey(content.id),
       child: FeedItem(
@@ -657,6 +740,14 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
   }
 
   Widget _buildErrorView() {
+    if(!_isOnline)
+    {
+      _refresh();
+    }
+    if(_isOnline)
+    {
+      _loadMoreContent();
+    }
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -705,7 +796,10 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
         ),
       ),
     );
-  }
+
+   }
+    
+  
 
   Widget _buildEmptyView() {
     return Center(
@@ -750,7 +844,7 @@ class _FeedItemState extends State<FeedItem>
   bool isChecked = false;
 
   final ContentLikeService likeService = ContentLikeService(
-    baseUrl: 'http://182.93.94.210:3064',
+    baseUrl: 'http://182.93.94.210:3065',
   );
   late String formattedTimeAgo;
   bool _showComments = false;
@@ -837,7 +931,7 @@ class _FeedItemState extends State<FeedItem>
       final response = await http
           .post(
             Uri.parse(
-              'http://182.93.94.210:3064/api/v1/content/view/${widget.content.id}',
+              'http://182.93.94.210:3065/api/v1/content/view/${widget.content.id}',
             ),
             headers: {
               'Content-Type': 'application/json',
@@ -905,6 +999,11 @@ class _FeedItemState extends State<FeedItem>
   }
 
   bool _isAuthorCurrentUser() {
+    // final userController = Get.find<UserController>();
+  // Compare based on your user identification logic
+  // This could be user ID, email, or any unique identifier
+ // return widget.content.author.id == userController.currentUserId || 
+   //      widget.content.author.email == userController.currentUserEmail;
     if (AppData().isCurrentUser(widget.content.author.id)) {
       developer.log('isAuthorCurrentUser: Matched via AppData');
       return true;
@@ -979,30 +1078,30 @@ class _FeedItemState extends State<FeedItem>
                 children: [
                   // Enhanced Avatar
                   Hero(
-                    tag: 'avatar_${widget.content.author.id}',
-                    child: Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: LinearGradient(
-                          colors: [
-                            Colors.blue.shade400,
-                            Colors.purple.shade400,
-                          ],
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.blue.withAlpha(30),
-                            blurRadius: 12.0,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(2.0),
-                        child: _buildAuthorAvatar(),
-                      ),
-                    ),
-                  ),
+  tag: 'avatar_${widget.content.author.id}_${_isAuthorCurrentUser() ? Get.find<UserController>().profilePictureVersion.value : 0}',
+  child: Container(
+    decoration: BoxDecoration(
+      shape: BoxShape.circle,
+      gradient: LinearGradient(
+        colors: [
+          Colors.blue.shade400,
+          Colors.purple.shade400,
+        ],
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.blue.withAlpha(30),
+          blurRadius: 12.0,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    ),
+    child: Padding(
+      padding: const EdgeInsets.all(2.0),
+      child: _buildAuthorAvatar(),
+    ),
+  ),
+),
                   const SizedBox(width: 16.0),
 
                   // Author Info
@@ -1530,7 +1629,7 @@ class _FeedItemState extends State<FeedItem>
       );
 
       final response = await http.post(
-        Uri.parse('http://182.93.94.210:3064/api/v1/new-content'),
+        Uri.parse('http://182.93.94.210:3065/api/v1/new-content'),
         headers: {
           'Content-Type': 'application/json',
           'authorization': 'Bearer $authToken',
@@ -2075,7 +2174,7 @@ class _FeedItemState extends State<FeedItem>
     try {
       final response = await http.put(
         Uri.parse(
-          'http://182.93.94.210:3064/api/v1/update-contents/${widget.content.id}',
+          'http://182.93.94.210:3065/api/v1/update-contents/${widget.content.id}',
         ),
         headers: {
           'Content-Type': 'application/json',
@@ -2136,7 +2235,7 @@ class _FeedItemState extends State<FeedItem>
     try {
       final response = await http.delete(
         Uri.parse(
-          'http://182.93.94.210:3064/api/v1/delete-content/${widget.content.id}',
+          'http://182.93.94.210:3065/api/v1/delete-content/${widget.content.id}',
         ),
         headers: {'authorization': 'Bearer ${AppData().authToken}'},
       );
@@ -2188,7 +2287,7 @@ class _FeedItemState extends State<FeedItem>
   Future<void> _deleteFiles() async {
     try {
       final response = await http.post(
-        Uri.parse('http://182.93.94.210:3064/api/v1/delete-files'),
+        Uri.parse('http://182.93.94.210:3065/api/v1/delete-files'),
         headers: {
           'Content-Type': 'application/json',
           'authorization': 'Bearer ${AppData().authToken}',
@@ -2312,7 +2411,7 @@ class _FeedItemState extends State<FeedItem>
 
                       try {
                         final response = await http.post(
-                          Uri.parse('http://182.93.94.210:3064/api/v1/report'),
+                          Uri.parse('http://182.93.94.210:3065/api/v1/report'),
                           headers: {
                             'Content-Type': 'application/json',
                             'Accept': 'application/json',
@@ -2379,80 +2478,81 @@ class _FeedItemState extends State<FeedItem>
   }
 
   Widget _buildAuthorAvatar() {
-    final userController = Get.find<UserController>();
-
-    // Check if this is the current user's post
-    if (_isAuthorCurrentUser()) {
-      return Obx(() {
-        final picturePath = userController.getFullProfilePicturePath();
-        return GestureDetector(
-          onTap: () {
-            _showBigAvatarDialog(
-              context,
-              picturePath,
-              widget.content.author.name,
-            );
-          },
-          child: CircleAvatar(
-            backgroundImage:
-                picturePath != null ? NetworkImage(picturePath) : null,
-            child:
-                picturePath == null
-                    ? Text(
-                      widget.content.author.name.isNotEmpty
-                          ? widget.content.author.name[0].toUpperCase()
-                          : '?',
-                    )
-                    : null,
-          ),
-        );
-      });
-    }
+  final userController = Get.find<UserController>();
+  
+  // Check if this is the current user's post
+  if (_isAuthorCurrentUser()) {
+    return Obx(() {
+      final picturePath = userController.getFullProfilePicturePath();
+      final version = userController.profilePictureVersion.value;
+      
+      return GestureDetector(
+        onTap: () {
+          _showBigAvatarDialog(
+            context,
+            picturePath != null ? '$picturePath?v=$version' : null,
+            widget.content.author.name,
+          );
+        },
+        child: CircleAvatar(
+          key: ValueKey('feed_avatar_${widget.content.author.id}_$version'), // Force rebuild
+          backgroundImage: picturePath != null 
+              ? NetworkImage('$picturePath?v=$version') // Add version parameter
+              : null,
+          child: picturePath == null || picturePath.isEmpty
+              ? Text(
+                  widget.content.author.name.isNotEmpty
+                      ? widget.content.author.name[0].toUpperCase()
+                      : '?',
+                )
+              : null,
+        ),
+      );
+    });// initilizing Get in the code 
+  }
 
     // For other users' posts
     if (widget.content.author.picture.isEmpty) {
-      return GestureDetector(
-        onTap: () {
-          _showBigAvatarDialog(context, null, widget.content.author.name);
-        },
-        child: CircleAvatar(
-          child: Text(
-            widget.content.author.name.isNotEmpty
-                ? widget.content.author.name[0].toUpperCase()
-                : '?',
-          ),
-        ),
-      );
-    }
-
     return GestureDetector(
       onTap: () {
-        _showBigAvatarDialog(
-          context,
-          'http://182.93.94.210:3064${widget.content.author.picture}',
-          widget.content.author.name,
-        );
+        _showBigAvatarDialog(context, null, widget.content.author.name);
       },
-      child: CachedNetworkImage(
-        imageUrl: 'http://182.93.94.210:3064${widget.content.author.picture}',
-        imageBuilder:
-            (context, imageProvider) =>
-                CircleAvatar(backgroundImage: imageProvider),
-        placeholder:
-            (context, url) => const CircleAvatar(
-              child: CircularProgressIndicator(strokeWidth: 2.0),
-            ),
-        errorWidget:
-            (context, url, error) => CircleAvatar(
-              child: Text(
-                widget.content.author.name.isNotEmpty
-                    ? widget.content.author.name[0].toUpperCase()
-                    : '?',
-              ),
-            ),
+      child: CircleAvatar(
+        child: Text(
+          widget.content.author.name.isNotEmpty
+              ? widget.content.author.name[0].toUpperCase()
+              : '?',
+        ),
       ),
     );
   }
+
+      return GestureDetector(
+    onTap: () {
+      _showBigAvatarDialog(
+        context,
+        'http://182.93.94.210:3065${widget.content.author.picture}',
+        widget.content.author.name,
+      );
+    },
+    child: CachedNetworkImage(
+      imageUrl: 'http://182.93.94.210:3065${widget.content.author.picture}',
+      imageBuilder: (context, imageProvider) => CircleAvatar(
+        backgroundImage: imageProvider,
+      ),
+      placeholder: (context, url) => const CircleAvatar(
+        child: CircularProgressIndicator(strokeWidth: 2.0),
+      ),
+      errorWidget: (context, url, error) => CircleAvatar(
+        child: Text(
+          widget.content.author.name.isNotEmpty
+              ? widget.content.author.name[0].toUpperCase()
+              : '?',
+        ),
+      ),
+    ),
+  );
+}
 
   // ...existing code...
   void _showBigAvatarDialog(
@@ -2522,157 +2622,176 @@ class _FeedItemState extends State<FeedItem>
   }
 
   Widget _buildMediaPreview() {
-    final mediaUrls = widget.content.mediaUrls;
+  final mediaUrls = widget.content.mediaUrls;
 
-    if (mediaUrls.isEmpty) return const SizedBox.shrink();
+  if (mediaUrls.isEmpty) {
+    developer.log('No media URLs found for content ID: ${widget.content.id}', name: 'MediaPreview');
+    return const SizedBox.shrink();
+  }
 
-    if (mediaUrls.length == 1) {
-      final fileUrl = mediaUrls.first;
+  developer.log('Processing ${mediaUrls.length} media URLs for content ID: ${widget.content.id}', name: 'MediaPreview');
 
-      if (FileTypeHelper.isImage(fileUrl)) {
-        return LimitedBox(
-          maxHeight: 450.0,
-          child: GestureDetector(
-            onTap: () => _showMediaGallery(context, mediaUrls, 0),
-            child: _OptimizedNetworkImage(url: fileUrl, height: 250.0),
-          ),
-        );
-      } else if (FileTypeHelper.isVideo(fileUrl)) {
-        // Portrait video detection and display
-        return FutureBuilder<Size>(
-          future: _getVideoSize(fileUrl),
-          builder: (context, snapshot) {
-            double maxHeight = 250.0;
-            double? aspectRatio;
-            if (snapshot.hasData) {
-              final size = snapshot.data!;
-              aspectRatio = size.width / size.height;
-              // Portrait if height > width (aspectRatio < 1)
-              if (aspectRatio < 1) {
-                maxHeight = 400.0; // Taller for portrait videos
-              }
+  if (mediaUrls.length == 1) {
+    final fileUrl = mediaUrls.first;
+
+    if (FileTypeHelper.isImage(fileUrl)) {
+      developer.log('Loading single image: $fileUrl', name: 'MediaPreview.Image');
+      return LimitedBox(
+        maxHeight: 450.0,
+        child: GestureDetector(
+          onTap: () => _showMediaGallery(context, mediaUrls, 0),
+          child: _OptimizedNetworkImage(url: fileUrl, height: 250.0),
+        ),
+      );
+    } else if (FileTypeHelper.isVideo(fileUrl)) {
+      developer.log('Loading single video: $fileUrl', name: 'MediaPreview.Video');
+      // Portrait video detection and display
+      return FutureBuilder<Size>(
+        future: _getVideoSize(fileUrl),
+        builder: (context, snapshot) {
+          double maxHeight = 250.0;
+          double? aspectRatio;
+          if (snapshot.hasData) {
+            final size = snapshot.data!;
+            aspectRatio = size.width / size.height;
+            developer.log('Video size retrieved: width=${size.width}, height=${size.height}, aspectRatio=$aspectRatio', name: 'MediaPreview.Video');
+            // Portrait if height > width (aspectRatio < 1)
+            if (aspectRatio < 1) {
+              maxHeight = 400.0; // Taller for portrait videos
             }
+          } else if (snapshot.hasError) {
+            developer.log('Error retrieving video size for $fileUrl: ${snapshot.error}', name: 'MediaPreview.Video', error: snapshot.error);
+          }
+          return Container(
+            color: Colors.black,
+            alignment: Alignment.center,
+            child: LimitedBox(
+              maxHeight: maxHeight,
+              child: GestureDetector(
+                onTap: () => _showMediaGallery(context, mediaUrls, 0),
+                child: AutoPlayVideoWidget(url: fileUrl, height: maxHeight),
+              ),
+            ),
+          );
+        },
+      );
+    } else if (FileTypeHelper.isPdf(fileUrl)) {
+      developer.log('Loading single PDF: $fileUrl', name: 'MediaPreview.PDF');
+      return _buildDocumentPreview(
+        fileUrl,
+        'PDF Document',
+        Icons.picture_as_pdf,
+        Colors.red,
+      );
+    } else if (FileTypeHelper.isWordDoc(fileUrl)) {
+      developer.log('Loading single Word document: $fileUrl', name: 'MediaPreview.WordDoc');
+      return _buildDocumentPreview(
+        fileUrl,
+        'Word Document',
+        Icons.description,
+        Colors.blue,
+      );
+    }
+  }
+
+  developer.log('Building grid view for ${mediaUrls.length} media items', name: 'MediaPreview.Grid');
+  return LimitedBox(
+    maxHeight: 300.0,
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        return GridView.builder(
+          physics: const NeverScrollableScrollPhysics(),
+          shrinkWrap: true,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 4.0,
+            mainAxisSpacing: 4.0,
+          ),
+          itemCount: mediaUrls.length > 4 ? 4 : mediaUrls.length,
+          itemBuilder: (context, index) {
+            final fileUrl = mediaUrls[index];
+
+            if (index == 3 && mediaUrls.length > 4) {
+              developer.log('Showing +${mediaUrls.length - 4} more items overlay', name: 'MediaPreview.Grid');
+              return GestureDetector(
+                onTap: () => _showMediaGallery(context, mediaUrls, index),
+                child: Container(
+                  color: Colors.black.withOpacity(0.5),
+                  child: Center(
+                    child: Text(
+                      '+${mediaUrls.length - 4}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }
+
+            if (FileTypeHelper.isImage(fileUrl)) {
+              developer.log('Loading grid image at index $index: $fileUrl', name: 'MediaPreview.Image');
+              return GestureDetector(
+                onTap: () => _showMediaGallery(context, mediaUrls, index),
+                child: _OptimizedNetworkImage(url: fileUrl),
+              );
+            } else if (FileTypeHelper.isVideo(fileUrl)) {
+              developer.log('Loading grid video at index $index: $fileUrl', name: 'MediaPreview.Video');
+              return GestureDetector(
+                onTap: () => _showMediaGallery(context, mediaUrls, index),
+                child: AutoPlayVideoWidget(url: fileUrl),
+              );
+            } else if (FileTypeHelper.isPdf(fileUrl)) {
+              developer.log('Loading grid PDF at index $index: $fileUrl', name: 'MediaPreview.PDF');
+              return GestureDetector(
+                onTap: () => _showMediaGallery(context, mediaUrls, index),
+                child: Container(
+                  color: Colors.grey[200],
+                  child: const Center(
+                    child: Icon(
+                      Icons.picture_as_pdf,
+                      size: 32,
+                      color: Colors.red,
+                    ),
+                  ),
+                ),
+              );
+            } else if (FileTypeHelper.isWordDoc(fileUrl)) {
+              developer.log('Loading grid Word document at index $index: $fileUrl', name: 'MediaPreview.WordDoc');
+              return GestureDetector(
+                onTap: () => _showMediaGallery(context, mediaUrls, index),
+                child: Container(
+                  color: Colors.grey[200],
+                  child: const Center(
+                    child: Icon(
+                      Icons.description,
+                      size: 32,
+                      color: Colors.blue,
+                    ),
+                  ),
+                ),
+              );
+            }
+
+            developer.log('Loading unknown file type at index $index: $fileUrl', name: 'MediaPreview.Unknown');
             return Container(
-              color: Colors.black,
-              alignment: Alignment.center,
-              child: LimitedBox(
-                maxHeight: maxHeight,
-                child: GestureDetector(
-                  onTap: () => _showMediaGallery(context, mediaUrls, 0),
-                  child: AutoPlayVideoWidget(url: fileUrl, height: maxHeight),
+              color: Colors.grey[200],
+              child: const Center(
+                child: Icon(
+                  Icons.insert_drive_file,
+                  size: 32,
+                  color: Colors.grey,
                 ),
               ),
             );
           },
         );
-      } else if (FileTypeHelper.isPdf(fileUrl)) {
-        return _buildDocumentPreview(
-          fileUrl,
-          'PDF Document',
-          Icons.picture_as_pdf,
-          Colors.red,
-        );
-      } else if (FileTypeHelper.isWordDoc(fileUrl)) {
-        return _buildDocumentPreview(
-          fileUrl,
-          'Word Document',
-          Icons.description,
-          Colors.blue,
-        );
-      }
-    }
-
-    return LimitedBox(
-      maxHeight: 300.0,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          return GridView.builder(
-            physics: const NeverScrollableScrollPhysics(),
-            shrinkWrap: true,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 4.0,
-              mainAxisSpacing: 4.0,
-            ),
-            itemCount: mediaUrls.length > 4 ? 4 : mediaUrls.length,
-            itemBuilder: (context, index) {
-              final fileUrl = mediaUrls[index];
-
-              if (index == 3 && mediaUrls.length > 4) {
-                return GestureDetector(
-                  onTap: () => _showMediaGallery(context, mediaUrls, index),
-                  child: Container(
-                    color: Colors.black.withOpacity(0.5),
-                    child: Center(
-                      child: Text(
-                        '+${mediaUrls.length - 4}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }
-
-              if (FileTypeHelper.isImage(fileUrl)) {
-                return GestureDetector(
-                  onTap: () => _showMediaGallery(context, mediaUrls, index),
-                  child: _OptimizedNetworkImage(url: fileUrl),
-                );
-              } else if (FileTypeHelper.isVideo(fileUrl)) {
-                return GestureDetector(
-                  onTap: () => _showMediaGallery(context, mediaUrls, index),
-                  child: AutoPlayVideoWidget(url: fileUrl),
-                );
-              } else if (FileTypeHelper.isPdf(fileUrl)) {
-                return GestureDetector(
-                  onTap: () => _showMediaGallery(context, mediaUrls, index),
-                  child: Container(
-                    color: Colors.grey[200],
-                    child: const Center(
-                      child: Icon(
-                        Icons.picture_as_pdf,
-                        size: 32,
-                        color: Colors.red,
-                      ),
-                    ),
-                  ),
-                );
-              } else if (FileTypeHelper.isWordDoc(fileUrl)) {
-                return GestureDetector(
-                  onTap: () => _showMediaGallery(context, mediaUrls, index),
-                  child: Container(
-                    color: Colors.grey[200],
-                    child: const Center(
-                      child: Icon(
-                        Icons.description,
-                        size: 32,
-                        color: Colors.blue,
-                      ),
-                    ),
-                  ),
-                );
-              }
-
-              return Container(
-                color: Colors.grey[200],
-                child: const Center(
-                  child: Icon(
-                    Icons.insert_drive_file,
-                    size: 32,
-                    color: Colors.grey,
-                  ),
-                ),
-              );
-            },
-          );
-        },
-      ),
-    );
-  }
+      },
+    ),
+  );
+}
 
   // Helper to get video size (width/height) using VideoPlayerController
   Future<Size> _getVideoSize(String url) async {
@@ -2762,13 +2881,14 @@ class _OptimizedNetworkImage extends StatelessWidget {
   }
 }
 
+// Replace your existing FeedApiService class
 class FeedApiService {
-  static const String baseUrl = 'http://182.93.94.210:3064';
+  static const String baseUrl = 'http://182.93.94.210:3065';
 
-  static Future<List<FeedContent>> fetchContents(
-    String? lastId,
-    BuildContext context,
-  ) async {
+  static Future<ContentData> fetchContents({
+    required String? lastId,
+    required BuildContext context,
+  }) async {
     try {
       final String? authToken = AppData().authToken;
       final Map<String, String> headers = {
@@ -2780,55 +2900,58 @@ class FeedApiService {
         headers['authorization'] = 'Bearer $authToken';
       }
 
-      final url =
-          lastId == null
-              ? '$baseUrl/api/v1/list-contents'
-              : '$baseUrl/api/v1/list-contents?lastId=$lastId';
+      final String url = lastId == null
+          ? '$baseUrl/api/v1/list-contents'
+          : '$baseUrl/api/v1/list-contents?lastId=$lastId';
 
       final response = await http
           .get(Uri.parse(url), headers: headers)
-          .timeout(Duration(seconds: 30));
+          .timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
+        final contentResponse = ContentResponse.fromJson(data);
 
-        if (data.containsKey('data') && data['data']['contents'] is List) {
-          final List<dynamic> contentList = data['data']['contents'] as List;
-          final List<FeedContent> contents = [];
+        if (contentResponse.status == 200) {
+          final List<FeedContent> videoContents = [];
+          final List<FeedContent> normalContents = [];
 
-          // Process each content item and fetch follow status
-          for (var item in contentList) {
-            final content = FeedContent.fromJson(item);
+          // Process video contents
+          for (var item in contentResponse.data.videoContents) {
             try {
-              // Fetch follow status for the author
               final isFollowing = await FollowService.checkFollowStatus(
-                content.author.email,
+                item.author.email,
               );
-              contents.add(
-                FeedContent(
-                  id: content.id,
-                  status: content.status,
-                  type: content.type,
-                  files: content.files,
-                  author: content.author,
-                  createdAt: content.createdAt,
-                  updatedAt: content.updatedAt,
-                  likes: content.likes,
-                  comments: content.comments,
-                  isLiked: content.isLiked,
-                  isFollowed: isFollowing, // Set the follow status
-                ),
-              );
+              videoContents.add(item.copyWith(isFollowed: isFollowing));
             } catch (e) {
-              print(
-                'Error checking follow status for ${content.author.email}: $e',
-              );
-              // Fallback to default isFollowed value if check fails
-              contents.add(content);
+              print('Error checking follow status for ${item.author.email}: $e');
+              videoContents.add(item);
             }
           }
 
-          return contents;
+          // Process normal contents
+          for (var item in contentResponse.data.normalContents) {
+            try {
+              final isFollowing = await FollowService.checkFollowStatus(
+                item.author.email,
+              );
+              normalContents.add(item.copyWith(isFollowed: isFollowing));
+            } catch (e) {
+              print('Error checking follow status for ${item.author.email}: $e');
+              normalContents.add(item);
+            }
+          }
+
+          return ContentData(
+            videoContents: videoContents,
+            normalContents: normalContents,
+            hasMoreVideos: contentResponse.data.hasMoreVideos,
+            hasMoreNormal: contentResponse.data.hasMoreNormal,
+            nextVideoCursor: contentResponse.data.nextVideoCursor,
+            nextNormalCursor: contentResponse.data.nextNormalCursor,
+          );
+        } else {
+          throw Exception('Invalid response structure');
         }
       } else if (response.statusCode == 401) {
         Navigator.pushAndRemoveUntil(
@@ -2841,13 +2964,44 @@ class FeedApiService {
 
       throw Exception('Failed to load data: ${response.statusCode}');
     } catch (e) {
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => LoginPage()),
-        (route) => false,
-      );
-      throw Exception('Error: ${e.toString()}');
+      // Navigator.pushAndRemoveUntil(
+      //   context,
+      //   MaterialPageRoute(builder: (_) => LoginPage()),
+      //   (route) => false,
+      // );
+      throw Exception('Error: $e');
     }
+  }
+}
+
+// Add this extension to FeedContent if not already present
+extension FeedContentExtension on FeedContent {
+  FeedContent copyWith({
+    String? id,
+    String? status,
+    String? type,
+    List<String>? files,
+    Author? author,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? likes,
+    int? comments,
+    bool? isLiked,
+    bool? isFollowed,
+  }) {
+    return FeedContent(
+      id: id ?? this.id,
+      status: status ?? this.status,
+      type: type ?? this.type,
+      files: files ?? this.files,
+      author: author ?? this.author,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      likes: likes ?? this.likes,
+      comments: comments ?? this.comments,
+      isLiked: isLiked ?? this.isLiked,
+      isFollowed: isFollowed ?? this.isFollowed,
+    );
   }
 }
 

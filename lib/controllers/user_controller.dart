@@ -18,13 +18,14 @@ class UserController extends GetxController {
     }
   }
   
-  void updateProfilePicture(String? newPicture) {
-    profilePicture.value = newPicture;
-    // Also update in AppData
-    if (AppData().currentUser != null) {
-      AppData().updateCurrentUserField('picture', newPicture);
-    }
+    RxInt profilePictureVersion = 0.obs; // Add this for cache busting
+  
+  void updateProfilePicture(String newPath) {
+    profilePicture?.value = newPath;
+    profilePictureVersion.value++; // Increment to force refresh
+    update(); // Trigger GetX update
   }
+
   
   void updateUserName(String? newName) {
     userName.value = newName;

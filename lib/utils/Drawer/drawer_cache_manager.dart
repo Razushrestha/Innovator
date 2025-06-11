@@ -8,12 +8,9 @@ class DrawerProfileCache {
   static Future<void> initialize() async {
     try {
       await Hive.initFlutter();
-      
-      // Register the MANUAL adapter
       if (!Hive.isAdapterRegistered(2)) {
         Hive.registerAdapter(DrawerProfileAdapter());
       }
-      
       _box = await Hive.openBox<DrawerProfile>(boxName);
     } catch (e) {
       print('Error initializing Hive: $e');

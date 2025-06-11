@@ -1,16 +1,12 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:get/get.dart';
 import 'package:innovator/App_data/App_data.dart';
 import 'package:innovator/screens/Feed/Services/Feed_Cache_service.dart';
-import 'package:innovator/screens/Profile/ProfileCacheManager.dart';
 import 'package:innovator/screens/Splash_Screen/splash_screen.dart';
 import 'package:innovator/controllers/user_controller.dart';
 import 'package:innovator/services/Notification_services.dart';

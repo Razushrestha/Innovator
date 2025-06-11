@@ -2,8 +2,8 @@ import 'dart:developer' as developer;
 import 'dart:io';
 import 'dart:ui';
 import 'dart:math' as math;
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:get/get.dart';
 import 'dart:convert';
@@ -12,8 +12,6 @@ import 'package:innovator/App_data/App_data.dart';
 import 'package:innovator/Authorization/Login.dart';
 import 'package:innovator/Notification/FCM_Services.dart';
 import 'package:innovator/controllers/user_controller.dart';
-import 'package:innovator/main.dart';
-import 'package:innovator/screens/Course/home.dart';
 import 'package:innovator/screens/Eliza_ChatBot/Elizahomescreen.dart';
 import 'package:innovator/screens/F&Q/F&Qscreen.dart';
 import 'package:innovator/screens/Privacy_Policy/privacy_screen.dart';
@@ -22,7 +20,7 @@ import 'package:innovator/screens/Report/Report_screen.dart';
 import 'package:innovator/screens/chatrrom/Screen/chat_listscreen.dart';
 import 'package:innovator/utils/Drawer/drawer_cache_manager.dart';
 import 'package:lottie/lottie.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class CustomDrawer extends StatefulWidget {
   const CustomDrawer({super.key});
@@ -93,12 +91,12 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
     super.dispose();
   }
 
-  Future<void> _initializeData() async {
+ Future<void> _initializeData() async {
     setState(() {
       _isLoadingFromCache = true;
     });
 
-    // Try to load cached profile first
+    // Load cached profile
     final cachedProfile = await DrawerProfileCache.getCachedProfile();
     if (cachedProfile != null) {
       if (mounted) {
@@ -108,29 +106,35 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
             'email': cachedProfile.email,
             'picture': cachedProfile.picturePath,
           };
+          AppData().setCurrentUser(_userData!);
+          Get.find<UserController>().updateProfilePicture(cachedProfile.picturePath ?? '');
           _isLoading = false;
           _isLoadingFromCache = false;
         });
       }
+    } else {
+      setState(() {
+        _isLoading = true;
+      });
     }
 
-    // Then fetch fresh data
-    await _fetchUserProfile();
+    // Check internet and fetch fresh data if available
+    final bool hasInternet = await _checkInternetConnection();
+    if (hasInternet) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _fetchUserProfile();
+      });
+    } else if (cachedProfile == null) {
+      _handleError('No internet connection and no cached profile available');
+    }
   }
 
-  Future<void> _fetchUserProfile() async {
+ Future<void> _fetchUserProfile() async {
   try {
     final String? authToken = AppData().authToken;
     
     if (authToken == null || authToken.isEmpty) {
       _handleError('Authentication token not found');
-      return;
-    }
-
-    final bool hasInternet = await _checkInternetConnection();
-    if (!hasInternet) {
-      if (_userData != null) return;
-      _handleError('No internet connection');
       return;
     }
 
@@ -147,11 +151,21 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
       if (responseData['status'] == 200 && responseData['data'] != null) {
         final userData = responseData['data'];
         
+        // Cache profile data
         await DrawerProfileCache.cacheProfile(
           name: userData['name'] ?? '',
           email: userData['email'] ?? '',
           picturePath: userData['picture'],
         );
+
+        // Pre-cache the profile picture
+        if (userData['picture'] != null) {
+          const baseUrl = 'http://182.93.94.210:3064';
+          await precacheImage(
+            CachedNetworkImageProvider('$baseUrl${userData['picture']}'),
+            context,
+          );
+        }
 
         // Update the controller
         final userController = Get.find<UserController>();
@@ -180,7 +194,6 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
     }
   }
 }
-
   Future<bool> _checkInternetConnection() async {
     try {
       final result = await InternetAddress.lookup('google.com');
@@ -409,99 +422,96 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
   }
 
   Widget _buildGradientHeader() {
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.32, // Responsive height
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            const Color(0xFFEB6B46),
-            const Color(0xFFFF8A65),
-            const Color(0xFFEB6B46).withAlpha(99999),
-          ],
-        ),
-        borderRadius: const BorderRadius.only(
-          bottomLeft: Radius.circular(50),
-          bottomRight: Radius.circular(50),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFFEB6B46).withAlpha(30),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
+  return Container(
+    height: MediaQuery.of(context).size.height * 0.32,
+    decoration: BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          const Color(0xFFEB6B46),
+          const Color(0xFFFF8A65),
+          const Color(0xFFEB6B46).withAlpha(99999),
         ],
       ),
-      child: Stack(
-        children: [
-          // Animated background pattern
-          Positioned.fill(
-            child: CustomPaint(
-              painter: HeaderPatternPainter(),
-            ),
+      borderRadius: const BorderRadius.only(
+        bottomLeft: Radius.circular(50),
+        bottomRight: Radius.circular(50),
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: const Color(0xFFEB6B46).withAlpha(30),
+          blurRadius: 20,
+          offset: const Offset(0, 10),
+        ),
+      ],
+    ),
+    child: Stack(
+      children: [
+        Positioned.fill(
+          child: CustomPaint(
+            painter: HeaderPatternPainter(),
           ),
-          // Glassmorphism overlay
-          Positioned.fill(
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: const BorderRadius.only(
-                  bottomLeft: Radius.circular(50),
-                  bottomRight: Radius.circular(50),
-                ),
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.white.withOpacity(0.1),
-                    Colors.transparent,
-                  ],
-                ),
+        ),
+        Positioned.fill(
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(50),
+                bottomRight: Radius.circular(50),
+              ),
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.white.withOpacity(0.1),
+                  Colors.transparent,
+                ],
               ),
             ),
           ),
-          // Profile content
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-              child: _isLoading
-                  ? const Center(
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 3,
-                      ),
-                    )
-                  : _errorMessage != null
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                            
-                                      Lottie.asset('animation/No-Content.json',),
-
-                              // Text(
-                              //   'Error: $_errorMessage',
-                              //   style: const TextStyle(
-                              //     color: Colors.white,
-                              //     fontSize: 14,
-                              //   ),
-                              //   textAlign: TextAlign.center,
-                              // ),
-                            ],
-                          ),
-                        )
-                      : _buildAdvancedProfileHeader(),
-            ),
+        ),
+        SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+            child: _isLoading
+                ? const Center(
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 3,
+                    ),
+                  )
+                : _errorMessage != null && _userData == null
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Lottie.asset('animation/No-Content.json'),
+                            const SizedBox(height: 10),
+                            Text(
+                              'Offline: Please connect to the internet',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w400,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      )
+                    : _buildAdvancedProfileHeader(),
           ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
+}
 
   final UserController userController = Get.put(UserController());
 
 
-  Widget _buildAdvancedProfileHeader() {
+ Widget _buildAdvancedProfileHeader() {
   final userData = AppData().currentUser ?? _userData;
   final String name = userData?['name'] ?? 'User';
   final String email = userData?['email'] ?? '';
@@ -515,7 +525,6 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
     child: Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        // Wrap the CircleAvatar with Obx to react to changes
         Obx(() {
           final picturePath = userController.profilePicture;
           return Container(
@@ -532,16 +541,34 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
             child: CircleAvatar(
               radius: 35,
               backgroundColor: Colors.white.withAlpha(20),
-              backgroundImage: picturePath != null
-                  ? NetworkImage('$baseUrl$picturePath')
-                  : null,
-              child: picturePath == null
-                  ? const Icon(
+              child: picturePath != null
+                  ? CachedNetworkImage(
+                      imageUrl: '$baseUrl$picturePath',
+                      imageBuilder: (context, imageProvider) => CircleAvatar(
+                        radius: 35,
+                        backgroundImage: imageProvider,
+                      ),
+                      placeholder: (context, url) => const CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                      errorWidget: (context, url, error) => const Icon(
+                        Icons.person,
+                        size: 35,
+                        color: Colors.white,
+                      ),
+                      cacheManager: CacheManager(
+                        Config(
+                          'profilePictureCache',
+                          stalePeriod: const Duration(days: 30),
+                        ),
+                      ),
+                    )
+                  : const Icon(
                       Icons.person,
                       size: 35,
                       color: Colors.white,
-                    )
-                  : null,
+                    ),
             ),
           );
         }),

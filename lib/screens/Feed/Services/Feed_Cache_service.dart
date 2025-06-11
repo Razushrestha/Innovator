@@ -1,11 +1,11 @@
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:innovator/screens/Feed/Feed_cached.g.dart';
+import 'package:innovator/screens/Feed/Services/Feed_cached.g.dart';
 import 'package:innovator/screens/Feed/Inner_Homepage.dart';
 import 'package:path_provider/path_provider.dart';
 
 class CacheManager {
   static const String feedBoxName = 'feed_cache';
-  static const int maxCachedItems = 20;
+  static const int maxCachedItems = 50;
 
   static Future<void> initialize() async {
     final appDir = await getApplicationDocumentsDirectory();
