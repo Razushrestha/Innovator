@@ -4,6 +4,8 @@ import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:innovator/screens/Feed/Inner_Homepage.dart';
+import 'package:innovator/screens/Feed/Optimize%20Media/optimizeImage.dart';
+import 'package:innovator/screens/Feed/Optimize%20Media/optimizeVideoPlayer.dart';
 import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
@@ -58,7 +60,7 @@ class _OptimizedMediaGalleryScreenState extends State<OptimizedMediaGalleryScree
     }
     
     if (_currentIndex < widget.mediaUrls.length - 1) {
-      _preloadMedia(_currentIndex + 1);
+      _preloadMedia(_currentIndex + 1); 
     }
   }
 
@@ -88,22 +90,44 @@ class _OptimizedMediaGalleryScreenState extends State<OptimizedMediaGalleryScree
 
   Future<void> _initializeVideo(String url) async {
     if (_isLoadingVideo) return;
-    
+
     setState(() => _isLoadingVideo = true);
-    
+
     try {
       // Clean up previous controllers
-      _videoController?.dispose();
+      await _videoController?.dispose();
       _chewieController?.dispose();
-      
-      _videoController = VideoPlayerController.network(url);
+
+      _videoController = VideoPlayerController.networkUrl(Uri.parse(url));
       await _videoController!.initialize();
-      
+
       _chewieController = ChewieController(
         videoPlayerController: _videoController!,
-        autoPlay: true, // Always auto-play when a video is loaded
+        autoPlay: true,
         looping: true,
         allowFullScreen: false,
+        errorBuilder: (context, errorMessage) => Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, color: Colors.white, size: 48),
+              const SizedBox(height: 16),
+              Text(
+                'Error: $errorMessage',
+                style: const TextStyle(color: Colors.white),
+              ),
+              const SizedBox(height: 16),
+              TextButton(
+                style: TextButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.black,
+                ),
+                onPressed: () => _downloadAndOpenFile(url, 'video.mp4'),
+                child: const Text('Download and Open'),
+              ),
+            ],
+          ),
+        ),
       );
     } catch (e) {
       debugPrint('Video initialization error: $e');
@@ -155,28 +179,24 @@ class _OptimizedMediaGalleryScreenState extends State<OptimizedMediaGalleryScree
             _currentIndex = index;
             _pdfLoadFailed = false;
           });
-          
-          // Load the current page media
+
+          // Load media only for the current page
           await _loadMedia(index);
-          
-          // Try to preload the next page if it exists
+
+          // Preload adjacent items
           if (index < widget.mediaUrls.length - 1) {
             _preloadMedia(index + 1);
           }
-          
-          // Preload the previous page if it exists
           if (index > 0) {
             _preloadMedia(index - 1);
           }
         },
         itemBuilder: (context, index) {
-          final url = widget.mediaUrls[index];
-          
+          // Only render the current page's media
           if (index != _currentIndex) {
-            // Just show a placeholder for non-visible pages
             return Container(color: Colors.black);
           }
-
+          final url = widget.mediaUrls[index];
           return GestureDetector(
             onTap: _toggleFullScreen,
             child: _buildMediaViewer(url),
@@ -204,13 +224,13 @@ class _OptimizedMediaGalleryScreenState extends State<OptimizedMediaGalleryScree
       minScale: 1.0,
       maxScale: 3.0,
       child: Center(
-        child: CachedNetworkImage(
-          imageUrl: url,
+        child: OptimizedImage(
+          url: url,
           fit: BoxFit.contain,
-          placeholder: (context, url) => const Center(
+          placeholder: const Center(
             child: CircularProgressIndicator(color: Colors.white),
           ),
-          errorWidget: (context, url, error) => const Center(
+          errorWidget: const Center(
             child: Icon(Icons.error, color: Colors.white, size: 48),
           ),
         ),
@@ -219,70 +239,14 @@ class _OptimizedMediaGalleryScreenState extends State<OptimizedMediaGalleryScree
   }
 
   Widget _buildVideoViewer() {
-    if (_isLoadingVideo) {
-      return const Center(child: CircularProgressIndicator(color: Colors.white));
-    }
-    
-    if (_videoController == null || _chewieController == null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, color: Colors.white, size: 48),
-            const SizedBox(height: 16),
-            const Text(
-              'Error loading video',
-              style: TextStyle(color: Colors.white),
-            ),
-            const SizedBox(height: 16),
-            TextButton(
-              style: TextButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: Colors.black,
-              ),
-              onPressed: () {
-                final url = widget.mediaUrls[_currentIndex];
-                _downloadAndOpenFile(url, 'video.mp4');
-              },
-              child: const Text('Download and Open'),
-            ),
-          ],
-        ),
-      );
-    }
-    
-    return Center(
-      child: _videoController!.value.hasError
-        ? Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.error_outline, color: Colors.white, size: 48),
-                const SizedBox(height: 16),
-                Text(
-                  'Video error: ${_videoController!.value.errorDescription ?? "Unknown error"}',
-                  style: const TextStyle(color: Colors.white),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
-                TextButton(
-                  style: TextButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.black,
-                  ),
-                  onPressed: () {
-                    final url = widget.mediaUrls[_currentIndex];
-                    _downloadAndOpenFile(url, 'video.mp4');
-                  },
-                  child: const Text('Download and Open'),
-                ),
-              ],
-            ),
-          )
-        : AspectRatio(
-            aspectRatio: _videoController!.value.aspectRatio,
-            child: Chewie(controller: _chewieController!),
-          ),
+    return OptimizedVideoPlayer(
+      url: widget.mediaUrls[_currentIndex],
+      maxHeight: MediaQuery.of(context).size.height,
+      onError: () {
+        // Handle video error
+        final url = widget.mediaUrls[_currentIndex];
+        _downloadAndOpenFile(url, 'video.mp4');
+      },
     );
   }
 

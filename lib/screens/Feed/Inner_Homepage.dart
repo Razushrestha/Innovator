@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:developer';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/gestures.dart';
@@ -9,7 +11,7 @@ import 'package:http/http.dart' as http;
 import 'package:innovator/App_data/App_data.dart';
 import 'package:innovator/Authorization/Login.dart';
 import 'package:innovator/controllers/user_controller.dart';
-import 'package:innovator/screens/Feed/OptimizeMediaScreen.dart';
+import 'package:innovator/screens/Feed/Optimize%20Media/OptimizeMediaScreen.dart';
 import 'package:innovator/screens/Feed/Services/Feed_Cache_service.dart';
 import 'package:innovator/screens/Follow/follow-Service.dart';
 import 'package:innovator/screens/Follow/follow_Button.dart';
@@ -32,7 +34,6 @@ import 'dart:typed_data';
 import 'dart:developer' as developer;
 import 'package:share_plus/share_plus.dart'; // <-- Add this import
 import 'package:url_launcher/url_launcher.dart';
-
 
 // Enhanced Author model
 class Author {
@@ -244,8 +245,7 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
     _requestNotificationPermission();
     _initializeData();
     _scrollController.addListener(_scrollListener);
-        _checkConnectivity();
-
+    _checkConnectivity();
   }
 
   Future<void> _checkConnectivity() async {
@@ -358,18 +358,20 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
       }
 
       // Request FCM permission
-      NotificationSettings settings = await FirebaseMessaging.instance.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-        criticalAlert: true,
-        provisional: false,
-      );
+      NotificationSettings settings = await FirebaseMessaging.instance
+          .requestPermission(
+            alert: true,
+            badge: true,
+            sound: true,
+            criticalAlert: true,
+            provisional: false,
+          );
       developer.log('FCM permission status: ${settings.authorizationStatus}');
-      
 
       if (Platform.isAndroid) {
-        developer.log('Running on Android, please ensure battery optimization is disabled for Innovator');
+        developer.log(
+          'Running on Android, please ensure battery optimization is disabled for Innovator',
+        );
       }
     } catch (e) {
       developer.log('Error requesting notification permission: $e');
@@ -382,7 +384,11 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
         _hasError = true;
         _errorMessage = 'Authentication required. Please login.';
       });
-      Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => LoginPage()), (route) => false);
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => LoginPage()),
+        (route) => false,
+      );
       return false;
     }
     return true;
@@ -409,8 +415,6 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
     return response;
   }
 
-  
-
   Future<void> _handleUnauthorizedError() async {
     if (!_isRefreshingToken) {
       _isRefreshingToken = true;
@@ -421,7 +425,11 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
         await _loadMoreContent();
       } else {
         await _appData.logout();
-        Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => LoginPage()), (route) => false);
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => LoginPage()),
+          (route) => false,
+        );
         setState(() {
           _hasError = true;
           _errorMessage = 'Session expired. Please login again.';
@@ -461,7 +469,11 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
     setState(() {
       _hasError = true;
       _errorMessage = 'Server error: $statusCode';
-      Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => LoginPage()), (route) => false);
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => LoginPage()),
+        (route) => false,
+      );
     });
   }
 
@@ -469,12 +481,9 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
     setState(() {
       _hasError = true;
 
-       //_errorMessage = 'Network error. Please check your connection.';
+      //_errorMessage = 'Network error. Please check your connection.';
     });
-    Lottie.asset(
-        'animation/Googlesignup.json',
-        height: mq.height * .05,
-      );
+    Lottie.asset('animation/Googlesignup.json', height: mq.height * .05);
   }
 
   void _handleGenericError(dynamic e) {
@@ -571,24 +580,19 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
                                   ),
                             ),
                           );
-
                           // Refresh data when returning from chat screen
                           print(
                             'Returned from ChatListScreen, refreshing data...',
                           );
-
                           // Ensure controller is still available
                           if (Get.isRegistered<ChatListController>()) {
                             final controller = Get.find<ChatListController>();
-
                             // Initialize MQTT if not connected
                             if (!controller.isMqttConnected.value) {
                               await controller.initializeMQTT();
                             }
-
                             // Fetch latest chats
                             await controller.fetchChats();
-
                             print(
                               'Chat data refreshed. New unread count: ${controller.totalUnreadCount}',
                             );
@@ -619,31 +623,6 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
           });
         },
       ),
-
-      //FloatingActionButton(
-      //   onPressed: () {
-      //     Navigator.push(
-      //       context,
-      //       MaterialPageRoute(
-      //         builder:
-      //             (_) => ChatListScreen(
-      //               currentUserId: AppData().currentUserId ?? '',
-      //               currentUserName: AppData().currentUserName ?? '',
-      //               currentUserPicture:
-      //                   AppData().currentUserProfilePicture ?? '',
-      //               currentUserEmail: AppData().currentUserEmail ?? '',
-      //             ),
-      //       ),
-      //     );
-      //   },
-      //   child: Container(
-      //     height: 200,
-      //     width: 200,
-      //     child: Lottie.asset('animation/chaticon.json'),
-      //   ),
-      //   backgroundColor: Colors.transparent,
-      //   elevation: 100.0,
-      // ),
     );
   }
 
@@ -677,7 +656,7 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
         : const SizedBox.shrink();
   }
 
-   Widget _buildErrorView() {
+  Widget _buildErrorView() {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -686,26 +665,27 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
           children: [
             if (!_isOnline) ...[
               Lottie.asset('animation/No_Internet.json'),
-              const Text(
-                'You\'re offline. ',
-                style: TextStyle(fontSize: 16),
-              ),
+              const Text('You\'re offline. ', style: TextStyle(fontSize: 16)),
             ] else ...[
               Text(
                 _errorMessage,
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: _errorMessage.contains('expired') ||
-                          _errorMessage.contains('Authentication')
-                      ? Colors.orange
-                      : Colors.red,
+                  color:
+                      _errorMessage.contains('expired') ||
+                              _errorMessage.contains('Authentication')
+                          ? Colors.orange
+                          : Colors.red,
                 ),
               ),
             ],
             const SizedBox(height: 16),
             ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 15,
+                ),
                 backgroundColor: Colors.deepOrange,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(30),
@@ -716,7 +696,10 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
                 _refresh();
               },
               icon: const Icon(Icons.refresh, color: Colors.white),
-              label: const Text('Refresh', style: TextStyle(color: Colors.white),),
+              label: const Text(
+                'Refresh',
+                style: TextStyle(color: Colors.white),
+              ),
             ),
           ],
         ),
@@ -793,6 +776,7 @@ class _FeedItemState extends State<FeedItem>
   @override
   void initState() {
     super.initState();
+
     _controller = AnimationController(
       vsync: this,
       duration: Duration(milliseconds: 300),
@@ -807,22 +791,20 @@ class _FeedItemState extends State<FeedItem>
     super.dispose();
   }
 
-   Future<bool> _checkConnectivity() async {
+  Future<bool> _checkConnectivity() async {
     try {
-      final List<ConnectivityResult> connectivityResult = 
+      final List<ConnectivityResult> connectivityResult =
           await Connectivity().checkConnectivity();
-      
+
       // Check if any connection is available (WiFi, Mobile, Ethernet)
       return connectivityResult.contains(ConnectivityResult.wifi) ||
-             connectivityResult.contains(ConnectivityResult.mobile) ||
-             connectivityResult.contains(ConnectivityResult.ethernet);
+          connectivityResult.contains(ConnectivityResult.mobile) ||
+          connectivityResult.contains(ConnectivityResult.ethernet);
     } catch (e) {
       developer.log('Error checking connectivity: $e');
       return false;
     }
   }
-
- 
 
   Future<void> _recordView() async {
     if (_hasRecordedView) return; // Prevent multiple calls
@@ -830,14 +812,10 @@ class _FeedItemState extends State<FeedItem>
     // Check connectivity before making API call
     bool isConnected = await _checkConnectivity();
     if (!isConnected) {
-      developer.log('No internet connection. Skipping view recording for content ID: ${widget.content.id}');
-      // Get.snackbar(
-      //   'No Internet',
-      //   'View will be recorded when connection is restored.',
-      //   backgroundColor: Colors.orange,
-      //   colorText: Colors.white,
-      //   duration: const Duration(seconds: 3),
-      // );
+      developer.log(
+        'No internet connection. Skipping view recording for content ID: ${widget.content.id}',
+      );
+
       return;
     }
 
@@ -877,47 +855,49 @@ class _FeedItemState extends State<FeedItem>
           );
           // Optionally, update local state if view count is needed in UI
         } else {
-          Get.snackbar(
-            'Error',
-            'Failed to record view: Invalid response',
-            backgroundColor: Colors.red,
-            colorText: Colors.white,
-            duration: const Duration(seconds: 3),
-          );
+          log('Error Failed to record View');
+          // Get.snackbar(
+          //   'Error',
+          //   'Failed to record view: Invalid response',
+          //   backgroundColor: Colors.red,
+          //   colorText: Colors.white,
+          //   duration: const Duration(seconds: 3),
+          // );
         }
       } else if (response.statusCode == 401) {
-        Get.snackbar(
-          'Error',
-          'Session expired. Please login again.',
-          backgroundColor: Colors.red,
-          colorText: Colors.white,
-          duration: const Duration(seconds: 3),
-        );
+        // Get.snackbar(
+        //   'Error',
+        //   'Session expired. Please login again.',
+        //   backgroundColor: Colors.red,
+        //   colorText: Colors.white,
+        //   duration: const Duration(seconds: 3),
+        // );
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => LoginPage()),
           (route) => false,
         );
       } else {
-        Get.snackbar(
-          'Error',
-          'Failed to record view: ${response.statusCode}',
-          backgroundColor: Colors.red,
-          colorText: Colors.white,
-          duration: const Duration(seconds: 3),
-        );
+        log('Error${response.statusCode}');
+        // Get.snackbar(
+        //   'Error',
+        //   'Failed to record view: ${response.statusCode}',
+        //   backgroundColor: Colors.red,
+        //   colorText: Colors.white,
+        //   duration: const Duration(seconds: 3),
+        // );
       }
     } catch (e) {
       // Reset the flag so it can retry later when connection is restored
       _hasRecordedView = false;
-      
-      Get.snackbar(
-        'Error',
-        'Error Please Contact to Support Team',
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-        duration: const Duration(seconds: 3),
-      );
+
+      // Get.snackbar(
+      //   'Error',
+      //   'Error Please Contact to Support Team',
+      //   backgroundColor: Colors.red,
+      //   colorText: Colors.white,
+      //   duration: const Duration(seconds: 3),
+      // );
       developer.log(
         'Error recording view for content ID: ${widget.content.id}, Error: $e',
       );
@@ -1254,7 +1234,7 @@ class _FeedItemState extends State<FeedItem>
             // Media Section
             if (widget.content.files.isNotEmpty)
               Container(
-                margin:  EdgeInsets.symmetric(horizontal: 5.0),
+                margin: EdgeInsets.symmetric(horizontal: 5.0),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(16.0),
                   child: _buildMediaPreview(),
@@ -1263,7 +1243,7 @@ class _FeedItemState extends State<FeedItem>
 
             // Action Buttons Section
             Container(
-             // padding: const EdgeInsets.all(.0),
+              // padding: const EdgeInsets.all(.0),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -1574,21 +1554,23 @@ class _FeedItemState extends State<FeedItem>
         );
       } else {
         final data = json.decode(response.body);
-        Get.snackbar(
-          'Error',
-          data['message'] ?? 'Failed to share post',
-          backgroundColor: Colors.red,
-          colorText: Colors.white,
-        );
+        print('Error$data');
+        // Get.snackbar(
+        //   'Error',
+        //   data['message'] ?? 'Failed to share post',
+        //   backgroundColor: Colors.red,
+        //   colorText: Colors.white,
+        // );
       }
     } catch (e) {
       Get.back();
-      Get.snackbar(
-        'Error',
-        e.toString(),
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
+      print('Error${e.toString()}');
+      // Get.snackbar(
+      //   'Error',
+      //   e.toString(),
+      //   backgroundColor: Colors.red,
+      //   colorText: Colors.white,
+      // );
     }
   }
 
@@ -1804,85 +1786,93 @@ class _FeedItemState extends State<FeedItem>
   }
 
   void _showShareError(String message) {
-    Get.snackbar(
-      'Error',
-      message,
-      backgroundColor: Colors.red,
-      colorText: Colors.white,
-      duration: const Duration(seconds: 3),
-    );
+    Get.back;
+    // Get.snackbar(
+    //   'Error',
+    //   message,
+    //   backgroundColor: Colors.red,
+    //   colorText: Colors.white,
+    //   duration: const Duration(seconds: 3),
+    // );
+    print('Error$message');
   }
 
   void _showQuickspecificSuggestions(BuildContext context) {
-  showModalBottomSheet<String>(
-    context: context,
-    backgroundColor: Colors.transparent,
-    builder: (context) {
-      return AnimatedPadding(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOutCubic,
-        padding: MediaQuery.of(context).viewInsets,
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.08),
-                blurRadius: 20,
-                offset: const Offset(0, -4),
+    showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return AnimatedPadding(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+          padding: MediaQuery.of(context).viewInsets,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
               ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                margin: const EdgeInsets.symmetric(vertical: 12),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 20,
+                  offset: const Offset(0, -4),
                 ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.copy, color: Colors.blue),
-                title: const Text('Copy content'),
-                onTap: () {
-                  Navigator.pop(context, 'copy');
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.flag, color: Colors.orange),
-                title: const Text('Report'),
-                onTap: () {
-                  Navigator.pop(context, 'report');
-                },
-              ),
-              const SizedBox(height: 8),
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-              ),
-              const SizedBox(height: 16),
-            ],
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  margin: const EdgeInsets.symmetric(vertical: 12),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.copy, color: Colors.blue),
+                  title: const Text('Copy content'),
+                  onTap: () {
+                    Navigator.pop(context, 'copy');
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.flag, color: Colors.orange),
+                  title: const Text('Report'),
+                  onTap: () {
+                    Navigator.pop(context, 'report');
+                  },
+                ),
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+            ),
           ),
-        ),
-      );
-    },
-  ).then((value) {
-    if (value == null) return;
-    switch (value) {
-      case 'copy':
-        _copyContentToClipboard();
-        break;
-      case 'report':
-        _showReportLinkButton(context);
-        break;
-    }
-  });
-}
+        );
+      },
+    ).then((value) {
+      if (value == null) return;
+      switch (value) {
+        case 'copy':
+          _copyContentToClipboard();
+          break;
+        case 'report':
+          _showReportLinkButton(context);
+          break;
+      }
+    });
+  }
+
   void _showQuickSuggestions(BuildContext context) {
     final RenderBox button = context.findRenderObject() as RenderBox;
     final RenderBox overlay =
@@ -1903,104 +1893,112 @@ class _FeedItemState extends State<FeedItem>
     );
 
     showModalBottomSheet<String>(
-  context: context,
-  backgroundColor: Colors.transparent,
-  builder: (context) {
-    return AnimatedPadding(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOutCubic,
-      padding: MediaQuery.of(context).viewInsets,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.08),
-              blurRadius: 20,
-              offset: const Offset(0, -4),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              margin: const EdgeInsets.symmetric(vertical: 12),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(2),
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return AnimatedPadding(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+          padding: MediaQuery.of(context).viewInsets,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 20,
+                  offset: const Offset(0, -4),
+                ),
+              ],
             ),
-            ListTile(
-              leading: const Icon(Icons.edit, color: Color(0xFFF48706)),
-              title: const Text('Edit content'),
-              onTap: () {
-                Navigator.pop(context, 'edit');
-              },
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  margin: const EdgeInsets.symmetric(vertical: 12),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.edit, color: Color(0xFFF48706)),
+                  title: const Text('Edit content'),
+                  onTap: () {
+                    Navigator.pop(context, 'edit');
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.delete, color: Colors.red),
+                  title: const Text('Delete post'),
+                  onTap: () {
+                    Navigator.pop(context, 'delete');
+                  },
+                ),
+                if (widget.content.files.isNotEmpty)
+                  ListTile(
+                    leading: const Icon(
+                      Icons.attach_file,
+                      color: Colors.purple,
+                    ),
+                    title: const Text('Delete files'),
+                    onTap: () {
+                      Navigator.pop(context, 'delete_files');
+                    },
+                  ),
+                ListTile(
+                  leading: const Icon(Icons.copy, color: Colors.blue),
+                  title: const Text('Copy content'),
+                  onTap: () {
+                    Navigator.pop(context, 'copy');
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.flag, color: Colors.orange),
+                  title: const Text('Report'),
+                  onTap: () {
+                    Navigator.pop(context, 'report');
+                  },
+                ),
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
             ),
-            ListTile(
-              leading: const Icon(Icons.delete, color: Colors.red),
-              title: const Text('Delete post'),
-              onTap: () {
-                Navigator.pop(context, 'delete');
-              },
-            ),
-            if (widget.content.files.isNotEmpty)
-              ListTile(
-                leading: const Icon(Icons.attach_file, color: Colors.purple),
-                title: const Text('Delete files'),
-                onTap: () {
-                  Navigator.pop(context, 'delete_files');
-                },
-              ),
-            ListTile(
-              leading: const Icon(Icons.copy, color: Colors.blue),
-              title: const Text('Copy content'),
-              onTap: () {
-                Navigator.pop(context, 'copy');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.flag, color: Colors.orange),
-              title: const Text('Report'),
-              onTap: () {
-                Navigator.pop(context, 'report');
-              },
-            ),
-            const SizedBox(height: 8),
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-            ),
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
-    );
-  },
-).then((value) {
-  if (value == null) return;
-  switch (value) {
-    case 'edit':
-      _showEditContentDialog(context);
-      break;
-    case 'delete':
-      _showDeleteConfirmation(context);
-      break;
-    case 'delete_files':
-      _showDeleteFilesConfirmation(context);
-      break;
-    case 'copy':
-      _copyContentToClipboard();
-      break;
-    case 'report':
-      _showReportLinkButton(context);
-      break;
-  }
-});
+          ),
+        );
+      },
+    ).then((value) {
+      if (value == null) return;
+      switch (value) {
+        case 'edit':
+          _showEditContentDialog(context);
+          break;
+        case 'delete':
+          _showDeleteConfirmation(context);
+          break;
+        case 'delete_files':
+          _showDeleteFilesConfirmation(context);
+          break;
+        case 'copy':
+          _copyContentToClipboard();
+          break;
+        case 'report':
+          _showReportLinkButton(context);
+          break;
+      }
+    });
   }
 
   void _showEditContentDialog(BuildContext context) {
@@ -2009,68 +2007,68 @@ class _FeedItemState extends State<FeedItem>
     );
 
     showGeneralDialog(
-  context: context,
-  barrierDismissible: true,
-  barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
-  barrierColor: Colors.black.withOpacity(0.4),
-  transitionDuration: const Duration(milliseconds: 300),
-  pageBuilder: (context, animation, secondaryAnimation) {
-    return Center(
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 24),
-        child: Material(
-          color: Colors.transparent,
-          child: AlertDialog(
-            backgroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            title: const Text(
-              'Edit Content',
-              style: TextStyle(
-                color: Color(0xFFF48706),
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            content: TextField(
-              controller: controller,
-              decoration: const InputDecoration(
-                labelText: 'Status',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 5,
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () {
-                  _updateContentStatus(controller.text);
-                  Navigator.of(context).pop();
-                },
-                child: const Text(
-                  'Update',
-                  style: TextStyle(color: Color(0xFFF48706), fontWeight: FontWeight.bold),
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+      barrierColor: Colors.black.withOpacity(0.4),
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return Center(
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 24),
+            child: Material(
+              color: Colors.transparent,
+              child: AlertDialog(
+                backgroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
                 ),
+                title: const Text(
+                  'Edit Content',
+                  style: TextStyle(
+                    color: Color(0xFFF48706),
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                content: TextField(
+                  controller: controller,
+                  decoration: const InputDecoration(
+                    labelText: 'Status',
+                    border: OutlineInputBorder(),
+                  ),
+                  maxLines: 5,
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      _updateContentStatus(controller.text);
+                      Navigator.of(context).pop();
+                    },
+                    child: const Text(
+                      'Update',
+                      style: TextStyle(
+                        color: Color(0xFFF48706),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        return ScaleTransition(
+          scale: CurvedAnimation(parent: animation, curve: Curves.easeOutBack),
+          child: child,
+        );
+      },
     );
-  },
-  transitionBuilder: (context, animation, secondaryAnimation, child) {
-    return ScaleTransition(
-      scale: CurvedAnimation(
-        parent: animation,
-        curve: Curves.easeOutBack,
-      ),
-      child: child,
-    );
-  },
-);
   }
 
   Future<void> _updateContentStatus(String newStatus) async {
@@ -2096,34 +2094,12 @@ class _FeedItemState extends State<FeedItem>
           backgroundColor: Colors.green,
           colorText: Colors.white,
         );
-
-        // ScaffoldMessenger.of(context).showSnackBar(
-        //   const SnackBar(content: Text('Content updated successfully')),
-        // );
       } else {
-        Get.snackbar(
-          'Error',
-          'Failed to update content: ${response.statusCode}',
-          backgroundColor: Colors.red,
-          colorText: Colors.white,
-        );
-
-        // ScaffoldMessenger.of(context).showSnackBar(
-        //   SnackBar(
-        //     content: Text('Failed to update content: ${response.statusCode}'),
-        //   ),
-        // );
+        Get.back();
+        log('Error Failed to update content: ${response.statusCode}');
       }
     } catch (e) {
-      Get.snackbar(
-        'Error',
-        e.toString(),
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
-      // ScaffoldMessenger.of(
-      //   context,
-      // ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+      print('Error${e.toString()}');
     }
   }
 
@@ -2172,35 +2148,11 @@ class _FeedItemState extends State<FeedItem>
           backgroundColor: Colors.green,
           colorText: Colors.white,
         );
-
-        // ScaffoldMessenger.of(context).showSnackBar(
-        //   const SnackBar(content: Text('Post deleted successfully')),
-        // );
       } else {
-        Get.snackbar(
-          'Error',
-          'Failed to Delete Post: ${response.statusCode}',
-          backgroundColor: Colors.red,
-          colorText: Colors.white,
-        );
-
-        // ScaffoldMessenger.of(context).showSnackBar(
-        //   SnackBar(
-        //     content: Text('Failed to delete post: ${response.statusCode}'),
-        //   ),
-        // );
+        log('Failed to Delete Post: ${response.statusCode}');
       }
     } catch (e) {
-      Get.snackbar(
-        'Error',
-        e.toString(),
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
-
-      // ScaffoldMessenger.of(
-      //   context,
-      // ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+      print('Error${e.toString()}');
     }
   }
 
@@ -2254,10 +2206,6 @@ class _FeedItemState extends State<FeedItem>
           backgroundColor: Colors.green,
           colorText: Colors.white,
         );
-
-        // ScaffoldMessenger.of(context).showSnackBar(
-        //   const SnackBar(content: Text('Files deleted successfully')),
-        // );
       } else {
         Get.snackbar(
           'Error',
@@ -2265,12 +2213,6 @@ class _FeedItemState extends State<FeedItem>
           backgroundColor: Colors.red,
           colorText: Colors.white,
         );
-
-        // ScaffoldMessenger.of(context).showSnackBar(
-        //   SnackBar(
-        //     content: Text('Failed to delete files: ${response.statusCode}'),
-        //   ),
-        // );
       }
     } catch (e) {
       Get.snackbar(
@@ -2279,10 +2221,6 @@ class _FeedItemState extends State<FeedItem>
         backgroundColor: Colors.red,
         colorText: Colors.white,
       );
-
-      // ScaffoldMessenger.of(
-      //   context,
-      // ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
     }
   }
 
@@ -2297,269 +2235,291 @@ class _FeedItemState extends State<FeedItem>
     final TextEditingController reasonController = TextEditingController();
     final TextEditingController descriptionController = TextEditingController();
 
-    // ...inside _showReportLinkButton(BuildContext context)...
-showGeneralDialog(
-  context: context,
-  barrierDismissible: true,
-  barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
-  barrierColor: Colors.black.withAlpha(40),
-  transitionDuration: const Duration(milliseconds: 300),
-  pageBuilder: (context, animation, secondaryAnimation) {
-    return Center(
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 20),
-        child: Material(
-          color: Colors.transparent,
-          child: AlertDialog(
-            backgroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            title: const Text(
-              'Report Content',
-              style: TextStyle(
-                color: Color(0xFFF48706),
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'Please tell us why you are reporting this content:',
-                    style: TextStyle(fontSize: 16.0),
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+      barrierColor: Colors.black.withAlpha(40),
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return Center(
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 20),
+            child: Material(
+              color: Colors.transparent,
+              child: AlertDialog(
+                backgroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                title: const Text(
+                  'Report Content',
+                  style: TextStyle(
+                    color: Color(0xFFF48706),
+                    fontWeight: FontWeight.bold,
                   ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: reasonController,
-                    decoration: const InputDecoration(
-                      labelText: 'Reason',
-                      border: OutlineInputBorder(),
-                      hintText: 'Enter the reason for reporting',
-                      
-                    ),
-                    maxLines: 2,
+                ),
+                content: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Please tell us why you are reporting this content:',
+                        style: TextStyle(fontSize: 16.0),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: reasonController,
+                        decoration: const InputDecoration(
+                          labelText: 'Reason',
+                          border: OutlineInputBorder(),
+                          hintText: 'Enter the reason for reporting',
+                        ),
+                        maxLines: 2,
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: descriptionController,
+                        decoration: const InputDecoration(
+                          labelText: 'Description (Optional)',
+                          border: OutlineInputBorder(),
+                          hintText: 'Provide additional details (optional)',
+                        ),
+                        maxLines: 3,
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: descriptionController,
-                    decoration: const InputDecoration(
-                      labelText: 'Description (Optional)',
-                      border: OutlineInputBorder(),
-                      hintText: 'Provide additional details (optional)',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      final reason = reasonController.text.trim();
+                      final description = descriptionController.text.trim();
+
+                      if (reason.isEmpty) {
+                        Get.snackbar(
+                          'Error',
+                          'Please provide a reason for reporting.',
+                          backgroundColor: Colors.red,
+                          colorText: Colors.white,
+                        );
+                        return;
+                      }
+
+                      try {
+                        final response = await http.post(
+                          Uri.parse('http://182.93.94.210:3064/api/v1/report'),
+                          headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'authorization': 'Bearer ${AppData().authToken}',
+                          },
+                          body: jsonEncode({
+                            'reportedUserId': widget.content.author.id,
+                            'reason': reason,
+                            'description':
+                                description.isEmpty ? reason : description,
+                          }),
+                        );
+
+                        if (response.statusCode == 200) {
+                          final data = json.decode(response.body);
+                          Get.snackbar(
+                            'Success',
+                            data['message'] ??
+                                'Your report has been submitted successfully.',
+                            backgroundColor: Colors.green,
+                            colorText: Colors.white,
+                          );
+                          Navigator.of(context).pop();
+                        } else {
+                          final data = json.decode(response.body);
+                          Get.snackbar(
+                            'Error',
+                            data['message'] ??
+                                'Failed to Submit Report: ${response.statusCode}',
+                            backgroundColor: Colors.red,
+                            colorText: Colors.white,
+                          );
+                        }
+                      } catch (e) {
+                        Get.snackbar(
+                          'Error',
+                          e.toString(),
+                          backgroundColor: Colors.red,
+                          colorText: Colors.white,
+                        );
+                      }
+                    },
+                    child: const Text(
+                      'Submit',
+                      style: TextStyle(
+                        color: Color(0xFFF48706),
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                    maxLines: 3,
-                  
                   ),
                 ],
               ),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () async {
-                  final reason = reasonController.text.trim();
-                  final description = descriptionController.text.trim();
-
-                  if (reason.isEmpty) {
-                    Get.snackbar(
-                      'Error',
-                      'Please provide a reason for reporting.',
-                      backgroundColor: Colors.red,
-                      colorText: Colors.white,
-                    );
-                    return;
-                  }
-
-                  try {
-                    final response = await http.post(
-                      Uri.parse('http://182.93.94.210:3064/api/v1/report'),
-                      headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json',
-                        'authorization': 'Bearer ${AppData().authToken}',
-                      },
-                      body: jsonEncode({
-                        'reportedUserId': widget.content.author.id,
-                        'reason': reason,
-                        'description': description.isEmpty ? reason : description,
-                      }),
-                    );
-
-                    if (response.statusCode == 200) {
-                      final data = json.decode(response.body);
-                      Get.snackbar(
-                        'Success',
-                        data['message'] ?? 'Your report has been submitted successfully.',
-                        backgroundColor: Colors.green,
-                        colorText: Colors.white,
-                      );
-                      Navigator.of(context).pop();
-                    } else {
-                      final data = json.decode(response.body);
-                      Get.snackbar(
-                        'Error',
-                        data['message'] ?? 'Failed to Submit Report: ${response.statusCode}',
-                        backgroundColor: Colors.red,
-                        colorText: Colors.white,
-                      );
-                    }
-                  } catch (e) {
-                    Get.snackbar(
-                      'Error',
-                      e.toString(),
-                      backgroundColor: Colors.red,
-                      colorText: Colors.white,
-                    );
-                  }
-                },
-                child: const Text(
-                  'Submit',
-                  style: TextStyle(color: Color(0xFFF48706), fontWeight: FontWeight.bold),
-                ),
-              ),
-            ],
           ),
-        ),
-      ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        return ScaleTransition(
+          scale: CurvedAnimation(parent: animation, curve: Curves.easeOutBack),
+          child: child,
+        );
+      },
     );
-  },
-  transitionBuilder: (context, animation, secondaryAnimation, child) {
-    return ScaleTransition(
-      scale: CurvedAnimation(
-        parent: animation,
-        curve: Curves.easeOutBack,
-      ),
-      child: child,
-    );
-  },
-);
-// ...existing code...
   }
 
-  // ...existing code...
   Widget _buildAuthorAvatar() {
-  final userController = Get.find<UserController>();
-  
-  // Check if this is the current user's post
-  if (_isAuthorCurrentUser()) {
-    return Obx(() {
-      final picturePath = userController.getFullProfilePicturePath();
+    final userController = Get.find<UserController>();
+
+    // Check if this is the current user's post
+    if (_isAuthorCurrentUser()) {
+      return Obx(() {
+        final picturePath = userController.getFullProfilePicturePath();
+        return GestureDetector(
+          onTap: () {
+            _showBigAvatarDialog(
+              context,
+              picturePath,
+              widget.content.author.name,
+            );
+          },
+          child: CircleAvatar(
+            backgroundImage:
+                picturePath != null ? NetworkImage(picturePath) : null,
+            child:
+                picturePath == null
+                    ? Text(
+                      widget.content.author.name.isNotEmpty
+                          ? widget.content.author.name[0].toUpperCase()
+                          : '?',
+                    )
+                    : null,
+          ),
+        );
+      });
+    }
+
+    // For other users' posts
+    if (widget.content.author.picture.isEmpty) {
       return GestureDetector(
         onTap: () {
-          _showBigAvatarDialog(context, picturePath, widget.content.author.name);
+          _showBigAvatarDialog(context, null, widget.content.author.name);
         },
         child: CircleAvatar(
-          backgroundImage: picturePath != null 
-              ? NetworkImage(picturePath) 
-              : null,
-          child: picturePath == null
-              ? Text(
-                  widget.content.author.name.isNotEmpty
-                      ? widget.content.author.name[0].toUpperCase()
-                      : '?',
-                )
-              : null,
+          child: Text(
+            widget.content.author.name.isNotEmpty
+                ? widget.content.author.name[0].toUpperCase()
+                : '?',
+          ),
         ),
       );
-    });
-  }
+    }
 
-  // For other users' posts
-  if (widget.content.author.picture.isEmpty) {
     return GestureDetector(
       onTap: () {
-        _showBigAvatarDialog(context, null, widget.content.author.name);
+        _showBigAvatarDialog(
+          context,
+          'http://182.93.94.210:3064${widget.content.author.picture}',
+          widget.content.author.name,
+        );
       },
-      child: CircleAvatar(
-        child: Text(
-          widget.content.author.name.isNotEmpty
-              ? widget.content.author.name[0].toUpperCase()
-              : '?',
-        ),
+      child: CachedNetworkImage(
+        imageUrl: 'http://182.93.94.210:3064${widget.content.author.picture}',
+        imageBuilder:
+            (context, imageProvider) =>
+                CircleAvatar(backgroundImage: imageProvider),
+        placeholder:
+            (context, url) => const CircleAvatar(
+              child: CircularProgressIndicator(strokeWidth: 2.0),
+            ),
+        errorWidget:
+            (context, url, error) => CircleAvatar(
+              child: Text(
+                widget.content.author.name.isNotEmpty
+                    ? widget.content.author.name[0].toUpperCase()
+                    : '?',
+              ),
+            ),
       ),
     );
   }
 
-  return GestureDetector(
-    onTap: () {
-      _showBigAvatarDialog(
-        context,
-        'http://182.93.94.210:3064${widget.content.author.picture}',
-        widget.content.author.name,
-      );
-    },
-    child: CachedNetworkImage(
-      imageUrl: 'http://182.93.94.210:3064${widget.content.author.picture}',
-      imageBuilder: (context, imageProvider) =>
-          CircleAvatar(backgroundImage: imageProvider),
-      placeholder: (context, url) => const CircleAvatar(
-        child: CircularProgressIndicator(strokeWidth: 2.0),
-      ),
-      errorWidget: (context, url, error) => CircleAvatar(
-        child: Text(
-          widget.content.author.name.isNotEmpty
-              ? widget.content.author.name[0].toUpperCase()
-              : '?',
-        ),
-      ),
-    ),
-  );
-}
-
   // ...existing code...
-  void _showBigAvatarDialog(BuildContext context, String? imageUrl, String name) {
+  void _showBigAvatarDialog(
+    BuildContext context,
+    String? imageUrl,
+    String name,
+  ) {
     showDialog(
       context: context,
       barrierDismissible: true, // Allow tap outside to dismiss
-      builder: (context) => GestureDetector(
-        onTap: () => Navigator.of(context).pop(), // Dismiss on tap outside
-        child: Material(
-          color: Colors.transparent,
-          child: Center(
-            child: GestureDetector(
-                    onTap: () => FocusScope.of(context).unfocus(),
- // Prevent dialog from closing when tapping the avatar itself
-              child: imageUrl == null
-                  ? CircleAvatar(
-                      radius: 80,
-                      backgroundColor: Colors.blue.shade200,
-                      child: Text(
-                        name.isNotEmpty ? name[0].toUpperCase() : '?',
-                        style: const TextStyle(fontSize: 60, color: Colors.white),
-                      ),
-                    )
-                  : CachedNetworkImage(
-                      imageUrl: imageUrl,
-                      imageBuilder: (context, imageProvider) => CircleAvatar(
-                        radius: 120,
-                        backgroundImage: imageProvider,
-                      ),
-                      placeholder: (context, url) => const CircleAvatar(
-                        radius: 120,
-                        child: CircularProgressIndicator(strokeWidth: 3.0),
-                      ),
-                      errorWidget: (context, url, error) => CircleAvatar(
-                        radius: 120,
-                        backgroundColor: Colors.blue.shade200,
-                        child: Text(
-                          name.isNotEmpty ? name[0].toUpperCase() : '?',
-                          style: const TextStyle(fontSize: 60, color: Colors.white),
-                        ),
-                      ),
-                    ),
+      builder:
+          (context) => GestureDetector(
+            onTap: () => Navigator.of(context).pop(), // Dismiss on tap outside
+            child: Material(
+              color: Colors.transparent,
+              child: Center(
+                child: GestureDetector(
+                  onTap: () => FocusScope.of(context).unfocus(),
+                  // Prevent dialog from closing when tapping the avatar itself
+                  child:
+                      imageUrl == null
+                          ? CircleAvatar(
+                            radius: 80,
+                            backgroundColor: Colors.blue.shade200,
+                            child: Text(
+                              name.isNotEmpty ? name[0].toUpperCase() : '?',
+                              style: const TextStyle(
+                                fontSize: 60,
+                                color: Colors.white,
+                              ),
+                            ),
+                          )
+                          : CachedNetworkImage(
+                            imageUrl: imageUrl,
+                            imageBuilder:
+                                (context, imageProvider) => CircleAvatar(
+                                  radius: 120,
+                                  backgroundImage: imageProvider,
+                                ),
+                            placeholder:
+                                (context, url) => const CircleAvatar(
+                                  radius: 120,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 3.0,
+                                  ),
+                                ),
+                            errorWidget:
+                                (context, url, error) => CircleAvatar(
+                                  radius: 120,
+                                  backgroundColor: Colors.blue.shade200,
+                                  child: Text(
+                                    name.isNotEmpty
+                                        ? name[0].toUpperCase()
+                                        : '?',
+                                    style: const TextStyle(
+                                      fontSize: 60,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                          ),
+                ),
+              ),
             ),
           ),
-        ),
-      ),
     );
   }
-
-
 
   Widget _buildMediaPreview() {
     final mediaUrls = widget.content.mediaUrls;
@@ -2805,7 +2765,10 @@ class _OptimizedNetworkImage extends StatelessWidget {
 class FeedApiService {
   static const String baseUrl = 'http://182.93.94.210:3064';
 
-  static Future<List<FeedContent>> fetchContents(String? lastId, BuildContext context) async {
+  static Future<List<FeedContent>> fetchContents(
+    String? lastId,
+    BuildContext context,
+  ) async {
     try {
       final String? authToken = AppData().authToken;
       final Map<String, String> headers = {
@@ -2868,14 +2831,21 @@ class FeedApiService {
           return contents;
         }
       } else if (response.statusCode == 401) {
-        Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => LoginPage()), (route) => false);
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => LoginPage()),
+          (route) => false,
+        );
         throw Exception('Authentication required');
-        
       }
 
       throw Exception('Failed to load data: ${response.statusCode}');
     } catch (e) {
-      Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => LoginPage()), (route) => false);
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => LoginPage()),
+        (route) => false,
+      );
       throw Exception('Error: ${e.toString()}');
     }
   }
@@ -2918,72 +2888,157 @@ class AutoPlayVideoWidget extends StatefulWidget {
   State<AutoPlayVideoWidget> createState() => _AutoPlayVideoWidgetState();
 }
 
-class _AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget> {
-  late VideoPlayerController _controller;
+class _AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
+    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
+  VideoPlayerController? _controller;
   bool _initialized = false;
   bool _isMuted = false;
+  bool _disposed = false;
+  Timer? _initTimer;
+  
+  @override
+  bool get wantKeepAlive => _initialized;
 
   @override
   void initState() {
     super.initState();
-    _controller =
-        VideoPlayerController.networkUrl(Uri.parse(widget.url))
-          ..setLooping(true)
-          ..setVolume(0.0)
-          ..initialize().then((_) {
-            setState(() {
-              _initialized = true;
-              _controller.play();
-            });
+    WidgetsBinding.instance.addObserver(this);
+    _initializeVideoPlayer();
+  }
+
+  void _initializeVideoPlayer() {
+    if (_disposed) return;
+    
+    // Add timeout for initialization to prevent hanging
+    _initTimer = Timer(const Duration(seconds: 30), () {
+      if (!_initialized && !_disposed) {
+        _handleInitializationError();
+      }
+    });
+
+    _controller = VideoPlayerController.networkUrl(
+      Uri.parse(widget.url),
+      videoPlayerOptions: VideoPlayerOptions(
+        mixWithOthers: true, // Reduces audio conflicts
+        allowBackgroundPlayback: false, // Saves resources
+      ),
+    );
+
+    _controller!
+      ..setLooping(true)
+      ..setVolume(0.0)
+      ..initialize().then((_) {
+        _initTimer?.cancel();
+        if (!_disposed && mounted) {
+          setState(() {
+            _initialized = true;
           });
+          // Only start playing if widget is still visible
+          if (mounted) {
+            _controller!.play();
+          }
+        }
+      }).catchError((error) {
+        _initTimer?.cancel();
+        if (!_disposed) {
+          _handleInitializationError();
+        }
+      });
+  }
+
+  void _handleInitializationError() {
+    if (mounted && !_disposed) {
+      setState(() {
+        _initialized = false;
+      });
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (_controller == null || _disposed) return;
+
+    switch (state) {
+      case AppLifecycleState.paused:
+      case AppLifecycleState.inactive:
+        // Pause video when app goes to background to save resources
+        _controller!.pause();
+        break;
+      case AppLifecycleState.resumed:
+        // Resume only if initialized and widget is still mounted
+        if (_initialized && mounted) {
+          _controller!.play();
+        }
+        break;
+      case AppLifecycleState.detached:
+        _controller!.pause();
+        break;
+      case AppLifecycleState.hidden:
+        _controller!.pause();
+        break;
+    }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _disposed = true;
+    _initTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _controller?.dispose();
+    _controller = null;
     super.dispose();
   }
 
   void _toggleMute() {
+    if (_controller == null || _disposed) return;
+    
     setState(() {
       _isMuted = !_isMuted;
-      _controller.setVolume(_isMuted ? 0.0 : 1.0);
+      _controller!.setVolume(_isMuted ? 0.0 : 1.0);
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!_initialized) {
-      return Container(
-        height: widget.height,
-        width: widget.width ?? double.infinity,
-        color: Colors.black,
-        child: const Center(child: CircularProgressIndicator()),
-      );
-    }
-    return Stack(
-      alignment: Alignment.bottomRight,
-      children: [
-        AspectRatio(
-          aspectRatio: _controller.value.aspectRatio,
-          child: VideoPlayer(_controller),
-        ),
-        Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: GestureDetector(
-            onTap: _toggleMute,
-            child: CircleAvatar(
-              backgroundColor: Colors.black54,
-              radius: 18,
-              child: Icon(
-                _isMuted ? Icons.volume_off : Icons.volume_up,
-                color: Colors.white,
-                size: 20,
-              ),
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
+    
+    return Container(
+      height: widget.height,
+      width: widget.width ?? double.infinity,
+      color: Colors.black,
+      child: !_initialized || _controller == null
+          ? const Center(
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : Stack(
+              alignment: Alignment.bottomRight,
+              children: [
+                AspectRatio(
+                  aspectRatio: _controller!.value.aspectRatio,
+                  child: VideoPlayer(_controller!),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: GestureDetector(
+                    onTap: _toggleMute,
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: const BoxDecoration(
+                        color: Colors.black54,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        _isMuted ? Icons.volume_off : Icons.volume_up,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
-        ),
-      ],
     );
   }
 }
@@ -3063,5 +3118,3 @@ class _LinkifyText extends StatelessWidget {
     );
   }
 }
-
-

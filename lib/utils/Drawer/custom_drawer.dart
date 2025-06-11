@@ -749,7 +749,7 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Innovator App v1.0',
+                    'Innovator App v1.0.8',
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,

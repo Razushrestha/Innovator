@@ -48,7 +48,7 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
     );
   } catch (e) {
     debugPrint('⚠️ Error sending FCM notification: $e');
-    return false;
+    return false; 
   }
 }
 
