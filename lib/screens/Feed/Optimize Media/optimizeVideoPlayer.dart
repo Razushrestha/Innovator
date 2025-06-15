@@ -8,17 +8,21 @@ import 'package:chewie/chewie.dart';
 class OptimizedVideoPlayer extends StatefulWidget {
   final String url;
   final double? maxHeight;
+  final double? maxWidth;
   final bool autoPlay;
   final bool looping;
   final bool showControls;
+  final bool isMuted; // Add this parameter
   final VoidCallback? onError;
 
   const OptimizedVideoPlayer({
     required this.url,
     this.maxHeight,
+    this.maxWidth,
     this.autoPlay = true,
     this.looping = true,
     this.showControls = true,
+    this.isMuted = true,
     this.onError,
     Key? key,
   }) : super(key: key);
@@ -44,7 +48,6 @@ class _OptimizedVideoPlayerState extends State<OptimizedVideoPlayer> {
       final controller = VideoPlayerController.networkUrl(Uri.parse(widget.url));
       _videoController = controller;
 
-      // Initialize video with error handling
       await controller.initialize().timeout(
         const Duration(seconds: 10),
         onTimeout: () => throw TimeoutException('Video initialization timed out'),
@@ -52,7 +55,6 @@ class _OptimizedVideoPlayerState extends State<OptimizedVideoPlayer> {
 
       if (!mounted) return;
 
-      // Get video size for aspect ratio
       final size = await MediaService.getVideoSize(widget.url);
       final aspectRatio = size.width / size.height;
 
@@ -62,6 +64,9 @@ class _OptimizedVideoPlayerState extends State<OptimizedVideoPlayer> {
         looping: widget.looping,
         showControls: widget.showControls,
         aspectRatio: aspectRatio,
+        allowMuting: true,
+        startAt: Duration.zero,
+        isLive: false,
         errorBuilder: (context, errorMessage) {
           widget.onError?.call();
           return Center(
@@ -81,11 +86,17 @@ class _OptimizedVideoPlayerState extends State<OptimizedVideoPlayer> {
         },
       );
 
-      setState(() => _isInitialized = true);
+      // Set initial volume based on isMuted
+      await _videoController!.setVolume(widget.isMuted ? 0.0 : 1.0);
+
+      if (mounted) {
+        setState(() => _isInitialized = true);
+      }
     } catch (e) {
-      if (!mounted) return;
-      setState(() => _hasError = true);
-      widget.onError?.call();
+      if (mounted) {
+        setState(() => _hasError = true);
+        widget.onError?.call();
+      }
     }
   }
 
@@ -129,6 +140,7 @@ class _OptimizedVideoPlayerState extends State<OptimizedVideoPlayer> {
     return LayoutBuilder(
       builder: (context, constraints) {
         return SizedBox(
+          width: widget.maxWidth,
           height: widget.maxHeight,
           child: Chewie(controller: _chewieController!),
         );

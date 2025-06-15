@@ -1,49 +1,53 @@
+import 'dart:developer' as developer;
+import 'dart:io';
+import 'dart:ui';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:get/get.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:innovator/utils/Drawer/custom_drawer.dart';
+import 'package:lottie/lottie.dart';
+import 'package:innovator/App_data/App_data.dart';
+import 'package:innovator/Authorization/Login.dart';
+import 'package:innovator/Notification/FCM_Services.dart';
+import 'package:innovator/controllers/user_controller.dart';
+import 'package:innovator/screens/Eliza_ChatBot/Elizahomescreen.dart';
+import 'package:innovator/screens/F&Q/F&Qscreen.dart';
+import 'package:innovator/screens/Privacy_Policy/privacy_screen.dart';
+import 'package:innovator/screens/Profile/profile_page.dart';
+import 'package:innovator/screens/Report/Report_screen.dart';
+import 'package:innovator/screens/chatrrom/Screen/chat_listscreen.dart';
+import 'package:innovator/utils/Drawer/drawer_cache_manager.dart';
 import 'package:innovator/innovator_home.dart';
 import 'package:innovator/screens/Add_Content/Create_post.dart';
 import 'package:innovator/screens/Course/home.dart';
 import 'package:innovator/screens/Search/Searchpage.dart';
-import 'package:innovator/screens/Search/Searchpage.dart';
 import 'package:innovator/screens/Shop/Shop_Page.dart';
-import 'package:innovator/utils/Drawer/custom_drawer.dart';
-import 'package:get/get.dart';
-import 'package:innovator/controllers/user_controller.dart';
 
 class FloatingMenuWidget extends StatefulWidget {
-  final GlobalKey<ScaffoldState>? scaffoldKey;
-
-  const FloatingMenuWidget({Key? key, this.scaffoldKey}) : super(key: key);
+  const FloatingMenuWidget({super.key});
 
   @override
   _FloatingMenuWidgetState createState() => _FloatingMenuWidgetState();
 }
 
-class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
-    with SingleTickerProviderStateMixin {
+class _FloatingMenuWidgetState extends State<FloatingMenuWidget> with SingleTickerProviderStateMixin {
   bool _isExpanded = false;
   late AnimationController _animationController;
   late Animation<double> _animation;
-
-  // Track the position of the menu button
   double _buttonX = 0;
   double _buttonY = 0;
 
-  final UserController _userController = Get.find<UserController>();
-
-  // Features to display above the menu button with their respective actions
   final List<Map<String, dynamic>> _topIcons = [
-    {
-      'icon': Icons.home,
-      'name': 'FEED',
-      'action': 'navigate_golf',
-    },
+    {'icon': Icons.home, 'name': 'FEED', 'action': 'navigate_golf'},
     {'icon': Icons.school, 'name': 'COURSE', 'action': 'open_search'},
     {'icon': Icons.add_a_photo, 'name': 'ADD POST', 'action': 'add_photo'},
   ];
 
-  // Features to display below the menu button with their respective actions
   final List<Map<String, dynamic>> _bottomIcons = [
     {'icon': Icons.shop, 'name': 'SHOP', 'action': 'open_settings'},
     {'icon': Icons.search, 'name': 'SEARCH', 'action': 'view_profile'},
@@ -55,19 +59,17 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
     super.initState();
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 400),
     );
     _animation = CurvedAnimation(
       parent: _animationController,
-      curve: Curves.easeInOut,
+      curve: Curves.easeInOutCubic,
     );
 
-    // Position will be set in first build
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         final size = MediaQuery.of(context).size;
         setState(() {
-          // Default position at right middle
           _buttonX = size.width - 60;
           _buttonY = size.height * 0.5;
         });
@@ -92,158 +94,61 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
     });
   }
 
-  // Handle icon press actions
   void _handleIconPress(String action, BuildContext context) {
     switch (action) {
       case 'navigate_golf':
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => Homepage() ),
-          
+          MaterialPageRoute(builder: (_) => const Homepage()),
         );
         break;
-
       case 'open_search':
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (_) => ProviderScope(child: HomeScreen()),
-          ),
-
+          MaterialPageRoute(builder: (_) => const ProviderScope(child: HomeScreen())),
         );
         break;
-
       case 'add_photo':
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => CreatePostScreen()),
-          
+          MaterialPageRoute(builder: (_) => const CreatePostScreen()),
         );
         break;
-
       case 'open_settings':
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => ShopPage()),
-          
+          MaterialPageRoute(builder: (_) => const ShopPage()),
         );
         break;
-
       case 'view_profile':
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (_) => SearchPage(),
-          ),
-          
+          MaterialPageRoute(builder: (_) => const SearchPage()),
         );
         break;
-
       case 'drawer':
         SmoothDrawerService.showLeftDrawer(context);
         break;
-
       default:
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Action not implemented yet: $action')),
+          SnackBar(content: Text('Action not implemented: $action')),
         );
     }
   }
 
-  void _showLeftSideDrawer(BuildContext context) {
-    // Drawer width calculation - typically 80% of screen width but not more than 300px
-    final double drawerWidth = math.min(
-      MediaQuery.of(context).size.width * 0.8,
-      300.0,
-    );
-
-    showGeneralDialog(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: "Drawer",
-      barrierColor: Colors.black54,
-      transitionDuration: const Duration(milliseconds: 300),
-      pageBuilder: (context, animation1, animation2) {
-        return Container(); // This isn't used but required
-      },
-      transitionBuilder: (context, animation, secondaryAnimation, child) {
-        // Scale and fade animations for smooth appearance
-        final curvedAnimation = CurvedAnimation(
-          parent: animation,
-          curve: Curves.easeOutCubic,
-        );
-
-        return Stack(
-          children: [
-            // Tap outside to dismiss
-            GestureDetector(
-              onTap: () => Navigator.pop(context),
-              child: Container(
-                color: Colors.transparent,
-                width: MediaQuery.of(context).size.width,
-                height: MediaQuery.of(context).size.height,
-              ),
-            ),
-
-            // The drawer itself with animations
-            SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(-1, 0),
-                end: Offset.zero,
-              ).animate(curvedAnimation),
-              child: FadeTransition(
-                opacity: curvedAnimation,
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Container(
-                    width: drawerWidth,
-                    height: MediaQuery.of(context).size.height,
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.only(
-                        topRight: Radius.circular(20),
-                        bottomRight: Radius.circular(20),
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black26,
-                          blurRadius: 10.0,
-                          offset: Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: const CustomDrawer(), // Use the optimized drawer
-                  ),
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  
-
-  // Get shape of menu button based on position
   BorderRadius _getButtonBorderRadius() {
     final size = MediaQuery.of(context).size;
-
-    // If near right edge, make semi-circular
     if (_buttonX >= size.width - 70) {
       return const BorderRadius.only(
         topLeft: Radius.circular(30),
         bottomLeft: Radius.circular(30),
       );
-    }
-    // If near left edge, make semi-circular from right
-    else if (_buttonX <= 70) {
+    } else if (_buttonX <= 70) {
       return const BorderRadius.only(
         topRight: Radius.circular(30),
         bottomRight: Radius.circular(30),
       );
     }
-    // Otherwise, make fully circular
     return BorderRadius.circular(30);
   }
 
@@ -254,10 +159,9 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
     return Stack(
       fit: StackFit.expand,
       children: [
-        // Main draggable menu button
         Positioned(
           left: _buttonX,
-          top: _buttonY - 25, // Center vertically
+          top: _buttonY - 25,
           child: Draggable(
             feedback: Material(
               color: Colors.orange.withOpacity(0.8),
@@ -266,7 +170,7 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
                 width: 50,
                 height: 50,
                 alignment: Alignment.center,
-                child: Icon(Icons.menu, color: Colors.white, size: 24),
+                child: const Icon(Icons.menu, color: Colors.white, size: 24),
               ),
             ),
             childWhenDragging: Opacity(
@@ -279,14 +183,8 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
             ),
             onDragEnd: (details) {
               setState(() {
-                // Update position based on where drag ended
                 _buttonX = (details.offset.dx).clamp(0.0, size.width - 50);
-                _buttonY = (details.offset.dy + 25).clamp(
-                  50.0,
-                  size.height - 50,
-                );
-
-                // Close menu when dragging ends
+                _buttonY = (details.offset.dy + 25).clamp(50.0, size.height - 50);
                 if (_isExpanded) {
                   _isExpanded = false;
                   _animationController.reverse();
@@ -314,16 +212,12 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
             ),
           ),
         ),
-
-        // Top features (visible only when expanded)
         if (_isExpanded)
           Positioned(
             left: _buttonX,
             top: _buttonY - 25 - (_topIcons.length * 52),
             child: _buildIconsContainer(_topIcons, context),
           ),
-
-        // Bottom features (visible only when expanded)
         if (_isExpanded)
           Positioned(
             left: _buttonX,
@@ -334,13 +228,8 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
     );
   }
 
-  Widget _buildIconsContainer(
-    List<Map<String, dynamic>> iconItems,
-    BuildContext context,
-  ) {
+  Widget _buildIconsContainer(List<Map<String, dynamic>> iconItems, BuildContext context) {
     final size = MediaQuery.of(context).size;
-
-    // Determine border radius based on position
     BorderRadius borderRadius;
     if (_buttonX >= size.width - 70) {
       borderRadius = const BorderRadius.only(
@@ -371,243 +260,27 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget>
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        children:
-            iconItems
-                .map(
-                  (item) => Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(25),
-                      onTap: () => _handleIconPress(item['action'], context),
-                      child: Tooltip(
-                        message: item['name'],
-                        child: Container(
-                          height: 50,
-                          width: 50,
-                          alignment: Alignment.center,
-                          child: Icon(
-                            item['icon'],
-                            color: Colors.orange,
-                            size: 22,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                )
-                .toList(),
-      ),
-    );
-  }
-}
-
-// Custom Search Delegate remains unchanged
-class CustomSearchDelegate extends SearchDelegate {
-  final List<String> searchExamples = [
-    'Golf courses',
-    'Friends',
-    'Events',
-    'Messages',
-  ];
-
-  @override
-  List<Widget> buildActions(BuildContext context) {
-    return [
-      IconButton(
-        icon: const Icon(Icons.clear),
-        onPressed: () {
-          query = '';
-        },
-      ),
-    ];
-  }
-
-  @override
-  Widget buildLeading(BuildContext context) {
-    return IconButton(
-      icon: const Icon(Icons.arrow_back),
-      onPressed: () {
-        close(context, null);
-      },
-    );
-  }
-
-  @override
-  Widget buildResults(BuildContext context) {
-    List<String> matchQuery = [];
-    for (var item in searchExamples) {
-      if (item.toLowerCase().contains(query.toLowerCase())) {
-        matchQuery.add(item);
-      }
-    }
-    return ListView.builder(
-      itemCount: matchQuery.length,
-      itemBuilder: (context, index) {
-        return ListTile(
-          title: Text(matchQuery[index]),
-          onTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Selected: ${matchQuery[index]}')),
-            );
-            close(context, matchQuery[index]);
-          },
-        );
-      },
-    );
-  }
-
-  @override
-  Widget buildSuggestions(BuildContext context) {
-    List<String> matchQuery = [];
-    for (var item in searchExamples) {
-      if (item.toLowerCase().contains(query.toLowerCase())) {
-        matchQuery.add(item);
-      }
-    }
-    return ListView.builder(
-      itemCount: matchQuery.length,
-      itemBuilder: (context, index) {
-        return ListTile(
-          title: Text(matchQuery[index]),
-          onTap: () {
-            query = matchQuery[index];
-            showResults(context);
-          },
-        );
-      },
-    );
-  }
-}
-
-
-class SmoothDrawerService {
-  static void showLeftDrawer(BuildContext context) {
-    Navigator.of(context).push(
-      PageRouteBuilder(
-        opaque: false,
-        barrierDismissible: true,
-        barrierColor: Colors.black54,
-        transitionDuration: const Duration(milliseconds: 350),
-        reverseTransitionDuration: const Duration(milliseconds: 250),
-        pageBuilder: (context, animation, _) {
-          final drawerWidth = math.min(
-            MediaQuery.of(context).size.width * 0.8,
-            300.0,
-          );
-
-          return _SmoothDrawerOverlay(
-            animation: animation,
-            drawerWidth: drawerWidth,
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _SmoothDrawerOverlay extends StatelessWidget {
-  final Animation<double> animation;
-  final double drawerWidth;
-
-  const _SmoothDrawerOverlay({
-    required this.animation,
-    required this.drawerWidth,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    // Create multiple animation curves for different elements
-    final slideAnimation = CurvedAnimation(
-      parent: animation,
-      curve: const Cubic(0.25, 0.1, 0.25, 1.0), // Custom bezier curve
-    );
-
-    final fadeAnimation = CurvedAnimation(
-      parent: animation,
-      curve: const Interval(0.0, 0.8, curve: Curves.easeOut),
-    );
-
-    final scaleAnimation = CurvedAnimation(
-      parent: animation,
-      curve: const ElasticOutCurve(0.8),
-    );
-
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Stack(
-        children: [
-          // Background overlay with tap to dismiss
-          GestureDetector(
-            onTap: () => Navigator.of(context).pop(),
-            child: AnimatedBuilder(
-              animation: animation,
-              builder: (context, child) {
-                return Container(
-                  color: Colors.black.withOpacity(0.5 * animation.value),
-                  width: double.infinity,
-                  height: double.infinity,
-                );
-              },
+        children: iconItems.map((item) => Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(25),
+            onTap: () => _handleIconPress(item['action'], context),
+            child: Tooltip(
+              message: item['name'],
+              child: Container(
+                height: 50,
+                width: 50,
+                alignment: Alignment.center,
+                child: Icon(
+                  item['icon'],
+                  color: Colors.orange,
+                  size: 22,
+                ),
+              ),
             ),
           ),
-
-          // Drawer with smooth animations
-          AnimatedBuilder(
-            animation: animation,
-            builder: (context, child) {
-              return Transform.translate(
-                offset: Offset(
-                  -drawerWidth * (1 - slideAnimation.value),
-                  0,
-                ),
-                child: Opacity(
-                  opacity: fadeAnimation.value,
-                  child: Transform.scale(
-                    scale: 0.95 + (0.05 * scaleAnimation.value),
-                    alignment: Alignment.centerLeft,
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Container(
-                        width: drawerWidth,
-                        height: double.infinity,
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).scaffoldBackgroundColor,
-                          borderRadius: const BorderRadius.only(
-                            topRight: Radius.circular(28),
-                            bottomRight: Radius.circular(28),
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.15),
-                              blurRadius: 20.0,
-                              offset: const Offset(0, 4),
-                              spreadRadius: 2,
-                            ),
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 40.0,
-                              offset: const Offset(0, 8),
-                            ),
-                          ],
-                        ),
-                        child: ClipRRect(
-                          borderRadius: const BorderRadius.only(
-                            topRight: Radius.circular(28),
-                            bottomRight: Radius.circular(28),
-                          ),
-                          child: const CustomDrawer(),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ],
+        )).toList(),
       ),
     );
   }
 }
-
-

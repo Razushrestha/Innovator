@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:developer';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
@@ -7,6 +8,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:innovator/screens/chatrrom/utils.dart';
 import 'package:innovator/App_data/App_data.dart';
 import 'package:innovator/screens/chatrrom/Services/mqtt_services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ChatListController extends GetxController {
   final MQTTService mqttService = MQTTService();
@@ -41,9 +43,9 @@ class ChatListController extends GetxController {
   void onInit() {
     super.onInit();
     _initializeNotifications();
-    fetchChats();
     initializeMQTT();
-    
+    _loadChatsFromPreferences(); // Load cached chats first
+    fetchChats(showLoader: true);
     searchController.addListener(() {
       searchText.value = searchController.text;
       _onSearchChanged();
@@ -56,6 +58,60 @@ class ChatListController extends GetxController {
     mqttService.disconnect();
     super.onClose();
   }
+Future<void> _saveChatsToPreferences() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final chatsJson = jsonEncode(chats.toList());
+      await prefs.setString('cached_chats', chatsJson);
+      final unreadCountsJson = jsonEncode(unreadMessageCounts.toJson());
+      await prefs.setString('unread_message_counts', unreadCountsJson);
+      await prefs.setInt('cache_timestamp', DateTime.now().millisecondsSinceEpoch);
+      log('Chats saved to SharedPreferences');
+    } catch (e) {
+      log('Error saving chats to SharedPreferences: $e');
+    }
+  }
+
+  Future<void> _loadChatsFromPreferences() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final chatsJson = prefs.getString('cached_chats');
+      final unreadCountsJson = prefs.getString('unread_message_counts');
+      final timestamp = prefs.getInt('cache_timestamp') ?? 0;
+      final cacheAge = DateTime.now().millisecondsSinceEpoch - timestamp;
+      if (cacheAge > Duration(days: 7).inMilliseconds) {
+    log('Cache expired');
+    return;
+  }
+      if (chatsJson != null) {
+        final List<dynamic> decodedChats = jsonDecode(chatsJson);
+        chats.assignAll(decodedChats.cast<Map<String, dynamic>>());
+        _onSearchChanged(); // Update filtered chats
+        log('Chats loaded from SharedPreferences: ${chats.length} chats');
+      }
+      
+      if (unreadCountsJson != null) {
+        final Map<String, dynamic> decodedUnreadCounts = jsonDecode(unreadCountsJson);
+        unreadMessageCounts.assignAll(decodedUnreadCounts.map((key, value) => MapEntry(key, value as int)));
+      }
+      
+      forceRefreshUI();
+    } catch (e) {
+      log('Error loading chats from SharedPreferences: $e');
+    }
+  }
+
+  // Check internet connectivity
+  Future<bool> _hasInternetConnection() async {
+  final connectivityResult = await Connectivity().checkConnectivity();
+  if (connectivityResult == ConnectivityResult.none) return false;
+  try {
+    final response = await http.get(Uri.parse('${Utils.baseUrl}/ping')).timeout(Duration(seconds: 5));
+    return response.statusCode == 200;
+  } catch (e) {
+    return false;
+  }
+}
 
   Future<void> _initializeNotifications() async {
     const AndroidNotificationChannel channel = AndroidNotificationChannel(
@@ -124,6 +180,14 @@ class ChatListController extends GetxController {
       if (showLoader) {
         isLoading.value = true;
       }
+
+      final hasInternet = await _hasInternetConnection();
+      if (!hasInternet) {
+        log('No internet connection. Using cached chats.');
+        await _loadChatsFromPreferences(); // Load cached chats if no internet
+        Get.snackbar('Offline', 'No internet connection. Showing cached chats.');
+        return;
+      }
       
       final token = AppData().authToken;
       if (token == null) throw Exception('No auth token available');
@@ -170,6 +234,8 @@ class ChatListController extends GetxController {
               unreadMessageCounts[chatId] = preservedCount > apiUnreadCount ? preservedCount : apiUnreadCount;
             }
           }
+
+          await _saveChatsToPreferences();
           
           // Apply current search filter
           _onSearchChanged();
@@ -187,6 +253,7 @@ class ChatListController extends GetxController {
       }
     } catch (e) {
       log('Error fetching chats: $e');
+      await _loadChatsFromPreferences(); // Fallback to cached chats on error
      // Get.snackbar('Error', 'Failed to fetch chats: $e');
     } finally {
       if (showLoader) {
@@ -271,11 +338,14 @@ class ChatListController extends GetxController {
           _updateExistingChat(chatIndex, senderId, messageText, messageData, senderName, isRead);
         }
 
+        _saveChatsToPreferences();
+
         if(senderId != AppData().currentUserId && !isRead){
           _showLocalNotification(senderId, senderName, messageText);
         }
       } else if (data['type'] == 'read_receipt') {
         _handleReadReceipt(data);
+        _saveChatsToPreferences();
       }
     } catch (e) {
       log('Error processing MQTT message: $e');
@@ -361,6 +431,7 @@ class ChatListController extends GetxController {
   void markChatAsRead(String chatId) {
     unreadMessageCounts[chatId] = 0;
     newMessageTimestamps.remove(chatId);
+    _saveChatsToPreferences(); // Save updated unread counts
     forceRefreshUI();
   }
 
@@ -431,6 +502,7 @@ class ChatListController extends GetxController {
       Future.delayed(const Duration(seconds: 5), () {
         if (!isMqttConnected.value) {
           initializeMQTT();
+          fetchChats(); // Attempt to fetch data when reconnected
         }
       });
     }
@@ -458,6 +530,7 @@ class ChatListController extends GetxController {
     unreadMessageCounts.remove(chatId);
     newMessageTimestamps.remove(chatId);
     _onSearchChanged();
+    _saveChatsToPreferences(); // Save updated chat list
     forceRefreshUI();
     log('Chat removed: $chatId');
   }

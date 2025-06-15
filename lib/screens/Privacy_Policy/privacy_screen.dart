@@ -225,7 +225,7 @@ class _PrivacyPolicyState extends State<PrivacyPolicy> with SingleTickerProvider
             ),
           ),
         ),
-        FloatingMenuWidget(scaffoldKey: _scaffoldKey)
+        FloatingMenuWidget()
         ]
       ),
     );

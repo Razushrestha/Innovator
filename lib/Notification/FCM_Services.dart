@@ -261,7 +261,7 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
         backgroundColor: Colors.green,
       ),
     );
-  }
+  }  
 
   void _showInfoSnackbar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -272,7 +272,11 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+    
       appBar: AppBar(
+      //toolbarHeight: 20, // Default is 56
+
+        automaticallyImplyLeading: false,
         title: const Text(
           'Notifications',
           style: TextStyle(
@@ -286,7 +290,7 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
           onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => Homepage())),
         ),
         backgroundColor: Color.fromRGBO(244, 135, 6, 1),
-        elevation: 0,
+         elevation: 0,
         actions: [
           if (notifications.isNotEmpty) ...[
             IconButton(

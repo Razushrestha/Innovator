@@ -1,3 +1,7 @@
+import 'dart:async';
+import 'dart:developer';
+import 'dart:developer' as developer;
+
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -6,7 +10,10 @@ import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 import 'package:innovator/App_data/App_data.dart';
 import 'package:innovator/Authorization/Login.dart';
+import 'package:innovator/controllers/user_controller.dart';
+import 'package:innovator/innovator_home.dart';
 import 'package:innovator/main.dart';
+import 'package:innovator/screens/Eliza_ChatBot/Elizahomescreen.dart';
 import 'package:innovator/screens/Likes/Content-Like-Service.dart';
 import 'package:innovator/screens/Likes/content-Like-Button.dart';
 import 'package:innovator/screens/chatrrom/Screen/chat_listscreen.dart';
@@ -23,7 +30,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:lottie/lottie.dart';
 import 'dart:io';
 import 'package:innovator/screens/Follow/follow_Button.dart'; // Add FollowButton import
-import 'package:innovator/screens/Follow/follow-Service.dart'; // Add FollowService import
+import 'package:innovator/screens/Follow/follow-Service.dart';
+import 'package:visibility_detector/visibility_detector.dart'; // Add FollowService import
 
 // Models (Author and FeedContent remain unchanged)
 class Author {
@@ -80,7 +88,7 @@ class FeedContent {
   }) {
     _mediaUrls = files.map((file) {
       if (file.startsWith('http')) return file;
-      return 'http://182.93.94.210:3065$file';
+      return 'http://182.93.94.210:3064$file';
     }).toList();
 
     _hasVideos = files.any((file) => file.toLowerCase().endsWith('.mp4') ||
@@ -170,13 +178,16 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
     }
   }
 
-   void _handleFeedToggle(bool isPost) {
-    if (isPost) {
-      // Navigate back to post feed or your main page
-      Navigator.pop(context);
-    }
-    // If !isPost, we're already on video feed, so no action needed
-  }
+  //  void _handleFeedToggle(bool isPost) {
+  //   if (isPost) {
+  //     // Navigate back to post feed or your main page
+  //     Navigator.pop(context);
+  //   }
+  //   else{
+  //     Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => Homepage()), (route) => false);
+  //   }
+  //   // If !isPost, we're already on video feed, so no action needed
+  // }
 
   Future<void> _loadVideoContent() async {
     if (_isLoading || !_hasMoreVideos) return;
@@ -232,7 +243,7 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
           _errorMessage = 'Session expired. Please log in again.';
         });
         await AppData().logout();
-        Navigator.pushReplacementNamed(context, '/login');
+        Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => LoginPage()), (route) => false);
       } else {
         setState(() {
           _hasError = true;
@@ -242,7 +253,7 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
     } catch (e) {
       setState(() {
         _hasError = true;
-        _errorMessage = 'Error: $e';
+        _errorMessage = 'No Internet Connection';
       });
     } finally {
       setState(() {
@@ -253,8 +264,8 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
 
   Future<http.Response> _makeApiRequest() async {
     final url = _nextVideoCursor == null
-        ? 'http://182.93.94.210:3065/api/v1/list-contents'
-        : 'http://182.93.94.210:3065/api/v1/list-contents';
+        ? 'http://182.93.94.210:3064/api/v1/list-contents'
+        : 'http://182.93.94.210:3064/api/v1/list-contents';
 
     return await http.get(
       Uri.parse(url),
@@ -327,7 +338,7 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                             ),
                           ),
                           onPressed: _hasError && _errorMessage.contains('log in')
-                              ? () => Navigator.pushReplacementNamed(context, '/login')
+                              ? () => Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => LoginPage()), (route) => false)
                               : _refresh,
                           child: Text(
                             _hasError && _errorMessage.contains('log in')
@@ -395,15 +406,20 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
             ],
           ),
         ),
-        Positioned(
-            top: mq.height * 0.01,
-            right: mq.width * 0.03,
-            child: FeedToggleButton(
-              initialValue: false, // false for video feed
-              accentColor: Color.fromRGBO(244, 135, 6, 1),
-              onToggle: _handleFeedToggle,
-            ),
-          ),
+       Positioned(
+  top: mq.height * 0.01,
+  right: mq.width * 0.03,
+  child: FeedToggleButton(
+    initialValue: false, // false for video feed (current page)
+    accentColor: Color.fromRGBO(244, 135, 6, 1),
+    onToggle: (bool isPost) {
+      if (isPost) { // When switching to post feed
+        Navigator.pop(context); // Go back to post feed
+      }
+      // If isPost is false, stay on current page (already on video feed)
+    },
+  ),
+),
         ]
       ),
       floatingActionButton: GetBuilder<ChatListController>(
@@ -532,7 +548,7 @@ class _VideoFeedItemState extends State<VideoFeedItem> with SingleTickerProvider
     }
   }
     final ContentLikeService likeService = ContentLikeService(
-    baseUrl: 'http://182.93.94.210:3065',
+    baseUrl: 'http://182.93.94.210:3064',
   );
 
   bool _isAuthorCurrentUser() {
@@ -582,7 +598,7 @@ class _VideoFeedItemState extends State<VideoFeedItem> with SingleTickerProvider
               child: Row(
                 children: [
                   Hero(
-                    tag: 'avatar_${widget.content.author.id}',
+                    tag: 'avatar_${widget.content.author.id}_${_isAuthorCurrentUser() ? Get.find<UserController>().profilePictureVersion.value : 0}',
                     child: Container(
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
@@ -784,12 +800,12 @@ class _VideoFeedItemState extends State<VideoFeedItem> with SingleTickerProvider
             // Video Content
             if (widget.content.hasVideos)
               Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16.0),
+                margin: const EdgeInsets.symmetric(horizontal: 5.0),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(5.0),
+                  borderRadius: BorderRadius.circular(16.0),
                   child: LimitedBox(
-                    maxHeight: 250.0,
-                    child: AutoPlayVideoWidget(url: widget.content.mediaUrls.first, height: 250.0),
+                    maxHeight: 300.0,
+                    child: AutoPlayVideoWidget(url: widget.content.mediaUrls.first, height: 350.0),
                   ),
                 ),
               ),
@@ -943,7 +959,7 @@ class _VideoFeedItemState extends State<VideoFeedItem> with SingleTickerProvider
     }
 
     return CachedNetworkImage(
-      imageUrl: 'http://182.93.94.210:3065${widget.content.author.picture}',
+      imageUrl: 'http://182.93.94.210:3064${widget.content.author.picture}',
       imageBuilder: (context, imageProvider) => CircleAvatar(
         backgroundImage: imageProvider,
       ),
@@ -962,7 +978,7 @@ class _VideoFeedItemState extends State<VideoFeedItem> with SingleTickerProvider
 
   Future<void> _submitComment(String comment) async {
     try {
-      final url = Uri.parse('http://182.93.94.210:3065/api/v1/add-comment');
+      final url = Uri.parse('http://182.93.94.210:3064/api/v1/add-comment');
       final response = await http.post(
         url,
         headers: {
@@ -989,9 +1005,10 @@ class _VideoFeedItemState extends State<VideoFeedItem> with SingleTickerProvider
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      log('Error$e');
+      // ScaffoldMessenger.of(context).showSnackBar(
+      //   SnackBar(content: Text('Error: $e')),
+      // );
     }
   }
 
@@ -1053,7 +1070,7 @@ class _VideoFeedItemState extends State<VideoFeedItem> with SingleTickerProvider
 
   void _copyLink() {
     Clipboard.setData(ClipboardData(
-      text: 'http://182.93.94.210:3065/content/${widget.content.id}',
+      text: 'http://182.93.94.210:3064/content/${widget.content.id}',
     ));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Link copied to clipboard')),
@@ -1069,7 +1086,7 @@ class _VideoFeedItemState extends State<VideoFeedItem> with SingleTickerProvider
     }
 
     try {
-      final url = Uri.parse('http://182.93.94.210:3065/api/v1/delete-content/${widget.content.id}');
+      final url = Uri.parse('http://182.93.94.210:3064/api/v1/delete-content/${widget.content.id}');
       final response = await http.delete(
         url,
         headers: {
@@ -1160,87 +1177,352 @@ class _VideoFeedItemState extends State<VideoFeedItem> with SingleTickerProvider
 class AutoPlayVideoWidget extends StatefulWidget {
   final String url;
   final double? height;
+  final double? width;
 
-  const AutoPlayVideoWidget({required this.url, this.height, Key? key}) 
-      : super(key: key);
+  const AutoPlayVideoWidget({
+    required this.url,
+    this.height,
+    this.width, 
+    Key? key,
+  }) : super(key: key);
 
   @override
-  _AutoPlayVideoWidgetState createState() => _AutoPlayVideoWidgetState();
+  State<AutoPlayVideoWidget> createState() => AutoPlayVideoWidgetState();
 }
 
-class _AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget> {
-  late VideoPlayerController _controller;
+class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
+    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
+  VideoPlayerController? _controller;
   bool _initialized = false;
-  bool _isMuted = true;
+  bool _isMuted = true; // Start muted
+  bool _disposed = false;
+  Timer? _initTimer;
+  bool _isPlaying = true;
+  final String videoId = UniqueKey().toString();
+  static final Map<String, AutoPlayVideoWidgetState> _activeVideos = {};
+  
+  @override
+  bool get wantKeepAlive => _initialized;
+
+  // Public methods to control the video from outside
+  void pauseVideo() {
+    if (_controller != null && !_disposed && _initialized) {
+      _controller!.pause();
+      setState(() {
+        _isPlaying = false;
+      });
+    }
+  }
+
+  void playVideo() {
+    if (_controller != null && !_disposed && _initialized) {
+      _controller!.play();
+      setState(() {
+        _isPlaying = true;
+      });
+    }
+  }
+
+  void muteVideo() {
+    if (_controller != null && !_disposed && _initialized) {
+      _controller!.setVolume(0.0).then((_) {
+        if (mounted) {
+          setState(() {
+            _isMuted = true;
+          });
+          developer.log('Video muted successfully for ID: $videoId', name: 'AutoPlayVideoWidget');
+        }
+      }).catchError((error) {
+        developer.log('Error muting video for ID: $videoId: $error', name: 'AutoPlayVideoWidget');
+      });
+    } else {
+      developer.log('Cannot mute video for ID: $videoId (controller null or disposed)', name: 'AutoPlayVideoWidget');
+    }
+  }
+
+  void unmuteVideo() {
+    if (_controller != null && !_disposed && _initialized) {
+      _controller!.setVolume(1.0);
+      setState(() {
+        _isMuted = false;
+      });
+    }
+  }
+
+  void pauseAndMute() {
+    pauseVideo();
+    muteVideo();
+  }
+
+  void resumeWithPreviousState(bool wasMuted) {
+    if (wasMuted) {
+      muteVideo();
+    } else {
+      unmuteVideo();
+    }
+    playVideo();
+  }
+
+  bool get isMuted => _isMuted;
+  bool get isPlaying => _isPlaying;
+  bool get isInitialized => _initialized;
 
   @override
   void initState() {
     super.initState();
-    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
+
+    _initializeVideoPlayer();
+    _activeVideos[videoId] = this;
+  }
+
+  void _initializeVideoPlayer() {
+    if (_disposed) return;
+    
+    _initTimer = Timer(const Duration(seconds: 30), () {
+      if (!_initialized && !_disposed) {
+        _handleInitializationError();
+      }
+    });
+
+    _controller = VideoPlayerController.networkUrl(
+      Uri.parse(widget.url),
+      videoPlayerOptions: VideoPlayerOptions(
+        mixWithOthers: true,
+        allowBackgroundPlayback: false,
+      ),
+    );
+
+    _controller!
       ..setLooping(true)
-      ..setVolume(_isMuted ? 0.0 : 1.0)
+      ..setVolume(0.0) // Start muted
       ..initialize().then((_) {
-        if (mounted) {
+        _initTimer?.cancel();
+        if (!_disposed && mounted) {
           setState(() {
             _initialized = true;
-            _controller.play();
           });
+          if (mounted) {
+            _controller!.play();
+          }
+        }
+      }).catchError((error) {
+        _initTimer?.cancel();
+        if (!_disposed) {
+          _handleInitializationError();
         }
       });
   }
 
+  void _handleVisibilityChanged(VisibilityInfo info) {
+    if (!mounted || _disposed || _controller == null) return;
+    
+    // Don't auto-play if gallery is open
+    
+    final visibleFraction = info.visibleFraction;
+    
+    if (visibleFraction > 0.5) {
+      // Video is mostly visible
+      _activeVideos[videoId] = this;
+      _muteOtherVideos();
+      if (_initialized && !_controller!.value.isPlaying && _isPlaying) {
+        _controller!.play();
+      }
+    } else {
+      // Video is mostly hidden
+      _activeVideos.remove(videoId);
+      if (_initialized && _controller!.value.isPlaying) {
+        _controller!.pause();
+      }
+    }
+  }
+
+  void _muteOtherVideos() {
+    for (final entry in _activeVideos.entries) {
+      if (entry.key != videoId) {
+        entry.value._controller?.pause();
+        entry.value._isMuted = true;
+        if (entry.value.mounted) {
+          entry.value.setState(() {});
+        }
+      }
+    }
+  }
+
+  // Static method to pause and mute all AutoPlay videos
+  static void pauseAllAutoPlayVideos() {
+    for (final entry in _activeVideos.entries) {
+      entry.value._controller?.pause();
+      entry.value._controller?.setVolume(0.0);
+      entry.value._isMuted = true;
+      entry.value._isPlaying = false;
+      if (entry.value.mounted) {
+        entry.value.setState(() {});
+      }
+    }
+  }
+
+  // Static method to resume all AutoPlay videos with their previous states
+  static void resumeAllAutoPlayVideos() {
+    for (final entry in _activeVideos.entries) {
+      if (entry.value._initialized && entry.value.mounted) {
+        entry.value._controller?.play();
+        entry.value._isPlaying = true;
+        // Keep them muted by default for auto-play behavior
+        entry.value._controller?.setVolume(0.0);
+        entry.value._isMuted = true;
+        entry.value.setState(() {});
+      }
+    }
+  }
+
+  void _handleInitializationError() {
+    if (mounted && !_disposed) {
+      setState(() {
+        _initialized = false;
+      });
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (_controller == null || _disposed) return;
+
+    switch (state) {
+      case AppLifecycleState.paused:
+      case AppLifecycleState.inactive:
+        _controller!.pause();
+        break;
+      case AppLifecycleState.resumed:
+        if (_initialized && mounted && _isPlaying) {
+          _controller!.play();
+        }
+        break;
+      case AppLifecycleState.detached:
+      case AppLifecycleState.hidden:
+        _controller!.pause();
+        break;
+    }
+  }
+
   @override
   void dispose() {
-    _controller.dispose();
+     _disposed = true;
+    _activeVideos.remove(videoId);
+    _initTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _controller?.dispose();
+    _controller = null;
     super.dispose();
   }
 
+  void _togglePlayPause() {
+    if (_controller == null || _disposed) return;
+    
+    setState(() {
+      _isPlaying = !_isPlaying;
+      if (_isPlaying) {
+        _controller!.play();
+      } else {
+        _controller!.pause();
+      }
+    });
+  }
+
   void _toggleMute() {
+    if (_controller == null || _disposed) return;
+    
     setState(() {
       _isMuted = !_isMuted;
-      _controller.setVolume(_isMuted ? 0.0 : 1.0);
+      _controller!.setVolume(_isMuted ? 0.0 : 1.0);
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!_initialized) {
-      return Container(
-        height: widget.height,
-        color: Colors.black,
-        child: Center(child: CircularProgressIndicator()),
-      );
-    }
+    super.build(context);
     
-    return GestureDetector(
-      onTap: () {
-        if (_controller.value.isPlaying) {
-          _controller.pause();
-        } else {
-          _controller.play();
-        }
-      },
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          AspectRatio(
-            aspectRatio: _controller.value.aspectRatio,
-            child: VideoPlayer(_controller),
-          ),
-          if (!_controller.value.isPlaying)
-            Icon(Icons.play_arrow, size: 50, color: Colors.white),
-          Positioned(
-            bottom: 10,
-            right: 10,
-            child: IconButton(
-              icon: Icon(
-                _isMuted ? Icons.volume_off : Icons.volume_up,
-                color: Colors.white,
+    return VisibilityDetector(
+      key: Key(videoId),
+      onVisibilityChanged: _handleVisibilityChanged,
+      child: Container(
+        height: widget.height ?? MediaQuery.of(context).size.height,
+        width: widget.width ?? MediaQuery.of(context).size.width,
+        color: Colors.white,
+        child: !_initialized || _controller == null
+            ? const Center(
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : LayoutBuilder(
+                builder: (context, constraints) {
+                  final size = _controller!.value.size;
+                  final aspectRatio = size.width / size.height;
+                  
+                  double targetWidth = constraints.maxWidth;
+                  double targetHeight = constraints.maxWidth / aspectRatio;
+
+                  if (targetHeight > constraints.maxHeight) {
+                    targetHeight = constraints.maxHeight;
+                    targetWidth = constraints.maxHeight * aspectRatio;
+                  }
+
+                  return Center(
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        GestureDetector(
+                          onTap: _togglePlayPause,
+                          child: SizedBox(
+                            width: targetWidth,
+                            height: targetHeight,
+                            child: VideoPlayer(_controller!),
+                          ),
+                        ),
+                         Positioned.fill(
+                        child: GestureDetector(
+                          onTap: _togglePlayPause,
+                          behavior: HitTestBehavior.translucent,
+                          child: Container(
+                            color: Colors.transparent,
+                          ),
+                        ),
+                      ),
+                        if (!_isPlaying)
+                          Icon(
+                            Icons.play_arrow,
+                            size: 50,
+                            color: Colors.white.withAlpha(80),
+                          ),
+                        Positioned(
+                          bottom: 8,
+                          right: 8,
+                          child: GestureDetector(
+                            onTap: _toggleMute,
+                            behavior: HitTestBehavior.opaque,
+                            child: Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white.withAlpha(50),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Icon(
+                                _isMuted ? Icons.volume_off : Icons.volume_up,
+                                color: Colors.white,
+                                size: 20,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
               ),
-              onPressed: _toggleMute,
-            ),
-          ),
-        ],
       ),
     );
   }

@@ -206,7 +206,7 @@ class _FAQScreenState extends State<FAQScreen> with SingleTickerProviderStateMix
               ),
             ),
           ),
-          FloatingMenuWidget(scaffoldKey: _scaffoldKey)
+          FloatingMenuWidget()
         ],
       ),
     );

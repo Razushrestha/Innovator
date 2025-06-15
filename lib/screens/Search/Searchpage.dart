@@ -250,7 +250,7 @@ class _SearchPageState extends State<SearchPage>
               ),
             ],
           ),
-          FloatingMenuWidget(scaffoldKey: _scaffoldKey),
+          FloatingMenuWidget(),
         ],
       ),
     );

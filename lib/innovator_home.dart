@@ -104,10 +104,22 @@ class _HomepageState extends State<Homepage> with SingleTickerProviderStateMixin
           // Add the floating menu widget
           FloatingMenuWidget(),
           Positioned(
-            top: mq.height * 0.01,
-            right: mq.width *.03,            
-            child: FeedToggleButton(onToggle: (bool isPost) { Navigator.push(context, MaterialPageRoute(builder: (_) => VideoFeedPage()));},))
-        ],
+  top: mq.height * 0.01,
+  right: mq.width * 0.03,
+  child: FeedToggleButton(
+    initialValue: true, // true for post feed (current page)
+    accentColor: Color.fromRGBO(244, 135, 6, 1),
+    onToggle: (bool isPost) {
+      if (!isPost) { // When switching to video feed
+        Navigator.push(
+          context, 
+          MaterialPageRoute(builder: (_) => VideoFeedPage())
+        );
+      }
+      // If isPost is true, stay on current page (already on post feed)
+    },
+  ),
+),        ],
       ),
     );
   }

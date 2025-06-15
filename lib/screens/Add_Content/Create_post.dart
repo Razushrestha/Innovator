@@ -933,7 +933,7 @@ class _CreatePostScreenState extends State<CreatePostScreen>
               ],
             ),
           ),
-          FloatingMenuWidget(scaffoldKey: _scaffoldKey),
+          FloatingMenuWidget(),
         ],
       ),
       bottomSheet: Container(

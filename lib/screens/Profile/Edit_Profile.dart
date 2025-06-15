@@ -729,7 +729,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                 ),
               ),
             ),
-          FloatingMenuWidget(scaffoldKey: _scaffoldKey),
+          FloatingMenuWidget(),
         ],
       ),
     );

@@ -79,14 +79,14 @@ class _SplashScreenState extends State<SplashScreen> {
                 height: 400,
               ),
               const SizedBox(height: 20),
-              const Text(
-                'My Awesome App',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
+              // const Text(
+              //   'My Awesome App',
+              //   style: TextStyle(
+              //     fontSize: 24,
+              //     fontWeight: FontWeight.bold,
+              //     color: Colors.white,
+              //   ),
+              // ),
               const SizedBox(height: 20),
               const CircularProgressIndicator(
                 valueColor: AlwaysStoppedAnimation<Color>(Colors.white),

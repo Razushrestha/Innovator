@@ -375,7 +375,7 @@ class _SignupState extends State<Signup> {
             // Show loading indicator if needed
             if (isLoading)
               Container(
-                color: Colors.black.withOpacity(0.3),
+                color: Colors.black.withAlpha(30),
                 child: const Center(
                   child: CircularProgressIndicator(),
                 ),

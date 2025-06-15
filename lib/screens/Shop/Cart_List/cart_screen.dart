@@ -452,7 +452,7 @@ class _CartScreenState extends State<CartScreen>
               },
             ),
           ),
-          FloatingMenuWidget(scaffoldKey: _scaffoldKey),
+          FloatingMenuWidget(),
         ],
       ),
     );

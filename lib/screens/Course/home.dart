@@ -204,7 +204,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             ],
           ),
         ),
-        FloatingMenuWidget(scaffoldKey: _scaffoldKey,)
+        FloatingMenuWidget()
         ]
       ),
     );

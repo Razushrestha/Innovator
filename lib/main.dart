@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:get/get.dart';
+import 'package:hive/hive.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:innovator/App_data/App_data.dart';
 import 'package:innovator/screens/Feed/Services/Feed_Cache_service.dart';
 import 'package:innovator/screens/Splash_Screen/splash_screen.dart';
@@ -71,10 +73,10 @@ Future<void> _initializeApp() async {
     debugPrint('🚀 Starting app initialization...');
     
     // Ensure Flutter binding is initialized
-    WidgetsFlutterBinding.ensureInitialized();
-    
+     WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
+
     // Initialize Firebase
-    await Firebase.initializeApp();
     debugPrint('✅ Firebase initialized');
     
     // Set background message handler
@@ -106,7 +108,12 @@ Future<void> _initializeApp() async {
     // Initialize GetX controller
     Get.put(UserController());
     debugPrint('✅ Controllers initialized');
-    
+    //Get.put(UserController());
+  await DrawerProfileCache.initialize();
+
+  await CacheManager.initialize();
+
+
     debugPrint('🎉 App initialization completed successfully');
   } catch (e) {
     debugPrint('❌ Error during app initialization: $e');
@@ -124,12 +131,11 @@ Future<void> _configureSystemUI() async {
 
 void main() async {
   await _initializeApp();
-    Get.put(UserController());
-
+ 
+  //  await Firebase.initializeApp();
+ 
   //await ProfileCacheManager.initialize();
-  await DrawerProfileCache.initialize();
 
-  await CacheManager.initialize();
 
   runApp(const ProviderScope(child: InnovatorHomePage()));
 }
@@ -180,7 +186,7 @@ class _InnovatorHomePageState extends ConsumerState<InnovatorHomePage> {
       theme: _buildAppTheme(),
       debugShowCheckedModeBanner: false,
       home: SplashScreen(),
-      getPages: _buildAppPages(),
+     // getPages: _buildAppPages(),
     );
   }
 
@@ -201,70 +207,70 @@ class _InnovatorHomePageState extends ConsumerState<InnovatorHomePage> {
     );
   }
 
-  List<GetPage> _buildAppPages() {
-    return [
-      GetPage(name: '/splash', page: () => const SplashScreen()),
-      GetPage(name: '/home', page: () => const HomeScreen()),
-      GetPage(name: '/chat', page: () => const ChatScreen()),
-      GetPage(name: '/profile', page: () => const ProfileScreen()),
-      GetPage(name: '/orders', page: () => const OrdersScreen()),
-    ];
-  }
+  // List<GetPage> _buildAppPages() {
+  //   return [
+  //     GetPage(name: '/splash', page: () => const SplashScreen()),
+  //     GetPage(name: '/home', page: () => const HomeScreen()),
+  //     GetPage(name: '/chat', page: () => const ChatScreen()),
+  //     GetPage(name: '/profile', page: () => const ProfileScreen()),
+  //     GetPage(name: '/orders', page: () => const OrdersScreen()),
+  //   ];
+  // }
 }
 
 // Screen Widgets
-class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
+// class HomeScreen extends StatelessWidget {
+//   const HomeScreen({super.key});
   
-  @override
-  Widget build(BuildContext context) {
-    final args = Get.arguments as Map<String, dynamic>?;
-    return Scaffold(
-      body: Center(
-        child: Text('Home Screen: ${args ?? ''}'),
-      ),
-    );
-  }
-}
+//   @override
+//   Widget build(BuildContext context) {
+//     final args = Get.arguments as Map<String, dynamic>?;
+//     return Scaffold(
+//       body: Center(
+//         child: Text('Home Screen: ${args ?? ''}'),
+//       ),
+//     );
+//   }
+// }
 
-class ChatScreen extends StatelessWidget {
-  const ChatScreen({super.key});
+// class ChatScreen extends StatelessWidget {
+//   const ChatScreen({super.key});
   
-  @override
-  Widget build(BuildContext context) {
-    final args = Get.arguments as Map<String, dynamic>?;
-    return Scaffold(
-      body: Center(
-        child: Text('Chat Screen: ${args ?? ''}'),
-      ),
-    );
-  }
-}
+//   @override
+//   Widget build(BuildContext context) {
+//     final args = Get.arguments as Map<String, dynamic>?;
+//     return Scaffold(
+//       body: Center(
+//         child: Text('Chat Screen: ${args ?? ''}'),
+//       ),
+//     );
+//   }
+// }
 
-class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({super.key});
+// class ProfileScreen extends StatelessWidget {
+//   const ProfileScreen({super.key});
   
-  @override
-  Widget build(BuildContext context) {
-    final args = Get.arguments as Map<String, dynamic>?;
-    return Scaffold(
-      body: Center(
-        child: Text('Profile Screen: ${args ?? ''}'),
-      ),
-    );
-  }
-}
+//   @override
+//   Widget build(BuildContext context) {
+//     final args = Get.arguments as Map<String, dynamic>?;
+//     return Scaffold(
+//       body: Center(
+//         child: Text('Profile Screen: ${args ?? ''}'),
+//       ),
+//     );
+//   }
+// }
 
-class OrdersScreen extends StatelessWidget {
-  const OrdersScreen({super.key});
+// class OrdersScreen extends StatelessWidget {
+//   const OrdersScreen({super.key});
   
-  @override
-  Widget build(BuildContext context) {
-    final args = Get.arguments as Map<String, dynamic>?;
-    return Scaffold(
-      body: Center(
-        child: Text('Orders Screen: ${args ?? ''}'),
-      ),
-    );
-  }
-}
+//   @override
+//   Widget build(BuildContext context) {
+//     final args = Get.arguments as Map<String, dynamic>?;
+//     return Scaffold(
+//       body: Center(
+//         child: Text('Orders Screen: ${args ?? ''}'),
+//       ),
+//     );
+//   }
+// }

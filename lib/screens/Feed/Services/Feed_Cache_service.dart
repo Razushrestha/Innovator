@@ -5,7 +5,7 @@ import 'package:path_provider/path_provider.dart';
 
 class CacheManager {
   static const String feedBoxName = 'feed_cache';
-  static const int maxCachedItems = 50;
+  static const int maxCachedItems = 20;
 
   static Future<void> initialize() async {
     final appDir = await getApplicationDocumentsDirectory();

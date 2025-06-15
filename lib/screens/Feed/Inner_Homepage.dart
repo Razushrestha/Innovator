@@ -34,6 +34,7 @@ import 'dart:typed_data';
 import 'dart:developer' as developer;
 import 'package:share_plus/share_plus.dart'; // <-- Add this import
 import 'package:url_launcher/url_launcher.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 
 // Enhanced Author model
 class Author {
@@ -175,7 +176,6 @@ class FeedContent {
   bool get hasWordDocs => _hasWordDocs;
 }
 
-
 // Add at the top of inner_home_page.dart, below existing imports
 class ContentResponse {
   final int status;
@@ -219,12 +219,14 @@ class ContentData {
 
   factory ContentData.fromJson(Map<String, dynamic> json) {
     return ContentData(
-      videoContents: (json['videoContents'] as List<dynamic>? ?? [])
-          .map((item) => FeedContent.fromJson(item as Map<String, dynamic>))
-          .toList(),
-      normalContents: (json['normalContents'] as List<dynamic>? ?? [])
-          .map((item) => FeedContent.fromJson(item as Map<String, dynamic>))
-          .toList(),
+      videoContents:
+          (json['videoContents'] as List<dynamic>? ?? [])
+              .map((item) => FeedContent.fromJson(item as Map<String, dynamic>))
+              .toList(),
+      normalContents:
+          (json['normalContents'] as List<dynamic>? ?? [])
+              .map((item) => FeedContent.fromJson(item as Map<String, dynamic>))
+              .toList(),
       hasMoreVideos: json['hasMoreVideos'] as bool? ?? false,
       hasMoreNormal: json['hasMoreNormal'] as bool? ?? false,
       nextVideoCursor: json['nextVideoCursor'] as String?,
@@ -283,7 +285,7 @@ class Inner_HomePage extends StatefulWidget {
 }
 
 class _Inner_HomePageState extends State<Inner_HomePage> {
-final ChatListController chatController = Get.put(ChatListController());
+  final ChatListController chatController = Get.put(ChatListController());
 
   final List<FeedContent> _videoContents = [];
   final List<FeedContent> _normalContents = [];
@@ -339,13 +341,14 @@ final ChatListController chatController = Get.put(ChatListController());
   }
 
   Future<void> _loadMoreContent() async {
-    if (_isLoading || (!_hasMoreNormal && !_hasMoreVideos) || _isRefreshingToken) return;
-
+    if (_isLoading ||
+        (!_hasMoreNormal && !_hasMoreVideos) ||
+        _isRefreshingToken)
+      return;
     setState(() {
       _isLoading = true;
       _hasError = false;
     });
-
     try {
       if (!_isOnline) {
         // Load cached data when offline
@@ -362,11 +365,9 @@ final ChatListController chatController = Get.put(ChatListController());
         });
         return;
       }
-      
-
       if (!await _verifyToken()) return;
 
-     final contentData = await FeedApiService.fetchContents(
+      final contentData = await FeedApiService.fetchContents(
         lastId: _nextVideoCursor ?? _nextNormalCursor,
         context: context,
       );
@@ -394,8 +395,6 @@ final ChatListController chatController = Get.put(ChatListController());
       });
     }
   }
-
-  
 
   Future<void> _requestNotificationPermission() async {
     try {
@@ -446,50 +445,6 @@ final ChatListController chatController = Get.put(ChatListController());
     }
     return true;
   }
-
-  // Future<http.Response> _makeApiRequest() async {
-  //   final url =
-  //       _lastId == null
-  //           ? 'http://182.93.94.210:3065/api/v1/list-contents'
-  //           : 'http://182.93.94.210:3065/api/v1/list-contents?lastId=$_lastId';
-
-  //   debugPrint('Request URL: $url');
-  //   final response = await http
-  //       .get(
-  //         Uri.parse(url),
-  //         headers: {
-  //           'Content-Type': 'application/json',
-  //           'Accept': 'application/json',
-  //           'authorization': 'Bearer ${_appData.authToken}',
-  //         },
-  //       )
-  //       .timeout(Duration(seconds: 30));
-  //   debugPrint('Response: ${response.body}');
-  //   return response;
-  // }
-
-  // Future<void> _handleUnauthorizedError() async {
-  //   if (!_isRefreshingToken) {
-  //     _isRefreshingToken = true;
-  //     final success = await _refreshToken();
-  //     _isRefreshingToken = false;
-
-  //     if (success) {
-  //       await _loadMoreContent();
-  //     } else {
-  //       await _appData.logout();
-  //       Navigator.pushAndRemoveUntil(
-  //         context,
-  //         MaterialPageRoute(builder: (_) => LoginPage()),
-  //         (route) => false,
-  //       );
-  //       setState(() {
-  //         _hasError = true;
-  //         _errorMessage = 'Session expired. Please login again.';
-  //       });
-  //     }
-  //   }
-  // }
 
   Future<bool> _refreshToken() async {
     try {
@@ -573,45 +528,35 @@ final ChatListController chatController = Get.put(ChatListController());
         onRefresh: _refresh,
         child: CustomScrollView(
           controller: _scrollController,
+          physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             SliverList(
-              delegate: SliverChildListDelegate([
-              // Videos Section
-              // if (_videoContents.isNotEmpty)
-              //   const Padding(
-              //     padding: EdgeInsets.all(16.0),
-              //     child: Text(
-              //       'Videos',
-              //       style: TextStyle(
-              //         fontSize: 20,
-              //         fontWeight: FontWeight.bold,
-              //         color: Colors.black87,
-              //       ),
-              //     ),
-              //   ),
-              ..._videoContents.map((content) => _buildContentItem(content)),
-              // Posts Section
-              // if (_normalContents.isNotEmpty)
-              //   const Padding(
-              //     padding: EdgeInsets.all(16.0),
-              //     child: Text(
-              //       'Posts',
-              //       style: TextStyle(
-              //         fontSize: 20,
-              //         fontWeight: FontWeight.bold,
-              //         color: Colors.black87,
-              //       ),
-              //     ),
-              //   ),
-              ..._normalContents.map((content) => _buildContentItem(content)),
-              
-              // Loading Indicator
-              _buildLoadingIndicator(),
-            ]),
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  if (index < _videoContents.length) {
+                    return _buildContentItem(_videoContents[index]);
+                  }
+                  final normalIndex = index - _videoContents.length;
+                  if (normalIndex < _normalContents.length) {
+                    return _buildContentItem(_normalContents[normalIndex]);
+                  }
+                  return null;
+                },
+                childCount:
+                    _videoContents.length +
+                    _normalContents.length +
+                    (_isLoading ? 1 : 0),
+              ),
             ),
+             if (_isLoading)
+      SliverToBoxAdapter(
+        child: Center(child: CircularProgressIndicator()),
+      ),
             if (_hasError) SliverFillRemaining(child: _buildErrorView()),
-            if (_videoContents.isEmpty && _normalContents.isEmpty &&!_isLoading && !_hasError)
-            
+            if (_videoContents.isEmpty &&
+                _normalContents.isEmpty &&
+                !_isLoading &&
+                !_hasError)
               SliverFillRemaining(child: _buildEmptyView()),
           ],
         ),
@@ -647,7 +592,7 @@ final ChatListController chatController = Get.put(ChatListController());
                           }
 
                           // Navigate to ChatListScreen
-                           await Navigator.push(
+                          await Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder:
@@ -740,12 +685,10 @@ final ChatListController chatController = Get.put(ChatListController());
   }
 
   Widget _buildErrorView() {
-    if(!_isOnline)
-    {
+    if (!_isOnline) {
       _refresh();
     }
-    if(_isOnline)
-    {
+    if (_isOnline) {
       _loadMoreContent();
     }
     return Center(
@@ -796,10 +739,7 @@ final ChatListController chatController = Get.put(ChatListController());
         ),
       ),
     );
-
-   }
-    
-  
+  }
 
   Widget _buildEmptyView() {
     return Center(
@@ -947,25 +887,10 @@ class _FeedItemState extends State<FeedItem>
           developer.log(
             'View recorded for content ID: ${widget.content.id}, Views: ${data['data']['views']}',
           );
-          // Optionally, update local state if view count is needed in UI
         } else {
           log('Error Failed to record View');
-          // Get.snackbar(
-          //   'Error',
-          //   'Failed to record view: Invalid response',
-          //   backgroundColor: Colors.red,
-          //   colorText: Colors.white,
-          //   duration: const Duration(seconds: 3),
-          // );
         }
       } else if (response.statusCode == 401) {
-        // Get.snackbar(
-        //   'Error',
-        //   'Session expired. Please login again.',
-        //   backgroundColor: Colors.red,
-        //   colorText: Colors.white,
-        //   duration: const Duration(seconds: 3),
-        // );
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => LoginPage()),
@@ -973,25 +898,9 @@ class _FeedItemState extends State<FeedItem>
         );
       } else {
         log('Error${response.statusCode}');
-        // Get.snackbar(
-        //   'Error',
-        //   'Failed to record view: ${response.statusCode}',
-        //   backgroundColor: Colors.red,
-        //   colorText: Colors.white,
-        //   duration: const Duration(seconds: 3),
-        // );
       }
     } catch (e) {
-      // Reset the flag so it can retry later when connection is restored
       _hasRecordedView = false;
-
-      // Get.snackbar(
-      //   'Error',
-      //   'Error Please Contact to Support Team',
-      //   backgroundColor: Colors.red,
-      //   colorText: Colors.white,
-      //   duration: const Duration(seconds: 3),
-      // );
       developer.log(
         'Error recording view for content ID: ${widget.content.id}, Error: $e',
       );
@@ -999,11 +908,6 @@ class _FeedItemState extends State<FeedItem>
   }
 
   bool _isAuthorCurrentUser() {
-    // final userController = Get.find<UserController>();
-  // Compare based on your user identification logic
-  // This could be user ID, email, or any unique identifier
- // return widget.content.author.id == userController.currentUserId || 
-   //      widget.content.author.email == userController.currentUserEmail;
     if (AppData().isCurrentUser(widget.content.author.id)) {
       developer.log('isAuthorCurrentUser: Matched via AppData');
       return true;
@@ -1030,7 +934,6 @@ class _FeedItemState extends State<FeedItem>
     } else {
       developer.log('isAuthorCurrentUser: No auth token available');
     }
-
     return false;
   }
 
@@ -1078,30 +981,31 @@ class _FeedItemState extends State<FeedItem>
                 children: [
                   // Enhanced Avatar
                   Hero(
-  tag: 'avatar_${widget.content.author.id}_${_isAuthorCurrentUser() ? Get.find<UserController>().profilePictureVersion.value : 0}',
-  child: Container(
-    decoration: BoxDecoration(
-      shape: BoxShape.circle,
-      gradient: LinearGradient(
-        colors: [
-          Colors.blue.shade400,
-          Colors.purple.shade400,
-        ],
-      ),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.blue.withAlpha(30),
-          blurRadius: 12.0,
-          offset: const Offset(0, 4),
-        ),
-      ],
-    ),
-    child: Padding(
-      padding: const EdgeInsets.all(2.0),
-      child: _buildAuthorAvatar(),
-    ),
-  ),
-),
+                    tag:
+                        'avatar_${widget.content.author.id}_${_isAuthorCurrentUser() ? Get.find<UserController>().profilePictureVersion.value : 0}',
+                    child: Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          colors: [
+                            Colors.blue.shade400,
+                            Colors.purple.shade400,
+                          ],
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.blue.withAlpha(30),
+                            blurRadius: 12.0,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(2.0),
+                        child: _buildAuthorAvatar(),
+                      ),
+                    ),
+                  ),
                   const SizedBox(width: 16.0),
 
                   // Author Info
@@ -2325,9 +2229,10 @@ class _FeedItemState extends State<FeedItem>
 
   void _copyContentToClipboard() {
     Clipboard.setData(ClipboardData(text: widget.content.status));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Content copied to clipboard')),
-    );
+    Get.snackbar('Copied', 'Content copied to clipboard', backgroundColor: Colors.green, colorText: Colors.white);
+    // ScaffoldMessenger.of(context).showSnackBar(
+    //   Get.SnackBar(content: Text('')),
+    // );
   }
 
   void _showReportLinkButton(BuildContext context) {
@@ -2478,81 +2383,89 @@ class _FeedItemState extends State<FeedItem>
   }
 
   Widget _buildAuthorAvatar() {
-  final userController = Get.find<UserController>();
-  
-  // Check if this is the current user's post
-  if (_isAuthorCurrentUser()) {
-    return Obx(() {
-      final picturePath = userController.getFullProfilePicturePath();
-      final version = userController.profilePictureVersion.value;
-      
-      return GestureDetector(
-        onTap: () {
-          _showBigAvatarDialog(
-            context,
-            picturePath != null ? '$picturePath?v=$version' : null,
-            widget.content.author.name,
-          );
-        },
-        child: CircleAvatar(
-          key: ValueKey('feed_avatar_${widget.content.author.id}_$version'), // Force rebuild
-          backgroundImage: picturePath != null 
-              ? NetworkImage('$picturePath?v=$version') // Add version parameter
-              : null,
-          child: picturePath == null || picturePath.isEmpty
-              ? Text(
-                  widget.content.author.name.isNotEmpty
-                      ? widget.content.author.name[0].toUpperCase()
-                      : '?',
-                )
-              : null,
-        ),
-      );
-    });// initilizing Get in the code 
-  }
+    final userController = Get.find<UserController>();
+
+    // Check if this is the current user's post
+    if (_isAuthorCurrentUser()) {
+      return Obx(() {
+        final picturePath = userController.getFullProfilePicturePath();
+        final version = userController.profilePictureVersion.value;
+
+        return GestureDetector(
+          onTap: () {
+            _showBigAvatarDialog(
+              context,
+              picturePath != null ? '$picturePath?v=$version' : null,
+              widget.content.author.name,
+            );
+          },
+          child: CircleAvatar(
+            key: ValueKey(
+              'feed_avatar_${widget.content.author.id}_$version',
+            ), // Force rebuild
+            backgroundImage:
+                picturePath != null
+                    ? NetworkImage(
+                      '$picturePath?v=$version',
+                    ) // Add version parameter
+                    : null,
+            child:
+                picturePath == null || picturePath.isEmpty
+                    ? Text(
+                      widget.content.author.name.isNotEmpty
+                          ? widget.content.author.name[0].toUpperCase()
+                          : '?',
+                    )
+                    : null,
+          ),
+        );
+      }); // initilizing Get in the code
+    }
 
     // For other users' posts
     if (widget.content.author.picture.isEmpty) {
+      return GestureDetector(
+        onTap: () {
+          _showBigAvatarDialog(context, null, widget.content.author.name);
+        },
+        child: CircleAvatar(
+          child: Text(
+            widget.content.author.name.isNotEmpty
+                ? widget.content.author.name[0].toUpperCase()
+                : '?',
+          ),
+        ),
+      );
+    }
+
     return GestureDetector(
       onTap: () {
-        _showBigAvatarDialog(context, null, widget.content.author.name);
+        _showBigAvatarDialog(
+          context,
+          'http://182.93.94.210:3065${widget.content.author.picture}',
+          widget.content.author.name,
+        );
       },
-      child: CircleAvatar(
-        child: Text(
-          widget.content.author.name.isNotEmpty
-              ? widget.content.author.name[0].toUpperCase()
-              : '?',
-        ),
+      child: CachedNetworkImage(
+        imageUrl: 'http://182.93.94.210:3065${widget.content.author.picture}',
+        imageBuilder:
+            (context, imageProvider) =>
+                CircleAvatar(backgroundImage: imageProvider),
+        placeholder:
+            (context, url) => const CircleAvatar(
+              child: CircularProgressIndicator(strokeWidth: 2.0),
+            ),
+        errorWidget:
+            (context, url, error) => CircleAvatar(
+              child: Text(
+                widget.content.author.name.isNotEmpty
+                    ? widget.content.author.name[0].toUpperCase()
+                    : '?',
+              ),
+            ),
       ),
     );
   }
-
-      return GestureDetector(
-    onTap: () {
-      _showBigAvatarDialog(
-        context,
-        'http://182.93.94.210:3065${widget.content.author.picture}',
-        widget.content.author.name,
-      );
-    },
-    child: CachedNetworkImage(
-      imageUrl: 'http://182.93.94.210:3065${widget.content.author.picture}',
-      imageBuilder: (context, imageProvider) => CircleAvatar(
-        backgroundImage: imageProvider,
-      ),
-      placeholder: (context, url) => const CircleAvatar(
-        child: CircularProgressIndicator(strokeWidth: 2.0),
-      ),
-      errorWidget: (context, url, error) => CircleAvatar(
-        child: Text(
-          widget.content.author.name.isNotEmpty
-              ? widget.content.author.name[0].toUpperCase()
-              : '?',
-        ),
-      ),
-    ),
-  );
-}
 
   // ...existing code...
   void _showBigAvatarDialog(
@@ -2622,176 +2535,219 @@ class _FeedItemState extends State<FeedItem>
   }
 
   Widget _buildMediaPreview() {
-  final mediaUrls = widget.content.mediaUrls;
+    final mediaUrls = widget.content.mediaUrls;
 
-  if (mediaUrls.isEmpty) {
-    developer.log('No media URLs found for content ID: ${widget.content.id}', name: 'MediaPreview');
-    return const SizedBox.shrink();
-  }
-
-  developer.log('Processing ${mediaUrls.length} media URLs for content ID: ${widget.content.id}', name: 'MediaPreview');
-
-  if (mediaUrls.length == 1) {
-    final fileUrl = mediaUrls.first;
-
-    if (FileTypeHelper.isImage(fileUrl)) {
-      developer.log('Loading single image: $fileUrl', name: 'MediaPreview.Image');
-      return LimitedBox(
-        maxHeight: 450.0,
-        child: GestureDetector(
-          onTap: () => _showMediaGallery(context, mediaUrls, 0),
-          child: _OptimizedNetworkImage(url: fileUrl, height: 250.0),
-        ),
+    if (mediaUrls.isEmpty) {
+      developer.log(
+        'No media URLs found for content ID: ${widget.content.id}',
+        name: 'MediaPreview',
       );
-    } else if (FileTypeHelper.isVideo(fileUrl)) {
-      developer.log('Loading single video: $fileUrl', name: 'MediaPreview.Video');
-      // Portrait video detection and display
-      return FutureBuilder<Size>(
-        future: _getVideoSize(fileUrl),
-        builder: (context, snapshot) {
-          double maxHeight = 250.0;
-          double? aspectRatio;
-          if (snapshot.hasData) {
-            final size = snapshot.data!;
-            aspectRatio = size.width / size.height;
-            developer.log('Video size retrieved: width=${size.width}, height=${size.height}, aspectRatio=$aspectRatio', name: 'MediaPreview.Video');
-            // Portrait if height > width (aspectRatio < 1)
-            if (aspectRatio < 1) {
-              maxHeight = 400.0; // Taller for portrait videos
-            }
-          } else if (snapshot.hasError) {
-            developer.log('Error retrieving video size for $fileUrl: ${snapshot.error}', name: 'MediaPreview.Video', error: snapshot.error);
-          }
-          return Container(
-            color: Colors.black,
-            alignment: Alignment.center,
-            child: LimitedBox(
-              maxHeight: maxHeight,
-              child: GestureDetector(
-                onTap: () => _showMediaGallery(context, mediaUrls, 0),
-                child: AutoPlayVideoWidget(url: fileUrl, height: maxHeight),
-              ),
-            ),
-          );
-        },
-      );
-    } else if (FileTypeHelper.isPdf(fileUrl)) {
-      developer.log('Loading single PDF: $fileUrl', name: 'MediaPreview.PDF');
-      return _buildDocumentPreview(
-        fileUrl,
-        'PDF Document',
-        Icons.picture_as_pdf,
-        Colors.red,
-      );
-    } else if (FileTypeHelper.isWordDoc(fileUrl)) {
-      developer.log('Loading single Word document: $fileUrl', name: 'MediaPreview.WordDoc');
-      return _buildDocumentPreview(
-        fileUrl,
-        'Word Document',
-        Icons.description,
-        Colors.blue,
-      );
+      return const SizedBox.shrink();
     }
-  }
 
-  developer.log('Building grid view for ${mediaUrls.length} media items', name: 'MediaPreview.Grid');
-  return LimitedBox(
-    maxHeight: 300.0,
-    child: LayoutBuilder(
-      builder: (context, constraints) {
-        return GridView.builder(
-          physics: const NeverScrollableScrollPhysics(),
-          shrinkWrap: true,
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            crossAxisSpacing: 4.0,
-            mainAxisSpacing: 4.0,
+    developer.log(
+      'Processing ${mediaUrls.length} media URLs for content ID: ${widget.content.id}',
+      name: 'MediaPreview',
+    );
+
+    if (mediaUrls.length == 1) {
+      final fileUrl = mediaUrls.first;
+
+      if (FileTypeHelper.isImage(fileUrl)) {
+        developer.log(
+          'Loading single image: $fileUrl',
+          name: 'MediaPreview.Image',
+        );
+        return LimitedBox(
+          maxHeight: 450.0,
+          child: GestureDetector(
+            onTap: () => _showMediaGallery(context, mediaUrls, 0),
+            child: _OptimizedNetworkImage(url: fileUrl, height: 250.0),
           ),
-          itemCount: mediaUrls.length > 4 ? 4 : mediaUrls.length,
-          itemBuilder: (context, index) {
-            final fileUrl = mediaUrls[index];
-
-            if (index == 3 && mediaUrls.length > 4) {
-              developer.log('Showing +${mediaUrls.length - 4} more items overlay', name: 'MediaPreview.Grid');
-              return GestureDetector(
-                onTap: () => _showMediaGallery(context, mediaUrls, index),
-                child: Container(
-                  color: Colors.black.withOpacity(0.5),
-                  child: Center(
-                    child: Text(
-                      '+${mediaUrls.length - 4}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
+        );
+      } else if (FileTypeHelper.isVideo(fileUrl)) {
+        developer.log(
+          'Loading single video: $fileUrl',
+          name: 'MediaPreview.Video',
+        );
+        // Portrait video detection and display
+        return FutureBuilder<Size>(
+          future: _getVideoSize(fileUrl),
+          builder: (context, snapshot) {
+            double maxHeight = 250.0;
+            double? aspectRatio;
+            if (snapshot.hasData) {
+              final size = snapshot.data!;
+              aspectRatio = size.width / size.height;
+              developer.log(
+                'Video size retrieved: width=${size.width}, height=${size.height}, aspectRatio=$aspectRatio',
+                name: 'MediaPreview.Video',
+              );
+              // Portrait if height > width (aspectRatio < 1)
+              if (aspectRatio < 1) {
+                maxHeight = 400.0; // Taller for portrait videos
+              }
+            } else if (snapshot.hasError) {
+              developer.log(
+                'Error retrieving video size for $fileUrl: ${snapshot.error}',
+                name: 'MediaPreview.Video',
+                error: snapshot.error,
               );
             }
-
-            if (FileTypeHelper.isImage(fileUrl)) {
-              developer.log('Loading grid image at index $index: $fileUrl', name: 'MediaPreview.Image');
-              return GestureDetector(
-                onTap: () => _showMediaGallery(context, mediaUrls, index),
-                child: _OptimizedNetworkImage(url: fileUrl),
-              );
-            } else if (FileTypeHelper.isVideo(fileUrl)) {
-              developer.log('Loading grid video at index $index: $fileUrl', name: 'MediaPreview.Video');
-              return GestureDetector(
-                onTap: () => _showMediaGallery(context, mediaUrls, index),
-                child: AutoPlayVideoWidget(url: fileUrl),
-              );
-            } else if (FileTypeHelper.isPdf(fileUrl)) {
-              developer.log('Loading grid PDF at index $index: $fileUrl', name: 'MediaPreview.PDF');
-              return GestureDetector(
-                onTap: () => _showMediaGallery(context, mediaUrls, index),
-                child: Container(
-                  color: Colors.grey[200],
-                  child: const Center(
-                    child: Icon(
-                      Icons.picture_as_pdf,
-                      size: 32,
-                      color: Colors.red,
-                    ),
-                  ),
-                ),
-              );
-            } else if (FileTypeHelper.isWordDoc(fileUrl)) {
-              developer.log('Loading grid Word document at index $index: $fileUrl', name: 'MediaPreview.WordDoc');
-              return GestureDetector(
-                onTap: () => _showMediaGallery(context, mediaUrls, index),
-                child: Container(
-                  color: Colors.grey[200],
-                  child: const Center(
-                    child: Icon(
-                      Icons.description,
-                      size: 32,
-                      color: Colors.blue,
-                    ),
-                  ),
-                ),
-              );
-            }
-
-            developer.log('Loading unknown file type at index $index: $fileUrl', name: 'MediaPreview.Unknown');
             return Container(
-              color: Colors.grey[200],
-              child: const Center(
-                child: Icon(
-                  Icons.insert_drive_file,
-                  size: 32,
-                  color: Colors.grey,
+              color: Colors.black,
+              alignment: Alignment.center,
+              child: LimitedBox(
+                maxHeight: maxHeight,
+                child: GestureDetector(
+                  onTap: () => _showMediaGallery(context, mediaUrls, 0),
+                  child: AutoPlayVideoWidget(url: fileUrl, height: maxHeight),
                 ),
               ),
             );
           },
         );
-      },
-    ),
-  );
-}
+      } else if (FileTypeHelper.isPdf(fileUrl)) {
+        developer.log('Loading single PDF: $fileUrl', name: 'MediaPreview.PDF');
+        return _buildDocumentPreview(
+          fileUrl,
+          'PDF Document',
+          Icons.picture_as_pdf,
+          Colors.red,
+        );
+      } else if (FileTypeHelper.isWordDoc(fileUrl)) {
+        developer.log(
+          'Loading single Word document: $fileUrl',
+          name: 'MediaPreview.WordDoc',
+        );
+        return _buildDocumentPreview(
+          fileUrl,
+          'Word Document',
+          Icons.description,
+          Colors.blue,
+        );
+      }
+    }
+
+    developer.log(
+      'Building grid view for ${mediaUrls.length} media items',
+      name: 'MediaPreview.Grid',
+    );
+    return LimitedBox(
+      maxHeight: 300.0,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return GridView.builder(
+            physics: const NeverScrollableScrollPhysics(),
+            shrinkWrap: true,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 4.0,
+              mainAxisSpacing: 4.0,
+            ),
+            itemCount: mediaUrls.length > 4 ? 4 : mediaUrls.length,
+            itemBuilder: (context, index) {
+              final fileUrl = mediaUrls[index];
+
+              if (index == 3 && mediaUrls.length > 4) {
+                developer.log(
+                  'Showing +${mediaUrls.length - 4} more items overlay',
+                  name: 'MediaPreview.Grid',
+                );
+                return GestureDetector(
+                  onTap: () => _showMediaGallery(context, mediaUrls, index),
+                  child: Container(
+                    color: Colors.black.withAlpha(50),
+                    child: Center(
+                      child: Text(
+                        '+${mediaUrls.length - 4}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }
+
+              if (FileTypeHelper.isImage(fileUrl)) {
+                developer.log(
+                  'Loading grid image at index $index: $fileUrl',
+                  name: 'MediaPreview.Image',
+                );
+                return GestureDetector(
+                  onTap: () => _showMediaGallery(context, mediaUrls, index),
+                  child: _OptimizedNetworkImage(url: fileUrl),
+                );
+              } else if (FileTypeHelper.isVideo(fileUrl)) {
+                developer.log(
+                  'Loading grid video at index $index: $fileUrl',
+                  name: 'MediaPreview.Video',
+                );
+                return GestureDetector(
+                  onTap: () => _showMediaGallery(context, mediaUrls, index),
+                  child: AutoPlayVideoWidget(url: fileUrl),
+                );
+              } else if (FileTypeHelper.isPdf(fileUrl)) {
+                developer.log(
+                  'Loading grid PDF at index $index: $fileUrl',
+                  name: 'MediaPreview.PDF',
+                );
+                return GestureDetector(
+                  onTap: () => _showMediaGallery(context, mediaUrls, index),
+                  child: Container(
+                    color: Colors.grey[200],
+                    child: const Center(
+                      child: Icon(
+                        Icons.picture_as_pdf,
+                        size: 32,
+                        color: Colors.red,
+                      ),
+                    ),
+                  ),
+                );
+              } else if (FileTypeHelper.isWordDoc(fileUrl)) {
+                developer.log(
+                  'Loading grid Word document at index $index: $fileUrl',
+                  name: 'MediaPreview.WordDoc',
+                );
+                return GestureDetector(
+                  onTap: () => _showMediaGallery(context, mediaUrls, index),
+                  child: Container(
+                    color: Colors.grey[200],
+                    child: const Center(
+                      child: Icon(
+                        Icons.description,
+                        size: 32,
+                        color: Colors.blue,
+                      ),
+                    ),
+                  ),
+                );
+              }
+
+              developer.log(
+                'Loading unknown file type at index $index: $fileUrl',
+                name: 'MediaPreview.Unknown',
+              );
+              return Container(
+                color: Colors.grey[200],
+                child: const Center(
+                  child: Icon(
+                    Icons.insert_drive_file,
+                    size: 32,
+                    color: Colors.grey,
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
 
   // Helper to get video size (width/height) using VideoPlayerController
   Future<Size> _getVideoSize(String url) async {
@@ -2900,9 +2856,10 @@ class FeedApiService {
         headers['authorization'] = 'Bearer $authToken';
       }
 
-      final String url = lastId == null
-          ? '$baseUrl/api/v1/list-contents'
-          : '$baseUrl/api/v1/list-contents?lastId=$lastId';
+      final String url =
+          lastId == null
+              ? '$baseUrl/api/v1/list-contents'
+              : '$baseUrl/api/v1/list-contents?quality=auto&lastId=$lastId';
 
       final response = await http
           .get(Uri.parse(url), headers: headers)
@@ -2924,7 +2881,9 @@ class FeedApiService {
               );
               videoContents.add(item.copyWith(isFollowed: isFollowing));
             } catch (e) {
-              print('Error checking follow status for ${item.author.email}: $e');
+              print(
+                'Error checking follow status for ${item.author.email}: $e',
+              );
               videoContents.add(item);
             }
           }
@@ -2937,7 +2896,9 @@ class FeedApiService {
               );
               normalContents.add(item.copyWith(isFollowed: isFollowing));
             } catch (e) {
-              print('Error checking follow status for ${item.author.email}: $e');
+              print(
+                'Error checking follow status for ${item.author.email}: $e',
+              );
               normalContents.add(item);
             }
           }
@@ -3025,7 +2986,6 @@ extension DateTimeExtension on DateTime {
   }
 }
 
-// Auto Video Play
 class AutoPlayVideoWidget extends StatefulWidget {
   final String url;
   final double? height;
@@ -3039,31 +2999,109 @@ class AutoPlayVideoWidget extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<AutoPlayVideoWidget> createState() => _AutoPlayVideoWidgetState();
+  State<AutoPlayVideoWidget> createState() => AutoPlayVideoWidgetState();
 }
 
-class _AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
+class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
     with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   VideoPlayerController? _controller;
   bool _initialized = false;
-  bool _isMuted = false;
+  bool _isMuted = true; // Start muted
   bool _disposed = false;
   Timer? _initTimer;
-  
+  bool _isPlaying = true;
+  final String videoId = UniqueKey().toString();
+  static final Map<String, AutoPlayVideoWidgetState> _activeVideos = {};
+
   @override
-  bool get wantKeepAlive => _initialized;
+  bool get wantKeepAlive => true;
+
+  // Public methods to control the video from outside
+  void pauseVideo() {
+    if (_controller != null && !_disposed && _initialized) {
+      _controller!.pause();
+      setState(() {
+        _isPlaying = false;
+      });
+    }
+  }
+
+  void playVideo() {
+    if (_controller != null && !_disposed && _initialized) {
+      _controller!.play();
+      setState(() {
+        _isPlaying = true;
+      });
+    }
+  }
+
+  void muteVideo() {
+    if (_controller != null && !_disposed && _initialized) {
+      _controller!
+          .setVolume(0.0)
+          .then((_) {
+            if (mounted) {
+              setState(() {
+                _isMuted = true;
+              });
+              developer.log(
+                'Video muted successfully for ID: $videoId',
+                name: 'AutoPlayVideoWidget',
+              );
+            }
+          })
+          .catchError((error) {
+            developer.log(
+              'Error muting video for ID: $videoId: $error',
+              name: 'AutoPlayVideoWidget',
+            );
+          });
+    } else {
+      developer.log(
+        'Cannot mute video for ID: $videoId (controller null or disposed)',
+        name: 'AutoPlayVideoWidget',
+      );
+    }
+  }
+
+  void unmuteVideo() {
+    if (_controller != null && !_disposed && _initialized) {
+      _controller!.setVolume(1.0);
+      setState(() {
+        _isMuted = false;
+      });
+    }
+  }
+
+  void pauseAndMute() {
+    pauseVideo();
+    muteVideo();
+  }
+
+  void resumeWithPreviousState(bool wasMuted) {
+    if (wasMuted) {
+      muteVideo();
+    } else {
+      unmuteVideo();
+    }
+    playVideo();
+  }
+
+  bool get isMuted => _isMuted;
+  bool get isPlaying => _isPlaying;
+  bool get isInitialized => _initialized;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
+
     _initializeVideoPlayer();
+    _activeVideos[videoId] = this;
   }
 
   void _initializeVideoPlayer() {
     if (_disposed) return;
-    
-    // Add timeout for initialization to prevent hanging
+
     _initTimer = Timer(const Duration(seconds: 30), () {
       if (!_initialized && !_disposed) {
         _handleInitializationError();
@@ -3073,31 +3111,94 @@ class _AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
     _controller = VideoPlayerController.networkUrl(
       Uri.parse(widget.url),
       videoPlayerOptions: VideoPlayerOptions(
-        mixWithOthers: true, // Reduces audio conflicts
-        allowBackgroundPlayback: false, // Saves resources
+        mixWithOthers: true,
+        allowBackgroundPlayback: false,
       ),
     );
 
     _controller!
       ..setLooping(true)
-      ..setVolume(0.0)
-      ..initialize().then((_) {
-        _initTimer?.cancel();
-        if (!_disposed && mounted) {
-          setState(() {
-            _initialized = true;
+      ..setVolume(0.0) // Start muted
+      ..initialize()
+          .then((_) {
+            _initTimer?.cancel();
+            if (!_disposed && mounted) {
+              setState(() {
+                _initialized = true;
+              });
+              if (mounted) {
+                _controller!.play();
+              }
+            }
+          })
+          .catchError((error) {
+            _initTimer?.cancel();
+            if (!_disposed) {
+              _handleInitializationError();
+            }
           });
-          // Only start playing if widget is still visible
-          if (mounted) {
-            _controller!.play();
-          }
+  }
+
+  void _handleVisibilityChanged(VisibilityInfo info) {
+    if (!mounted || _disposed || _controller == null) return;
+
+    // Don't auto-play if gallery is open
+
+    final visibleFraction = info.visibleFraction;
+
+    if (visibleFraction > 0.5) {
+      // Video is mostly visible
+      _activeVideos[videoId] = this;
+      _muteOtherVideos();
+      if (_initialized && !_controller!.value.isPlaying && _isPlaying) {
+        _controller!.play();
+      }
+    } else {
+      // Video is mostly hidden
+      _activeVideos.remove(videoId);
+      if (_initialized && _controller!.value.isPlaying) {
+        _controller!.pause();
+      }
+    }
+  }
+
+  void _muteOtherVideos() {
+    for (final entry in _activeVideos.entries) {
+      if (entry.key != videoId) {
+        entry.value._controller?.pause();
+        entry.value._isMuted = true;
+        if (entry.value.mounted) {
+          entry.value.setState(() {});
         }
-      }).catchError((error) {
-        _initTimer?.cancel();
-        if (!_disposed) {
-          _handleInitializationError();
-        }
-      });
+      }
+    }
+  }
+
+  // Static method to pause and mute all AutoPlay videos
+  static void pauseAllAutoPlayVideos() {
+    for (final entry in _activeVideos.entries) {
+      entry.value._controller?.pause();
+      entry.value._controller?.setVolume(0.0);
+      entry.value._isMuted = true;
+      entry.value._isPlaying = false;
+      if (entry.value.mounted) {
+        entry.value.setState(() {});
+      }
+    }
+  }
+
+  // Static method to resume all AutoPlay videos with their previous states
+  static void resumeAllAutoPlayVideos() {
+    for (final entry in _activeVideos.entries) {
+      if (entry.value._initialized && entry.value.mounted) {
+        entry.value._controller?.play();
+        entry.value._isPlaying = true;
+        // Keep them muted by default for auto-play behavior
+        entry.value._controller?.setVolume(0.0);
+        entry.value._isMuted = true;
+        entry.value.setState(() {});
+      }
+    }
   }
 
   void _handleInitializationError() {
@@ -3116,18 +3217,14 @@ class _AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
     switch (state) {
       case AppLifecycleState.paused:
       case AppLifecycleState.inactive:
-        // Pause video when app goes to background to save resources
         _controller!.pause();
         break;
       case AppLifecycleState.resumed:
-        // Resume only if initialized and widget is still mounted
-        if (_initialized && mounted) {
+        if (_initialized && mounted && _isPlaying) {
           _controller!.play();
         }
         break;
       case AppLifecycleState.detached:
-        _controller!.pause();
-        break;
       case AppLifecycleState.hidden:
         _controller!.pause();
         break;
@@ -3137,6 +3234,7 @@ class _AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
   @override
   void dispose() {
     _disposed = true;
+    _activeVideos.remove(videoId);
     _initTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _controller?.dispose();
@@ -3144,9 +3242,22 @@ class _AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
     super.dispose();
   }
 
+  void _togglePlayPause() {
+    if (_controller == null || _disposed) return;
+
+    setState(() {
+      _isPlaying = !_isPlaying;
+      if (_isPlaying) {
+        _controller!.play();
+      } else {
+        _controller!.pause();
+      }
+    });
+  }
+
   void _toggleMute() {
     if (_controller == null || _disposed) return;
-    
+
     setState(() {
       _isMuted = !_isMuted;
       _controller!.setVolume(_isMuted ? 0.0 : 1.0);
@@ -3155,50 +3266,92 @@ class _AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
 
   @override
   Widget build(BuildContext context) {
-    super.build(context); // Required for AutomaticKeepAliveClientMixin
-    
-    return Container(
-      height: widget.height,
-      width: widget.width ?? double.infinity,
-      color: Colors.black,
-      child: !_initialized || _controller == null
-          ? const Center(
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : Stack(
-              alignment: Alignment.bottomRight,
-              children: [
-                AspectRatio(
-                  aspectRatio: _controller!.value.aspectRatio,
-                  child: VideoPlayer(_controller!),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: GestureDetector(
-                    onTap: _toggleMute,
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: const BoxDecoration(
-                        color: Colors.black54,
-                        shape: BoxShape.circle,
+    super.build(context);
+
+    return VisibilityDetector(
+      key: Key(videoId),
+      onVisibilityChanged: _handleVisibilityChanged,
+      child: Container(
+        height: widget.height ?? MediaQuery.of(context).size.height,
+        width: widget.width ?? MediaQuery.of(context).size.width,
+        color: Colors.white,
+        child:
+            !_initialized || _controller == null
+                ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                : LayoutBuilder(
+                  builder: (context, constraints) {
+                    final size = _controller!.value.size;
+                    final aspectRatio = size.width / size.height;
+
+                    double targetWidth = constraints.maxWidth;
+                    double targetHeight = constraints.maxWidth / aspectRatio;
+
+                    if (targetHeight > constraints.maxHeight) {
+                      targetHeight = constraints.maxHeight;
+                      targetWidth = constraints.maxHeight * aspectRatio;
+                    }
+
+                    return Center(
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          GestureDetector(
+                            onTap: _togglePlayPause,
+                            child: SizedBox(
+                              width: targetWidth,
+                              height: targetHeight,
+                              child: VideoPlayer(_controller!),
+                            ),
+                          ),
+                          Positioned.fill(
+                            child: GestureDetector(
+                              onTap: _togglePlayPause,
+                              behavior: HitTestBehavior.translucent,
+                              child: Container(color: Colors.transparent),
+                            ),
+                          ),
+                          if (!_isPlaying)
+                            Icon(
+                              Icons.play_arrow,
+                              size: 50,
+                              color: Colors.white.withAlpha(80),
+                            ),
+                          Positioned(
+                            bottom: 8,
+                            right: 8,
+                            child: GestureDetector(
+                              onTap: _toggleMute,
+                              behavior: HitTestBehavior.opaque,
+                              child: Container(
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  color: Colors.black54,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white.withAlpha(50),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Icon(
+                                  _isMuted ? Icons.volume_off : Icons.volume_up,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      child: Icon(
-                        _isMuted ? Icons.volume_off : Icons.volume_up,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                    ),
-                  ),
+                    );
+                  },
                 ),
-              ],
-            ),
+      ),
     );
   }
 }
 
 // This is Used For Status For adding Link
-
 class _LinkifyText extends StatelessWidget {
   final String text;
   final TextStyle? style;
@@ -3272,3 +3425,4 @@ class _LinkifyText extends StatelessWidget {
     );
   }
 }
+//using 

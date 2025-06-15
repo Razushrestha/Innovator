@@ -472,7 +472,7 @@ class _ShopPageState extends State<ShopPage>
       body: Stack(
         children: [
           _buildBody(),
-          FloatingMenuWidget(scaffoldKey: _scaffoldKey),
+          FloatingMenuWidget(),
           Positioned(
             top: MediaQuery.of(context).size.height * 0.03,
             left: MediaQuery.of(context).size.width * 0.05,
