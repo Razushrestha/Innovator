@@ -20,14 +20,14 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Future<void> _initializeApp() async {
     // Initialize app data
-    final appData = AppData();
-    await appData.initialize();
+    // final appData = AppData();
+    // await appData.initialize();
     
     // Add a small delay to show the splash screen
     await Future.delayed(const Duration(milliseconds: 2000));
     
     // Check if user exists (is authenticated)
-    if ( appData.isAuthenticated == true) {
+    if ( AppData().isAuthenticated == true) {
       // Initialize socket connection if authenticated
       //await _initializeSocketConnection(appData);
       _navigateToHome();
@@ -44,10 +44,14 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   void _navigateToLogin() {
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const LoginPage()),
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    Navigator.pushAndRemoveUntil(
+      context, 
+      MaterialPageRoute(builder: (_) => LoginPage()), 
+      (route) => false
     );
-  }
+  });
+}
 
   @override
   Widget build(BuildContext context) {

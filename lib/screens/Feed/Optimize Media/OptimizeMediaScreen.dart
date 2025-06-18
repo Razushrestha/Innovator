@@ -96,7 +96,7 @@ class _OptimizedMediaGalleryScreenState extends State<OptimizedMediaGalleryScree
       _videoController?.dispose();
       _chewieController?.dispose();
       
-      _videoController = VideoPlayerController.network(url);
+      _videoController = VideoPlayerController.networkUrl(Uri.parse(url));
       await _videoController!.initialize();
       
       _chewieController = ChewieController(

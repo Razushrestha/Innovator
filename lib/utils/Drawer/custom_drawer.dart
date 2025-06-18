@@ -29,11 +29,21 @@ class SmoothDrawerService {
         opaque: false,
         barrierDismissible: true,
         barrierColor: Colors.black54,
-        transitionDuration: const Duration(milliseconds: 300), // Reduced from 350
-        reverseTransitionDuration: const Duration(milliseconds: 200), // Reduced from 250
+        transitionDuration: const Duration(
+          milliseconds: 300,
+        ), // Reduced from 350
+        reverseTransitionDuration: const Duration(
+          milliseconds: 200,
+        ), // Reduced from 250
         pageBuilder: (context, animation, _) {
-          final drawerWidth = math.min(MediaQuery.of(context).size.width * 0.8, 300.0);
-          return _SmoothDrawerOverlay(animation: animation, drawerWidth: drawerWidth);
+          final drawerWidth = math.min(
+            MediaQuery.of(context).size.width * 0.8,
+            300.0,
+          );
+          return _SmoothDrawerOverlay(
+            animation: animation,
+            drawerWidth: drawerWidth,
+          );
         },
       ),
     );
@@ -44,7 +54,10 @@ class _SmoothDrawerOverlay extends StatelessWidget {
   final Animation<double> animation;
   final double drawerWidth;
 
-  const _SmoothDrawerOverlay({required this.animation, required this.drawerWidth});
+  const _SmoothDrawerOverlay({
+    required this.animation,
+    required this.drawerWidth,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -81,21 +94,28 @@ class _SmoothDrawerOverlay extends StatelessWidget {
             // Optimized backdrop
             AnimatedBuilder(
               animation: fadeAnimation,
-              builder: (context, _) => GestureDetector(
-                onTap: () => Navigator.of(context).pop(),
-                child: Container(
-                  color: Colors.black.withOpacity(0.5 * fadeAnimation.value),
-                ),
-              ),
+              builder:
+                  (context, _) => GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Container(
+                      color: Colors.black.withOpacity(
+                        0.5 * fadeAnimation.value,
+                      ),
+                    ),
+                  ),
             ),
-        
+
             // Optimized drawer animation
             AnimatedBuilder(
               animation: slideAnimation,
-              builder: (context, child) => Transform.translate(
-                offset: Offset(-drawerWidth * (1 - slideAnimation.value), 0),
-                child: child,
-              ),
+              builder:
+                  (context, child) => Transform.translate(
+                    offset: Offset(
+                      -drawerWidth * (1 - slideAnimation.value),
+                      0,
+                    ),
+                    child: child,
+                  ),
               child: Opacity(
                 opacity: fadeAnimation.value,
                 child: _buildDrawerContainer(context),
@@ -146,7 +166,8 @@ class CustomDrawer extends StatefulWidget {
   State<CustomDrawer> createState() => _CustomDrawerState();
 }
 
-class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMixin {
+class _CustomDrawerState extends State<CustomDrawer>
+    with TickerProviderStateMixin {
   List<NotificationModel> _notifications = [];
   int _unreadCount = 0;
   bool _isLoading = true;
@@ -207,7 +228,9 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
             'picture': cachedProfile.picturePath,
           };
           AppData().setCurrentUser(_userData!);
-          Get.find<UserController>().updateProfilePicture(cachedProfile.picturePath ?? '');
+          Get.find<UserController>().updateProfilePicture(
+            cachedProfile.picturePath ?? '',
+          );
           _isLoading = false;
           _isLoadingFromCache = false;
         });
@@ -222,7 +245,7 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
     if (hasInternet) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _fetchUserProfile();
-       // _loadNotifications();
+        // _loadNotifications();
       });
     } else if (cachedProfile == null) {
       _handleError('No internet connection and no cached profile available');
@@ -321,9 +344,10 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
         if (mounted) {
           setState(() {
             _unreadCount = data['data']['unreadCount'] ?? 0;
-            _notifications = (data['data']['notifications'] as List)
-                .map((json) => NotificationModel.fromJson(json))
-                .toList();
+            _notifications =
+                (data['data']['notifications'] as List)
+                    .map((json) => NotificationModel.fromJson(json))
+                    .toList();
           });
         }
       } else {
@@ -342,11 +366,7 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              Colors.white,
-              Colors.grey.shade50,
-              Colors.white,
-            ],
+            colors: [Colors.white, Colors.grey.shade50, Colors.white],
           ),
         ),
         child: ClipPath(
@@ -369,23 +389,23 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                 _buildAnimatedMenuItem(
-                    icon: Icons.notifications_rounded,
-                    title: 'Notifications',
-                    badge: _unreadCount > 0 ? _unreadCount.toString() : null,
-                    onTap: () {
-                      Navigator.pushAndRemoveUntil(
-                        context, 
-                        MaterialPageRoute(
-                          builder: (_) => ProviderScope(
-                            child: NotificationListScreen(),
-                          ),
-                        ),
-                        (route) => false,
-                      );
-                    },
-                    delay: 0,
-                  ),
+                                //                _buildAnimatedMenuItem(
+                                //   icon: Icons.notifications_rounded,
+                                //   title: 'Notifications',
+                                //   badge: _unreadCount > 0 ? _unreadCount.toString() : null,
+                                //   onTap: () {
+                                //     Navigator.pushAndRemoveUntil(
+                                //       context,
+                                //       MaterialPageRoute(
+                                //         builder: (_) => ProviderScope(
+                                //           child: NotificationListScreen(),
+                                //         ),
+                                //       ),
+                                //       (route) => false,
+                                //     );
+                                //   },
+                                //   delay: 0,
+                                // ),
                                 _buildAnimatedMenuItem(
                                   icon: Icons.message_rounded,
                                   title: 'Messages',
@@ -393,12 +413,21 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
                                     Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                        builder: (_) => ChatListScreen(
-                                          currentUserId: AppData().currentUserId ?? '',
-                                          currentUserName: AppData().currentUserName ?? '',
-                                          currentUserPicture: AppData().currentUserProfilePicture ?? '',
-                                          currentUserEmail: AppData().currentUserEmail ?? '',
-                                        ),
+                                        builder:
+                                            (_) => ChatListScreen(
+                                              currentUserId:
+                                                  AppData().currentUserId ?? '',
+                                              currentUserName:
+                                                  AppData().currentUserName ??
+                                                  '',
+                                              currentUserPicture:
+                                                  AppData()
+                                                      .currentUserProfilePicture ??
+                                                  '',
+                                              currentUserEmail:
+                                                  AppData().currentUserEmail ??
+                                                  '',
+                                            ),
                                       ),
                                     );
                                   },
@@ -411,9 +440,14 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
                                     Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                        builder: (_) => ProviderScope(
-                                          child: UserProfileScreen(userId: AppData().currentUserId ?? ''),
-                                        ),
+                                        builder:
+                                            (_) => ProviderScope(
+                                              child: UserProfileScreen(
+                                                userId:
+                                                    AppData().currentUserId ??
+                                                    '',
+                                              ),
+                                            ),
                                       ),
                                     );
                                   },
@@ -425,7 +459,9 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
                                   onTap: () {
                                     Navigator.push(
                                       context,
-                                      MaterialPageRoute(builder: (_) =>  ElizaChatScreen()),
+                                      MaterialPageRoute(
+                                        builder: (_) => ElizaChatScreen(),
+                                      ),
                                     );
                                   },
                                   delay: 300,
@@ -436,7 +472,9 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
                                   onTap: () {
                                     Navigator.push(
                                       context,
-                                      MaterialPageRoute(builder: (_) =>  ReportsScreen()),
+                                      MaterialPageRoute(
+                                        builder: (_) => ReportsScreen(),
+                                      ),
                                     );
                                   },
                                   delay: 400,
@@ -448,7 +486,10 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
                                     Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                        builder: (_) => const ProviderScope(child: PrivacyPolicy()),
+                                        builder:
+                                            (_) => const ProviderScope(
+                                              child: PrivacyPolicy(),
+                                            ),
                                       ),
                                     );
                                   },
@@ -460,12 +501,17 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
                                   onTap: () {
                                     Navigator.push(
                                       context,
-                                      MaterialPageRoute(builder: (_) => const FAQScreen()),
+                                      MaterialPageRoute(
+                                        builder: (_) => const FAQScreen(),
+                                      ),
                                     );
                                   },
                                   delay: 600,
                                 ),
-                                SizedBox(height: MediaQuery.of(context).size.height * 0.05),
+                                SizedBox(
+                                  height:
+                                      MediaQuery.of(context).size.height * 0.05,
+                                ),
                                 _buildGradientDivider(),
                                 _buildAnimatedMenuItem(
                                   icon: Icons.logout_rounded,
@@ -476,7 +522,11 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
                                 ),
                                 const SizedBox(height: 15),
                                 _buildFooter(),
-                                SizedBox(height: MediaQuery.of(context).padding.bottom + 20),
+                                SizedBox(
+                                  height:
+                                      MediaQuery.of(context).padding.bottom +
+                                      20,
+                                ),
                               ],
                             ),
                           ),
@@ -495,7 +545,7 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
 
   Widget _buildGradientHeader() {
     return Container(
-      height: MediaQuery.of(context).size.height * 0.32,
+      height: MediaQuery.of(context).size.height * 0.34,
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -531,10 +581,7 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.white.withOpacity(0.1),
-                    Colors.transparent,
-                  ],
+                  colors: [Colors.white.withOpacity(0.1), Colors.transparent],
                 ),
               ),
             ),
@@ -542,32 +589,33 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-              child: _isLoading
-                  ? const Center(
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 3,
-                      ),
-                    )
-                  : _errorMessage != null && _userData == null
+              child:
+                  _isLoading
+                      ? const Center(
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 3,
+                        ),
+                      )
+                      : _errorMessage != null && _userData == null
                       ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Lottie.asset('animation/No-Content.json'),
-                              const SizedBox(height: 10),
-                              const Text(
-                                'Offline: Please connect to the internet',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w400,
-                                ),
-                                textAlign: TextAlign.center,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Lottie.asset('animation/No-Content.json'),
+                            const SizedBox(height: 10),
+                            const Text(
+                              'Offline: Please connect to the internet',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w400,
                               ),
-                            ],
-                          ),
-                        )
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      )
                       : _buildAdvancedProfileHeader(),
             ),
           ),
@@ -606,40 +654,47 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
               child: CircleAvatar(
                 radius: 35,
                 backgroundColor: Colors.white.withOpacity(0.2),
-                child: picturePath != null
-                    ? CachedNetworkImage(
-                        imageUrl: '$baseUrl$picturePath',
-                        imageBuilder: (context, imageProvider) => CircleAvatar(
-                          radius: 35,
-                          backgroundImage: imageProvider,
-                        ),
-                        placeholder: (context, url) => const CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
-                        ),
-                        errorWidget: (context, url, error) => const Icon(
+                child:
+                    picturePath != null
+                        ? CachedNetworkImage(
+                          imageUrl: '$baseUrl$picturePath',
+                          imageBuilder:
+                              (context, imageProvider) => CircleAvatar(
+                                radius: 35,
+                                backgroundImage: imageProvider,
+                              ),
+                          placeholder:
+                              (context, url) => const CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                          errorWidget:
+                              (context, url, error) => const Icon(
+                                Icons.person,
+                                size: 35,
+                                color: Colors.white,
+                              ),
+                          cacheManager: CacheManager(
+                            Config(
+                              'profilePictureCache',
+                              stalePeriod: const Duration(days: 30),
+                              maxNrOfCacheObjects: 20,
+                              repo: JsonCacheInfoRepository(
+                                databaseName: 'profilePictureCache',
+                              ),
+                            ),
+                          ),
+                          placeholderFadeInDuration: const Duration(
+                            milliseconds: 200,
+                          ),
+                          fadeOutDuration: const Duration(milliseconds: 200),
+                          fadeInDuration: const Duration(milliseconds: 200),
+                        )
+                        : const Icon(
                           Icons.person,
                           size: 35,
                           color: Colors.white,
                         ),
-                        cacheManager: CacheManager(
-                          Config(
-                            'profilePictureCache',
-                            stalePeriod: const Duration(days: 30),
-                                  maxNrOfCacheObjects: 20,
-      repo: JsonCacheInfoRepository(databaseName: 'profilePictureCache'),
-
-                          ),
-                        ),
-                        placeholderFadeInDuration: const Duration(milliseconds: 200),
-  fadeOutDuration: const Duration(milliseconds: 200),
-  fadeInDuration: const Duration(milliseconds: 200),
-                      )
-                    : const Icon(
-                        Icons.person,
-                        size: 35,
-                        color: Colors.white,
-                      ),
               ),
             );
           }),
@@ -709,14 +764,15 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
               margin: const EdgeInsets.symmetric(horizontal: 15, vertical: 4),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(20),
-                gradient: isLogout
-                    ? LinearGradient(
-                        colors: [
-                          Colors.red.withOpacity(0.1),
-                          Colors.red.withOpacity(0.3),
-                        ],
-                      )
-                    : null,
+                gradient:
+                    isLogout
+                        ? LinearGradient(
+                          colors: [
+                            Colors.red.withOpacity(0.1),
+                            Colors.red.withOpacity(0.3),
+                          ],
+                        )
+                        : null,
               ),
               child: Material(
                 color: Colors.transparent,
@@ -724,20 +780,25 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
                   borderRadius: BorderRadius.circular(20),
                   onTap: onTap,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 16,
+                    ),
                     child: Row(
                       children: [
                         Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: isLogout
-                                ? Colors.red.withOpacity(0.1)
-                                : const Color(0xFFEB6B46).withOpacity(0.1),
+                            color:
+                                isLogout
+                                    ? Colors.red.withOpacity(0.1)
+                                    : const Color(0xFFEB6B46).withOpacity(0.1),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Icon(
                             icon,
-                            color: isLogout ? Colors.red : const Color(0xFFEB6B46),
+                            color:
+                                isLogout ? Colors.red : const Color(0xFFEB6B46),
                             size: 22,
                           ),
                         ),
@@ -748,14 +809,18 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
-                              color: isLogout ? Colors.red : Colors.grey.shade800,
+                              color:
+                                  isLogout ? Colors.red : Colors.grey.shade800,
                               letterSpacing: 0.5,
                             ),
                           ),
                         ),
                         if (badge != null)
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.red,
                               borderRadius: BorderRadius.circular(12),
@@ -856,63 +921,82 @@ class _CustomDrawerState extends State<CustomDrawer> with TickerProviderStateMix
     showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          backgroundColor: Colors.white,
-          title: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.4),
-                  borderRadius: BorderRadius.circular(8),
+      builder:
+          (context) => BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              backgroundColor: Colors.white,
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withOpacity(0.4),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.logout_rounded,
+                      color: Colors.red,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Logout Confirmation',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              content: const Text(
+                'Are you sure you want to logout from your account?',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.grey,
                 ),
-                child: const Icon(Icons.logout_rounded, color: Colors.red, size: 24),
               ),
-              const SizedBox(width: 12),
-              const Text(
-                'Logout Confirmation',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-          content: const Text(
-            'Are you sure you want to logout from your account?',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w400, color: Colors.grey),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: Text(
-                'Cancel',
-                style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.w600),
-              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: Text(
+                    'Cancel',
+                    style: TextStyle(
+                      color: Colors.grey.shade600,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    Navigator.of(context).pop(true);
+                    await AppData().clearAuthToken();
+                    if (mounted) {
+                      Navigator.pushAndRemoveUntil(
+                        context,
+                        MaterialPageRoute(builder: (_) => const LoginPage()),
+                        (route) => false,
+                      );
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Text(
+                    'Logout',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
             ),
-            ElevatedButton(
-              onPressed: () async {
-                Navigator.of(context).pop(true);
-                await AppData().clearAuthToken();
-                if (mounted) {
-                  Navigator.pushAndRemoveUntil(
-                    context,
-                    MaterialPageRoute(builder: (_) => const LoginPage()),
-                    (route) => false,
-                  );
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                elevation: 0,
-              ),
-              child: const Text('Logout', style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
-          ],
-        ),
-      ),
+          ),
     );
   }
 }
@@ -925,7 +1009,12 @@ class DrawerClipper extends CustomClipper<Path> {
     path.lineTo(size.width - 30, 0);
     path.quadraticBezierTo(size.width, 0, size.width, 30);
     path.lineTo(size.width, size.height - 30);
-    path.quadraticBezierTo(size.width, size.height, size.width - 30, size.height);
+    path.quadraticBezierTo(
+      size.width,
+      size.height,
+      size.width - 30,
+      size.height,
+    );
     path.lineTo(0, size.height);
     path.close();
     return path;
@@ -938,14 +1027,16 @@ class DrawerClipper extends CustomClipper<Path> {
 class HeaderPatternPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.white.withOpacity(0.1)
-      ..style = PaintingStyle.fill;
+    final paint =
+        Paint()
+          ..color = Colors.white.withOpacity(0.1)
+          ..style = PaintingStyle.fill;
 
     final path = Path();
     path.moveTo(0, size.height * 0.3);
     for (double x = 0; x <= size.width; x += 20) {
-      final y = size.height * 0.3 + 20 * math.sin((x / size.width) * 2 * math.pi);
+      final y =
+          size.height * 0.3 + 20 * math.sin((x / size.width) * 2 * math.pi);
       path.lineTo(x, y);
     }
     path.lineTo(size.width, size.height);
@@ -953,13 +1044,26 @@ class HeaderPatternPainter extends CustomPainter {
     path.close();
     canvas.drawPath(path, paint);
 
-    final circlePaint = Paint()
-      ..color = Colors.white.withOpacity(0.05)
-      ..style = PaintingStyle.fill;
+    final circlePaint =
+        Paint()
+          ..color = Colors.white.withOpacity(0.05)
+          ..style = PaintingStyle.fill;
 
-    canvas.drawCircle(Offset(size.width * 0.8, size.height * 0.2), 40, circlePaint);
-    canvas.drawCircle(Offset(size.width * 0.2, size.height * 0.6), 25, circlePaint);
-    canvas.drawCircle(Offset(size.width * 0.9, size.height * 0.8), 15, circlePaint);
+    canvas.drawCircle(
+      Offset(size.width * 0.8, size.height * 0.2),
+      40,
+      circlePaint,
+    );
+    canvas.drawCircle(
+      Offset(size.width * 0.2, size.height * 0.6),
+      25,
+      circlePaint,
+    );
+    canvas.drawCircle(
+      Offset(size.width * 0.9, size.height * 0.8),
+      15,
+      circlePaint,
+    );
   }
 
   @override

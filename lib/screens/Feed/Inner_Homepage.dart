@@ -13,6 +13,7 @@ import 'package:innovator/Authorization/Login.dart';
 import 'package:innovator/controllers/user_controller.dart';
 import 'package:innovator/screens/Feed/Optimize%20Media/OptimizeMediaScreen.dart';
 import 'package:innovator/screens/Feed/Services/Feed_Cache_service.dart';
+import 'package:innovator/screens/Feed/VideoPlayer/videoplayerpackage.dart';
 import 'package:innovator/screens/Follow/follow-Service.dart';
 import 'package:innovator/screens/Follow/follow_Button.dart';
 import 'package:innovator/screens/Likes/Content-Like-Service.dart';
@@ -66,13 +67,18 @@ class FeedContent {
   String status;
   final String type;
   final List<String> files;
+  final List<dynamic> optimizedFiles;
   final Author author;
   final DateTime createdAt;
   final DateTime updatedAt;
+  int views;
+  bool isShared;
   int likes;
   int comments;
   bool isLiked;
   bool isFollowed;
+  bool engagementLoaded;
+  String loadPriority;
 
   late final List<String> _mediaUrls;
   late final bool _hasImages;
@@ -85,41 +91,43 @@ class FeedContent {
     required this.status,
     required this.type,
     required this.files,
+    required this.optimizedFiles,
     required this.author,
     required this.createdAt,
     required this.updatedAt,
+    this.views = 0,
+    this.isShared = false,
     this.likes = 0,
     this.comments = 0,
     this.isLiked = false,
     this.isFollowed = false,
+    this.engagementLoaded = false,
+    this.loadPriority = 'normal',
   }) {
     try {
-      _mediaUrls =
-          files.map((file) {
-            if (file.startsWith('http')) return file;
-            return 'http://182.93.94.210:3065${file.startsWith('/') ? file : '/$file'}';
-          }).toList();
+      // Process both original files and optimized files
+      final allUrls = [
+        ...files.map((file) => _formatUrl(file)),
+        ...optimizedFiles
+            .where((file) => file['url'] != null)
+            .map((file) => _formatUrl(file['url'])),
+      ];
 
-      _hasImages = files.any((file) {
-        final lowerFile = file.toLowerCase();
-        return lowerFile.endsWith('.jpg') ||
-            lowerFile.endsWith('.jpeg') ||
-            lowerFile.endsWith('.png') ||
-            lowerFile.endsWith('.gif');
-      });
+      _mediaUrls = allUrls.toSet().toList(); // Remove duplicates
 
-      _hasVideos = files.any((file) {
-        final lowerFile = file.toLowerCase();
-        return lowerFile.endsWith('.mp4') ||
-            lowerFile.endsWith('.mov') ||
-            lowerFile.endsWith('.avi');
-      });
+      _hasImages =
+          _mediaUrls.any((url) => FileTypeHelper.isImage(url)) ||
+          optimizedFiles.any((file) => file['type'] == 'image');
 
-      _hasPdfs = files.any((file) => file.toLowerCase().endsWith('.pdf'));
-      _hasWordDocs = files.any((file) {
-        final lowerFile = file.toLowerCase();
-        return lowerFile.endsWith('.doc') || lowerFile.endsWith('.docx');
-      });
+      _hasVideos =
+          _mediaUrls.any((url) => FileTypeHelper.isVideo(url)) ||
+          optimizedFiles.any((file) => file['type'] == 'video');
+
+      _hasPdfs =
+          _mediaUrls.any((url) => FileTypeHelper.isPdf(url)) ||
+          optimizedFiles.any((file) => file['type'] == 'pdf');
+
+      _hasWordDocs = _mediaUrls.any((url) => FileTypeHelper.isWordDoc(url));
     } catch (e) {
       _mediaUrls = [];
       _hasImages = false;
@@ -130,30 +138,39 @@ class FeedContent {
     }
   }
 
+  String _formatUrl(String url) {
+    if (url.startsWith('http')) {
+      developer.log('Using original URL: $url', name: 'FeedContent');
+      return url;
+    }
+    final formatted =
+        'http://182.93.94.210:3065${url.startsWith('/') ? url : '/$url'}';
+    developer.log('Formatted URL: $formatted', name: 'FeedContent');
+    return formatted;
+  }
+
   factory FeedContent.fromJson(Map<String, dynamic> json) {
     try {
       return FeedContent(
         id: json['_id'] ?? '',
         status: json['status'] ?? '',
-        type: json['type'] ?? '',
+        type: json['type'] ?? 'innovation',
         files: List<String>.from(json['files'] ?? []),
-        author: Author.fromJson(
-          json['author'] ??
-              {'_id': '', 'name': 'Unknown', 'email': '', 'picture': ''},
+        optimizedFiles: List<dynamic>.from(json['optimizedFiles'] ?? []),
+        author: Author.fromJson(json['author'] ?? {}),
+        createdAt: DateTime.parse(
+          json['createdAt'] ?? DateTime.now().toIso8601String(),
         ),
-        createdAt:
-            json['createdAt'] != null
-                ? DateTime.parse(json['createdAt'])
-                : DateTime.now(),
-        updatedAt:
-            json['updatedAt'] != null
-                ? DateTime.parse(json['updatedAt'])
-                : DateTime.now(),
-
+        updatedAt: DateTime.parse(
+          json['updatedAt'] ?? DateTime.now().toIso8601String(),
+        ),
+        views: json['views'] ?? 0,
+        isShared: json['isShared'] ?? false,
         likes: json['likes'] ?? 0,
         comments: json['comments'] ?? 0,
         isLiked: json['liked'] ?? false,
-        isFollowed: json['followed'] ?? false,
+        engagementLoaded: json['engagementLoaded'] ?? false,
+        loadPriority: json['loadPriority'] ?? 'normal',
       );
     } catch (e) {
       developer.log('Error parsing FeedContent: $e');
@@ -162,6 +179,7 @@ class FeedContent {
         status: '',
         type: '',
         files: [],
+        optimizedFiles: [],
         author: Author(id: '', name: 'Error', email: '', picture: ''),
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
@@ -174,9 +192,52 @@ class FeedContent {
   bool get hasVideos => _hasVideos;
   bool get hasPdfs => _hasPdfs;
   bool get hasWordDocs => _hasWordDocs;
+
+  // Get the best quality video URL from optimized files
+  String? get bestVideoUrl {
+    try {
+      final videoFiles =
+          optimizedFiles.where((file) => file['type'] == 'video').toList();
+      if (videoFiles.isEmpty) return null;
+
+      // Sort by quality (assuming qualities are in order)
+      videoFiles.sort((a, b) {
+        final aQualities = List<String>.from(a['qualities'] ?? []);
+        final bQualities = List<String>.from(b['qualities'] ?? []);
+        return bQualities.length.compareTo(aQualities.length);
+      });
+
+      return _formatUrl(
+        videoFiles.first['url'] ?? videoFiles.first['hls'] ?? '',
+      );
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Get thumbnail URL
+  String? get thumbnailUrl {
+    try {
+      // First try to get from optimized files
+      for (final file in optimizedFiles) {
+        if (file['thumbnail'] != null) {
+          return _formatUrl(file['thumbnail']);
+        }
+      }
+
+      // Fallback to first image file
+      final imageUrl = _mediaUrls.firstWhere(
+        (url) => FileTypeHelper.isImage(url),
+        orElse: () => '',
+      );
+
+      return imageUrl.isNotEmpty ? imageUrl : null;
+    } catch (e) {
+      return null;
+    }
+  }
 }
 
-// Add at the top of inner_home_page.dart, below existing imports
 class ContentResponse {
   final int status;
   final ContentData data;
@@ -207,6 +268,7 @@ class ContentData {
   final bool hasMoreNormal;
   final String? nextVideoCursor;
   final String? nextNormalCursor;
+  final Map<String, dynamic> optimizationInfo;
 
   ContentData({
     required this.videoContents,
@@ -215,6 +277,7 @@ class ContentData {
     required this.hasMoreNormal,
     this.nextVideoCursor,
     this.nextNormalCursor,
+    required this.optimizationInfo,
   });
 
   factory ContentData.fromJson(Map<String, dynamic> json) {
@@ -231,6 +294,7 @@ class ContentData {
       hasMoreNormal: json['hasMoreNormal'] as bool? ?? false,
       nextVideoCursor: json['nextVideoCursor'] as String?,
       nextNormalCursor: json['nextNormalCursor'] as String?,
+      optimizationInfo: json['optimizationInfo'] as Map<String, dynamic>? ?? {},
     );
   }
 }
@@ -242,7 +306,8 @@ class FileTypeHelper {
       return lowerUrl.endsWith('.jpg') ||
           lowerUrl.endsWith('.jpeg') ||
           lowerUrl.endsWith('.png') ||
-          lowerUrl.endsWith('.gif');
+          lowerUrl.endsWith('.gif') ||
+          lowerUrl.contains('_thumb.jpg');
     } catch (e) {
       return false;
     }
@@ -253,7 +318,8 @@ class FileTypeHelper {
       final lowerUrl = url.toLowerCase();
       return lowerUrl.endsWith('.mp4') ||
           lowerUrl.endsWith('.mov') ||
-          lowerUrl.endsWith('.avi');
+          lowerUrl.endsWith('.avi') ||
+          lowerUrl.endsWith('.m3u8');
     } catch (e) {
       return false;
     }
@@ -286,7 +352,6 @@ class Inner_HomePage extends StatefulWidget {
 
 class _Inner_HomePageState extends State<Inner_HomePage> {
   final ChatListController chatController = Get.put(ChatListController());
-
   final List<FeedContent> _videoContents = [];
   final List<FeedContent> _normalContents = [];
   final ScrollController _scrollController = ScrollController();
@@ -326,32 +391,39 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
   }
 
   Future<void> _initializeData() async {
-    await _appData.initialize();
+  await _appData.initialize();
+  if (await _verifyToken()) {
     _loadMoreContent();
   }
+}
+
+  Timer? _debounce;
 
   void _scrollListener() {
+  if (_debounce?.isActive ?? false) return;
+  _debounce = Timer(const Duration(milliseconds: 200), () {
     if (!_isLoading &&
         (_hasMoreVideos || _hasMoreNormal) &&
         _scrollController.position.pixels >=
-            _scrollController.position.maxScrollExtent -
-                _loadTriggerThreshold) {
+            _scrollController.position.maxScrollExtent - _loadTriggerThreshold) {
       _loadMoreContent();
     }
-  }
+  });
+}
 
   Future<void> _loadMoreContent() async {
     if (_isLoading ||
         (!_hasMoreNormal && !_hasMoreVideos) ||
         _isRefreshingToken)
       return;
+
     setState(() {
       _isLoading = true;
       _hasError = false;
     });
+
     try {
       if (!_isOnline) {
-        // Load cached data when offline
         final cachedContents = await CacheManager.getCachedFeed();
         setState(() {
           if (cachedContents.isNotEmpty) {
@@ -365,10 +437,12 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
         });
         return;
       }
+
       if (!await _verifyToken()) return;
 
       final contentData = await FeedApiService.fetchContents(
-        lastId: _nextVideoCursor ?? _nextNormalCursor,
+        videoCursor: _nextVideoCursor,
+        normalCursor: _nextNormalCursor,
         context: context,
       );
 
@@ -469,6 +543,8 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
   }
 
   Future<String?> _getRefreshToken() async {
+    //return await SecureStorage().getRefreshToken(); // Or your actual storage method
+
     // Implement your refresh token retrieval logic
     return null;
   }
@@ -517,8 +593,9 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
 
   @override
   void dispose() {
-    _scrollController.dispose();
-    super.dispose();
+_debounce?.cancel();
+  _scrollController.dispose();
+      super.dispose();
   }
 
   @override
@@ -548,10 +625,10 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
                     (_isLoading ? 1 : 0),
               ),
             ),
-             if (_isLoading)
-      SliverToBoxAdapter(
-        child: Center(child: CircularProgressIndicator()),
-      ),
+            if (_isLoading)
+              SliverToBoxAdapter(
+                child: Center(child: CircularProgressIndicator()),
+              ),
             if (_hasError) SliverFillRemaining(child: _buildErrorView()),
             if (_videoContents.isEmpty &&
                 _normalContents.isEmpty &&
@@ -561,7 +638,6 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
           ],
         ),
       ),
-
       floatingActionButton: GetBuilder<ChatListController>(
         init: () {
           // Ensure ChatListController is initialized
@@ -2229,7 +2305,12 @@ class _FeedItemState extends State<FeedItem>
 
   void _copyContentToClipboard() {
     Clipboard.setData(ClipboardData(text: widget.content.status));
-    Get.snackbar('Copied', 'Content copied to clipboard', backgroundColor: Colors.green, colorText: Colors.white);
+    Get.snackbar(
+      'Copied',
+      'Content copied to clipboard',
+      backgroundColor: Colors.green,
+      colorText: Colors.white,
+    );
     // ScaffoldMessenger.of(context).showSnackBar(
     //   Get.SnackBar(content: Text('')),
     // );
@@ -2535,6 +2616,37 @@ class _FeedItemState extends State<FeedItem>
   }
 
   Widget _buildMediaPreview() {
+    final hasOptimizedVideo = widget.content.optimizedFiles.any(
+      (f) => f['type'] == 'video',
+    );
+    final hasOptimizedImages = widget.content.optimizedFiles.any(
+      (f) => f['type'] == 'image',
+    );
+
+    if (hasOptimizedVideo) {
+      final videoFile = widget.content.optimizedFiles.firstWhere(
+        (f) => f['type'] == 'video');
+
+      final videoUrl = videoFile['hls'] ?? videoFile['url'] ?? videoFile['original'];
+      if (videoUrl != null) {
+        return _buildVideoPreview(videoUrl);
+      }
+    }
+
+    if (hasOptimizedImages) {
+      final imageUrls =
+          widget.content.optimizedFiles
+              .where((f) => f['type'] == 'image')
+    .map((file) => file['original'] ?? file['url'] ?? file['thumbnail'])
+              .where((url) => url != null)
+    .map((url) => widget.content._formatUrl(url))
+              .toList();
+
+      if (imageUrls.isNotEmpty) {
+        return _buildImageGallery(imageUrls);
+      }
+    }
+
     final mediaUrls = widget.content.mediaUrls;
 
     if (mediaUrls.isEmpty) {
@@ -2749,6 +2861,78 @@ class _FeedItemState extends State<FeedItem>
     );
   }
 
+ Widget _buildVideoPreview(String url) {
+  // Try to get the original MP4 URL from optimizedFiles
+  final originalVideoUrl = widget.content.optimizedFiles
+      .where((file) => file['type'] == 'video')
+      .map((file) => file['original'] ?? file['hls'] ?? file['url'])
+      .firstWhere((url) => url != null, orElse: () => null);
+
+  final videoUrl = originalVideoUrl ?? url;
+  
+  return Container(
+    color: Colors.black,
+    child: AspectRatio(
+      aspectRatio: 16 / 9,
+      child: AutoPlayVideoWidget(
+        url: widget.content._formatUrl(videoUrl),
+        thumbnailUrl: widget.content.thumbnailUrl,
+      ),
+    ),
+  );
+}
+
+  Widget _buildSingleImage(String url) {
+    return GestureDetector(
+      onTap: () => _showMediaGallery(context, [url], 0),
+      child: CachedNetworkImage(
+      filterQuality: FilterQuality.high,
+        imageUrl: url,
+        fit: BoxFit.cover,
+        memCacheWidth: (MediaQuery.of(context).size.width * 1.5).toInt(), // Reduce cache size for grid
+        placeholder:
+            (context, url) => Container(
+              color: Colors.grey[300],
+              child: Center(child: CircularProgressIndicator()),
+            ),
+        errorWidget:
+            (context, url, error) =>
+                Container(color: Colors.grey[300], child: Icon(Icons.error)),
+      ),
+    );
+  }
+
+  Widget _buildImageGallery(List<String> urls) {
+    return GridView.builder(
+      physics: NeverScrollableScrollPhysics(),
+      shrinkWrap: true,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: urls.length > 1 ? 2 : 1,
+        crossAxisSpacing: 4.0,
+        mainAxisSpacing: 4.0,
+        childAspectRatio: 1.0,
+      ),
+      itemCount: urls.length > 4 ? 4 : urls.length,
+      itemBuilder: (context, index) {
+        if (index == 3 && urls.length > 4) {
+          return GestureDetector(
+            onTap: () => _showMediaGallery(context, urls, index),
+            child: Container(
+              color: Colors.black.withAlpha(50),
+              child: Center(
+                child: Text(
+                  '+${urls.length - 4}',
+                  style: TextStyle(color: Colors.white, fontSize: 24),
+                ),
+              ),
+            ),
+          );
+        }
+        return _buildSingleImage(urls[index]);
+      },
+    );
+  }
+
   // Helper to get video size (width/height) using VideoPlayerController
   Future<Size> _getVideoSize(String url) async {
     final controller = VideoPlayerController.networkUrl(Uri.parse(url));
@@ -2832,7 +3016,9 @@ class _OptimizedNetworkImage extends StatelessWidget {
             color: Colors.grey[300],
             child: const Center(child: Icon(Icons.error, color: Colors.white)),
           ),
-      memCacheWidth: (MediaQuery.of(context).size.width * 1.2).toInt(),
+      memCacheWidth: (MediaQuery.of(context).size.width * 2).toInt(),
+        memCacheHeight: (MediaQuery.of(context).size.height * 2).toInt(), // Added height cache
+
     );
   }
 }
@@ -2842,7 +3028,8 @@ class FeedApiService {
   static const String baseUrl = 'http://182.93.94.210:3065';
 
   static Future<ContentData> fetchContents({
-    required String? lastId,
+    String? videoCursor,
+    String? normalCursor,
     required BuildContext context,
   }) async {
     try {
@@ -2856,13 +3043,20 @@ class FeedApiService {
         headers['authorization'] = 'Bearer $authToken';
       }
 
-      final String url =
-          lastId == null
-              ? '$baseUrl/api/v1/list-contents'
-              : '$baseUrl/api/v1/list-contents?quality=auto&lastId=$lastId';
+      final params = {
+        'loadEngagement': 'true',
+        'quality': 'auto',
+        'limit': '20', // Add limit parameter
+        if (videoCursor != null) 'videoCursor': videoCursor,
+        if (normalCursor != null) 'normalCursor': normalCursor,
+      };
+
+      final uri = Uri.parse(
+        '$baseUrl/api/v1/list-contents?',
+      ).replace(queryParameters: params);
 
       final response = await http
-          .get(Uri.parse(url), headers: headers)
+          .get(uri, headers: headers)
           .timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
@@ -2910,6 +3104,7 @@ class FeedApiService {
             hasMoreNormal: contentResponse.data.hasMoreNormal,
             nextVideoCursor: contentResponse.data.nextVideoCursor,
             nextNormalCursor: contentResponse.data.nextNormalCursor,
+            optimizationInfo: contentResponse.data.optimizationInfo,
           );
         } else {
           throw Exception('Invalid response structure');
@@ -2942,26 +3137,36 @@ extension FeedContentExtension on FeedContent {
     String? status,
     String? type,
     List<String>? files,
+    List<dynamic>? optimizedFiles,
     Author? author,
     DateTime? createdAt,
     DateTime? updatedAt,
+    int? views,
+    bool? isShared,
     int? likes,
     int? comments,
     bool? isLiked,
     bool? isFollowed,
+    bool? engagementLoaded,
+    String? loadPriority,
   }) {
     return FeedContent(
       id: id ?? this.id,
       status: status ?? this.status,
       type: type ?? this.type,
       files: files ?? this.files,
+      optimizedFiles: optimizedFiles ?? this.optimizedFiles,
       author: author ?? this.author,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      views: views ?? this.views,
+      isShared: isShared ?? this.isShared,
       likes: likes ?? this.likes,
       comments: comments ?? this.comments,
       isLiked: isLiked ?? this.isLiked,
       isFollowed: isFollowed ?? this.isFollowed,
+      engagementLoaded: engagementLoaded ?? this.engagementLoaded,
+      loadPriority: loadPriority ?? this.loadPriority,
     );
   }
 }
@@ -2990,9 +3195,12 @@ class AutoPlayVideoWidget extends StatefulWidget {
   final String url;
   final double? height;
   final double? width;
+  final String? thumbnailUrl;
 
   const AutoPlayVideoWidget({
     required this.url,
+    this.thumbnailUrl,
+
     this.height,
     this.width,
     Key? key,
@@ -3096,6 +3304,7 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
     super.initState();
 
     _initializeVideoPlayer();
+    VideoPlaybackManager().registerVideo(this);
     _activeVideos[videoId] = this;
   }
 
@@ -3201,7 +3410,7 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
     }
   }
 
-  void _handleInitializationError() {
+  void _handleInitializationError([Object? error]) {
     if (mounted && !_disposed) {
       setState(() {
         _initialized = false;
@@ -3233,6 +3442,7 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
 
   @override
   void dispose() {
+    VideoPlaybackManager().unregisterVideo(this);
     _disposed = true;
     _activeVideos.remove(videoId);
     _initTimer?.cancel();
@@ -3295,6 +3505,20 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
                       child: Stack(
                         alignment: Alignment.center,
                         children: [
+                          if (_controller != null && _initialized)
+                            VideoPlayer(_controller!),
+                           (_controller == null || !_initialized) ? widget.thumbnailUrl != null ?
+                            CachedNetworkImage(
+                              imageUrl: widget.thumbnailUrl ?? '',
+                              fit: BoxFit.cover,
+                              placeholder:
+                                  (context, url) => Center(
+                                    child: CircularProgressIndicator(),
+                                  ),
+                              errorWidget:
+                                  (context, url, error) =>
+                                      Container(color: Colors.grey),
+                            ) :  Center(child: Icon(Icons.videocam_off)) :
                           GestureDetector(
                             onTap: _togglePlayPause,
                             child: SizedBox(

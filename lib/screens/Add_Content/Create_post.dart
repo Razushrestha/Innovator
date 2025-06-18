@@ -130,11 +130,13 @@ class _CreatePostScreenState extends State<CreatePostScreen>
       if (capturedImage != null) {
         setState(() {
           _selectedImages.add(capturedImage);
-          _selectedFiles.add(PlatformFile(
-            name: capturedImage.name,
-            path: capturedImage.path,
-            size: File(capturedImage.path).lengthSync(),
-          ));
+          _selectedFiles.add(
+            PlatformFile(
+              name: capturedImage.name,
+              path: capturedImage.path,
+              size: File(capturedImage.path).lengthSync(),
+            ),
+          );
         });
 
         if (_selectedFiles.isNotEmpty) {
@@ -158,11 +160,15 @@ class _CreatePostScreenState extends State<CreatePostScreen>
       if (pickedFiles != null && pickedFiles.isNotEmpty) {
         setState(() {
           _selectedImages.addAll(pickedFiles);
-          _selectedFiles.addAll(pickedFiles.map((xfile) => PlatformFile(
+          _selectedFiles.addAll(
+            pickedFiles.map(
+              (xfile) => PlatformFile(
                 name: xfile.name,
                 path: xfile.path,
                 size: File(xfile.path).lengthSync(),
-              )));
+              ),
+            ),
+          );
         });
 
         if (_selectedFiles.isNotEmpty) {
@@ -318,7 +324,7 @@ class _CreatePostScreenState extends State<CreatePostScreen>
         'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent';
 
     String systemPrompt =
-        "You are ELIZA, an AI assistant created by Innovator. Always respond as ELIZA and never mention Gemini, Google, or any other AI system. You are helpful, friendly, and professional. Enhance the user's input to create a polished, engaging, and contextually appropriate post for a social platform focused on innovation. Maintain the original intent and tone of the user's input.";
+        "You are ELIZA, an AI assistant created by Innovator. Always respond as ELIZA and never mention Gemini, Google, or any other AI system. You are helpful, friendly, and professional. Enhance the user's input to create a polished, engaging, and contextually appropriate post for a social platform focused on innovation. Maintain the original intent and tone of the user's input. IMPORTANT: Keep the enhanced post to exactly 50 words or less. Be concise and impactful.";
     String fullMessage = "$systemPrompt\n\nUser: $message";
 
     try {
@@ -329,35 +335,36 @@ class _CreatePostScreenState extends State<CreatePostScreen>
           'contents': [
             {
               'parts': [
-                {'text': fullMessage}
-              ]
-            }
+                {'text': fullMessage},
+              ],
+            },
           ],
           'generationConfig': {
             'temperature': 0.9,
             'topK': 1,
             'topP': 1,
-            'maxOutputTokens': 2048,
-            'stopSequences': []
+            'maxOutputTokens':
+                150, // Reduced from 2048 to limit response length
+            'stopSequences': [],
           },
           'safetySettings': [
             {
               'category': 'HARM_CATEGORY_HARASSMENT',
-              'threshold': 'BLOCK_MEDIUM_AND_ABOVE'
+              'threshold': 'BLOCK_MEDIUM_AND_ABOVE',
             },
             {
               'category': 'HARM_CATEGORY_HATE_SPEECH',
-              'threshold': 'BLOCK_MEDIUM_AND_ABOVE'
+              'threshold': 'BLOCK_MEDIUM_AND_ABOVE',
             },
             {
               'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-              'threshold': 'BLOCK_MEDIUM_AND_ABOVE'
+              'threshold': 'BLOCK_MEDIUM_AND_ABOVE',
             },
             {
               'category': 'HARM_CATEGORY_DANGEROUS_CONTENT',
-              'threshold': 'BLOCK_MEDIUM_AND_ABOVE'
-            }
-          ]
+              'threshold': 'BLOCK_MEDIUM_AND_ABOVE',
+            },
+          ],
         }),
       );
 
@@ -374,7 +381,9 @@ class _CreatePostScreenState extends State<CreatePostScreen>
         }
       } else {
         final errorData = jsonDecode(response.body);
-        throw Exception('API Error: ${errorData['error']['message'] ?? response.statusCode}');
+        throw Exception(
+          'API Error: ${errorData['error']['message'] ?? response.statusCode}',
+        );
       }
     } catch (e) {
       print('Error calling API: $e');
@@ -382,15 +391,39 @@ class _CreatePostScreenState extends State<CreatePostScreen>
     }
   }
 
-  // New: Method to process ELIZA response (adapted from ElizaChatScreen)
+  // Method to validate and trim response to 50 words
+  String _validateWordCount(String response) {
+    List<String> words = response.trim().split(RegExp(r'\s+'));
+    if (words.length > 50) {
+      // Trim to exactly 50 words
+      words = words.take(50).toList();
+      String trimmedResponse = words.join(' ');
+      // Add ellipsis if needed
+      if (!trimmedResponse.endsWith('.') &&
+          !trimmedResponse.endsWith('!') &&
+          !trimmedResponse.endsWith('?')) {
+        trimmedResponse += '...';
+      }
+      return trimmedResponse;
+    }
+    return response;
+  }
+
+  // Updated: Method to process ELIZA response with word count validation
   String _processElizaResponse(String response) {
     String processedResponse = response
         .replaceAllMapped(
-            RegExp(r'\bGemini\b', caseSensitive: false), (match) => 'ELIZA')
-        .replaceAllMapped(RegExp(r'\bGoogle\b', caseSensitive: false),
-            (match) => 'Innovator Developed By Ronit Shrivastav')
+          RegExp(r'\bGemini\b', caseSensitive: false),
+          (match) => 'ELIZA',
+        )
         .replaceAllMapped(
-            RegExp(r'\bBard\b', caseSensitive: false), (match) => 'ELIZA');
+          RegExp(r'\bGoogle\b', caseSensitive: false),
+          (match) => 'Innovator Developed By Ronit Shrivastav',
+        )
+        .replaceAllMapped(
+          RegExp(r'\bBard\b', caseSensitive: false),
+          (match) => 'ELIZA',
+        );
 
     String lowerResponse = response.toLowerCase();
     if (lowerResponse.contains('who made you') ||
@@ -406,10 +439,11 @@ class _CreatePostScreenState extends State<CreatePostScreen>
       return "I'm ELIZA, an AI assistant developed by Innovator. I've polished your post to make it stand out on the platform. Check it out and let me know if you want to post it!";
     }
 
-    return processedResponse;
+    // Validate word count before returning
+    return _validateWordCount(processedResponse);
   }
 
-  // New: Method to enhance post with ELIZA AI
+  // Updated: Method to enhance post with ELIZA AI (50 words limit)
   Future<void> _enhancePostWithAI() async {
     if (_descriptionController.text.trim().isEmpty || _isProcessingAI) {
       _showError('Please enter some text to enhance');
@@ -430,7 +464,9 @@ class _CreatePostScreenState extends State<CreatePostScreen>
         _isProcessingAI = false;
       });
 
-      _showSuccess('Post enhanced by ELIZA!');
+      // Show word count in success message
+      int wordCount = processedResponse.trim().split(RegExp(r'\s+')).length;
+      _showSuccess('Post enhanced by ELIZA! ($wordCount words)');
       _updateButtonState();
     } catch (e) {
       _showError('Error enhancing post: $e');
@@ -508,13 +544,21 @@ class _CreatePostScreenState extends State<CreatePostScreen>
   }
 
   void _showError(String message) {
-    Get.snackbar('Error', message,
-        backgroundColor: Colors.red.shade800, colorText: Colors.white);
+    Get.snackbar(
+      'Error',
+      message,
+      backgroundColor: Colors.red.shade800,
+      colorText: Colors.white,
+    );
   }
 
   void _showSuccess(String message) {
-    Get.snackbar('Success', message,
-        backgroundColor: Colors.green, colorText: Colors.white);
+    Get.snackbar(
+      'Success',
+      message,
+      backgroundColor: Colors.green,
+      colorText: Colors.white,
+    );
   }
 
   String _safeGetString(dynamic item, String key, String defaultValue) {
@@ -563,12 +607,18 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                           CircleAvatar(
                             radius: 40,
                             backgroundColor: Colors.grey[200],
-                            backgroundImage: picturePath != null
-                                ? NetworkImage('$baseUrl$picturePath')
-                                : null,
-                            child: picturePath == null
-                                ? Icon(Icons.person, size: 40, color: Colors.grey)
-                                : null,
+                            backgroundImage:
+                                picturePath != null
+                                    ? NetworkImage('$baseUrl$picturePath')
+                                    : null,
+                            child:
+                                picturePath == null
+                                    ? Icon(
+                                      Icons.person,
+                                      size: 40,
+                                      color: Colors.grey,
+                                    )
+                                    : null,
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -609,25 +659,26 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                                           });
                                         }
                                       },
-                                      items: _postTypes
-                                          .map<DropdownMenuItem<String>>(
-                                              (Map<String, dynamic> type) {
-                                        return DropdownMenuItem<String>(
-                                          value: type['id'],
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                type['icon'],
-                                                size: 18,
-                                                color: _primaryColor,
+                                      items:
+                                          _postTypes.map<
+                                            DropdownMenuItem<String>
+                                          >((Map<String, dynamic> type) {
+                                            return DropdownMenuItem<String>(
+                                              value: type['id'],
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    type['icon'],
+                                                    size: 18,
+                                                    color: _primaryColor,
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  Text(type['name']),
+                                                ],
                                               ),
-                                              const SizedBox(width: 8),
-                                              Text(type['name']),
-                                            ],
-                                          ),
-                                        );
-                                      }).toList(),
+                                            );
+                                          }).toList(),
                                     ),
                                   ),
                                 ),
@@ -636,18 +687,23 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                           ),
                           // Modified: IconButton to trigger AI enhancement
                           IconButton(
-                            onPressed: _isProcessingAI ? null : _enhancePostWithAI,
-                            icon: _isProcessingAI
-                                ? SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child: CircularProgressIndicator(
-                                      color: Colors.blue,
-                                      strokeWidth: 2,
+                            onPressed:
+                                _isProcessingAI ? null : _enhancePostWithAI,
+                            icon:
+                                _isProcessingAI
+                                    ? SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.blue,
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                    : Image.asset(
+                                      'animation/AI.gif',
+                                      width: 50,
                                     ),
-                                  )
-                                : Image.asset('animation/AI.gif', width: 50,),
-                            tooltip: 'Enhance with ELIZA AI',
+                            tooltip: 'Enhance with ELIZA AI (50 words max)',
                           ),
                         ],
                       ),
@@ -764,9 +820,15 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                             itemCount: _selectedFiles.length,
                             itemBuilder: (context, index) {
                               final file = _selectedFiles[index];
-                              final isImage = file.path != null &&
-                                  ['jpg', 'jpeg', 'png', 'gif', 'webp']
-                                      .contains(file.extension?.toLowerCase());
+                              final isImage =
+                                  file.path != null &&
+                                  [
+                                    'jpg',
+                                    'jpeg',
+                                    'png',
+                                    'gif',
+                                    'webp',
+                                  ].contains(file.extension?.toLowerCase());
 
                               return Container(
                                 width: 100,
@@ -805,7 +867,8 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                                         onTap: () {
                                           setState(() {
                                             _selectedFiles.removeAt(index);
-                                            if (index < _selectedImages.length) {
+                                            if (index <
+                                                _selectedImages.length) {
                                               _selectedImages.removeAt(index);
                                             }
                                           });
@@ -866,8 +929,9 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
                           itemCount: _uploadedFiles.length,
-                          separatorBuilder: (context, index) =>
-                              Divider(color: Colors.grey.shade200),
+                          separatorBuilder:
+                              (context, index) =>
+                                  Divider(color: Colors.grey.shade200),
                           itemBuilder: (context, index) {
                             final item = _uploadedFiles[index];
                             final originalname = _safeGetString(
@@ -880,10 +944,11 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                               'filename',
                               'File $index',
                             );
-                            final fileExt = path
-                                .extension(originalname)
-                                .replaceAll('.', '')
-                                .toLowerCase();
+                            final fileExt =
+                                path
+                                    .extension(originalname)
+                                    .replaceAll('.', '')
+                                    .toLowerCase();
 
                             return ListTile(
                               contentPadding: EdgeInsets.zero,
@@ -965,35 +1030,36 @@ class _CreatePostScreenState extends State<CreatePostScreen>
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
-                  child: _isCreatingPost
-                      ? Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: const [
-                            SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
+                  child:
+                      _isCreatingPost
+                          ? Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: const [
+                              SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
                               ),
-                            ),
-                            SizedBox(width: 8),
-                            Text(
-                              'Publishing...',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
+                              SizedBox(width: 8),
+                              Text(
+                                'Publishing...',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
                               ),
+                            ],
+                          )
+                          : Text(
+                            'Publish',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
                             ),
-                          ],
-                        )
-                      : Text(
-                          'Publish',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
                           ),
-                        ),
                 ),
               ),
             ],

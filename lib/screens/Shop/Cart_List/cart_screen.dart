@@ -1,5 +1,10 @@
+import 'dart:convert';
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:innovator/App_data/App_data.dart';
+import 'package:innovator/Authorization/Login.dart';
 import 'package:innovator/screens/Shop/Cart_List/api_services.dart';
 import 'package:innovator/widget/FloatingMenuwidget.dart';
 import 'cart_model.dart';
@@ -42,6 +47,32 @@ class _CartScreenState extends State<CartScreen>
         return cartResponse;
       });
     });
+  }
+
+  Future<void> _updateCartItemQuantity(String itemId, int newQuantity) async {
+    try {
+      final response = await http.patch(
+        Uri.parse('http://182.93.94.210:3064/api/v1/update-cart/$itemId'),
+        headers: {
+          'authorization': 'Bearer ${_appData.authToken}',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({'quantity': newQuantity}),
+      );
+
+      if (response.statusCode == 200) {
+        _loadCartItems(); // Refresh the cart
+      } else {
+        throw Exception('Failed to update quantity');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to update quantity: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   Future<void> _deleteCartItem(String itemId) async {
@@ -108,6 +139,11 @@ class _CartScreenState extends State<CartScreen>
                         if (_appData.authToken == null)
                           ElevatedButton(
                             onPressed: () {
+                              Navigator.pushAndRemoveUntil(
+                                context,
+                                MaterialPageRoute(builder: (_) => LoginPage()),
+                                (route) => false,
+                              );
                               // Navigate to login screen
                             },
                             style: ElevatedButton.styleFrom(
@@ -134,7 +170,7 @@ class _CartScreenState extends State<CartScreen>
                         Icon(
                           Icons.shopping_cart_outlined,
                           size: 80,
-                          color: _primaryColor.withOpacity(0.5),
+                          color: _primaryColor.withOpacity(50),
                         ),
                         const SizedBox(height: 16),
                         Text(
@@ -180,10 +216,10 @@ class _CartScreenState extends State<CartScreen>
                         padding: const EdgeInsets.all(16),
                         margin: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: _primaryColor.withOpacity(0.1),
+                          color: _primaryColor.withAlpha(10),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: _primaryColor.withOpacity(0.3),
+                            color: _primaryColor.withAlpha(30),
                           ),
                         ),
                         child: Row(
@@ -277,7 +313,7 @@ class _CartScreenState extends State<CartScreen>
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                   side: BorderSide(
-                                    color: _primaryColor.withOpacity(0.2),
+                                    color: _primaryColor.withAlpha(20),
                                     width: 1,
                                   ),
                                 ),
@@ -289,12 +325,12 @@ class _CartScreenState extends State<CartScreen>
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      // Product image placeholder
+                                      // Product image
                                       Container(
                                         width: 80,
                                         height: 80,
                                         decoration: BoxDecoration(
-                                          color: _primaryColor.withOpacity(0.1),
+                                          color: _primaryColor.withAlpha(10),
                                           borderRadius: BorderRadius.circular(
                                             8,
                                           ),
@@ -304,11 +340,12 @@ class _CartScreenState extends State<CartScreen>
                                             8,
                                           ),
                                           child: SafeImage(
-                                            imageUrl:
-                                                item.imageUrl, // Assuming you've added an imageUrl field to CartItem
+                                            images: item.images,
+                                            baseUrl:
+                                                'http://182.93.94.210:3064',
                                             placeholderIcon: Icons.image,
                                             placeholderColor: _primaryColor
-                                                .withOpacity(0.5),
+                                                .withAlpha(50),
                                             iconSize: 40,
                                           ),
                                         ),
@@ -340,32 +377,91 @@ class _CartScreenState extends State<CartScreen>
                                             Row(
                                               children: [
                                                 Text(
-                                                  'Quantity: ',
+                                                  'Qty: ', // Shortened from 'Quantity: '
                                                   style: TextStyle(
                                                     color: _textColor,
+                                                    fontSize:
+                                                        12, // Slightly smaller font
                                                   ),
                                                 ),
+                                                // Minus button
+                                                SizedBox(
+                                                  width: 32, // Fixed width
+                                                  height: 32,
+                                                  child: IconButton(
+                                                    icon: Icon(
+                                                      Icons.remove,
+                                                      size: 16,
+                                                    ), // Smaller icon
+                                                    onPressed: () {
+                                                      if (item.quantity > 1) {
+                                                        _updateCartItemQuantity(
+                                                          item.id,
+                                                          item.quantity - 1,
+                                                        );
+                                                      } else {
+                                                        _deleteCartItem(
+                                                          item.id,
+                                                        );
+                                                      }
+                                                    },
+                                                    padding: EdgeInsets.zero,
+                                                    constraints:
+                                                        BoxConstraints(),
+                                                    visualDensity:
+                                                        VisualDensity.compact,
+                                                  ),
+                                                ),
+                                                // Quantity display
                                                 Container(
+                                                  width:
+                                                      28, // Fixed width instead of minWidth constraint
                                                   padding:
                                                       const EdgeInsets.symmetric(
-                                                        horizontal: 12,
+                                                        horizontal:
+                                                            2, // Reduced padding
                                                         vertical: 2,
                                                       ),
                                                   decoration: BoxDecoration(
                                                     color: _accentColor
-                                                        .withOpacity(0.2),
+                                                        .withAlpha(20),
                                                     borderRadius:
                                                         BorderRadius.circular(
-                                                          8,
-                                                        ),
+                                                          6,
+                                                        ), // Slightly smaller radius
                                                   ),
+                                                  alignment: Alignment.center,
                                                   child: Text(
                                                     '${item.quantity}',
                                                     style: TextStyle(
                                                       fontWeight:
                                                           FontWeight.bold,
                                                       color: Colors.green,
+                                                      fontSize:
+                                                          12, // Smaller font
                                                     ),
+                                                  ),
+                                                ),
+                                                // Plus button
+                                                SizedBox(
+                                                  width: 32, // Fixed width
+                                                  height: 32,
+                                                  child: IconButton(
+                                                    icon: Icon(
+                                                      Icons.add,
+                                                      size: 16,
+                                                    ), // Smaller icon
+                                                    onPressed: () {
+                                                      _updateCartItemQuantity(
+                                                        item.id,
+                                                        item.quantity + 1,
+                                                      );
+                                                    },
+                                                    padding: EdgeInsets.zero,
+                                                    constraints:
+                                                        BoxConstraints(),
+                                                    visualDensity:
+                                                        VisualDensity.compact,
                                                   ),
                                                 ),
                                               ],
@@ -377,7 +473,7 @@ class _CartScreenState extends State<CartScreen>
                                       Container(
                                         padding: const EdgeInsets.all(8),
                                         decoration: BoxDecoration(
-                                          color: _priceColor.withOpacity(0.1),
+                                          color: _priceColor.withAlpha(10),
                                           borderRadius: BorderRadius.circular(
                                             8,
                                           ),
@@ -405,27 +501,28 @@ class _CartScreenState extends State<CartScreen>
                         child: ElevatedButton(
                           onPressed: () {
                             showDialog(
-    context: context,
-    builder: (BuildContext context) {
-      return AlertDialog(
-        title: const Text('Checkout'),
-        content: const Text('Proceed to checkout?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('CANCEL'),
-          ),
-          TextButton(
-            onPressed: () {
-              // Add your checkout logic here
-              Navigator.of(context).pop();
-            },
-            child: const Text('OK'),
-          ),
-        ],
-      );
-    },
-  );
+                              context: context,
+                              builder: (BuildContext context) {
+                                return AlertDialog(
+                                  title: const Text('Checkout'),
+                                  content: const Text('Proceed to checkout?'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed:
+                                          () => Navigator.of(context).pop(),
+                                      child: const Text('CANCEL'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () {
+                                        // Add your checkout logic here
+                                        Navigator.of(context).pop();
+                                      },
+                                      child: const Text('OK'),
+                                    ),
+                                  ],
+                                );
+                              },
+                            );
                             // Navigate to checkout
                           },
                           style: ElevatedButton.styleFrom(
@@ -460,56 +557,54 @@ class _CartScreenState extends State<CartScreen>
 }
 
 class SafeImage extends StatelessWidget {
-  final String? imageUrl;
+  final List<String>? images;
+  final String? baseUrl;
   final IconData placeholderIcon;
   final Color placeholderColor;
   final double iconSize;
 
   const SafeImage({
     Key? key,
-    this.imageUrl,
-    required this.placeholderIcon,
-    required this.placeholderColor,
-    required this.iconSize,
+    this.images,
+    this.baseUrl,
+    this.placeholderIcon = Icons.image,
+    this.placeholderColor = Colors.grey,
+    this.iconSize = 40,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    // If no image URL or empty URL, show placeholder
-    if (imageUrl == null || imageUrl!.isEmpty) {
+    // If no images or empty list, show placeholder
+    if (images == null || images!.isEmpty) {
       return Center(
         child: Icon(placeholderIcon, color: placeholderColor, size: iconSize),
       );
     }
 
+    // Construct full URL if baseUrl is provided
+    final imageUrl =
+        baseUrl != null ? '$baseUrl${images!.first}' : images!.first;
+
     // Try to load the image with error handling
-    return Image.network(
-      imageUrl!,
+    return CachedNetworkImage(
+      imageUrl: imageUrl,
       fit: BoxFit.cover,
       width: double.infinity,
       height: double.infinity,
-      errorBuilder: (context, error, stackTrace) {
-        print('Error loading image: $error');
-        return Center(
-          child: Icon(placeholderIcon, color: placeholderColor, size: iconSize),
-        );
-      },
-      loadingBuilder: (context, child, loadingProgress) {
-        if (loadingProgress == null) {
-          return child;
-        }
-        return Center(
-          child: CircularProgressIndicator(
-            value:
-                loadingProgress.expectedTotalBytes != null
-                    ? loadingProgress.cumulativeBytesLoaded /
-                        loadingProgress.expectedTotalBytes!
-                    : null,
-            valueColor: AlwaysStoppedAnimation<Color>(placeholderColor),
-            strokeWidth: 2,
+      placeholder:
+          (context, url) => Center(
+            child: CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(placeholderColor),
+            ),
           ),
-        );
-      },
+      errorWidget:
+          (context, url, error) => Center(
+            child: Icon(
+              placeholderIcon,
+              color: placeholderColor,
+              size: iconSize,
+            ),
+          ),
     );
   }
 }

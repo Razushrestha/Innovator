@@ -55,6 +55,8 @@ class _LoginPageState extends State<LoginPage> {
     _requestNotificationPermission();
   }
 
+
+
   // Request notification permission for FCM
   Future<void> _requestNotificationPermission() async {
     try {
@@ -538,8 +540,9 @@ _handleGoogleSignIn();
   @override
   Widget build(BuildContext context) {
     final Size screenSize = MediaQuery.of(context).size;
-    mq = MediaQuery.of(context).size;
-    return Theme(
+final mq = MediaQuery.of(context).size;
+  final theme = Theme.of(context);
+      return Theme(
       data: ThemeData(primaryColor: preciseGreen),
       child: Scaffold(
         appBar: AppBar(

@@ -8,6 +8,7 @@ import 'package:get/get.dart';
 import 'package:hive/hive.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:innovator/App_data/App_data.dart';
+import 'package:innovator/firebase_options.dart';
 import 'package:innovator/screens/Feed/Services/Feed_Cache_service.dart';
 import 'package:innovator/screens/Splash_Screen/splash_screen.dart';
 import 'package:innovator/controllers/user_controller.dart';
@@ -69,12 +70,15 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 }
 
 Future<void> _initializeApp() async {
-  try {
+  
     debugPrint('🚀 Starting app initialization...');
     
     // Ensure Flutter binding is initialized
-     WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+    WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+    //await Firebase.initializeApp();
 
     // Initialize Firebase
     debugPrint('✅ Firebase initialized');
@@ -97,7 +101,7 @@ Future<void> _initializeApp() async {
     debugPrint('✅ FCM initialized');
     
     // Configure system UI
-    await _configureSystemUI();
+    //await _configureSystemUI();
     debugPrint('✅ System UI configured');
     
     // Initialize cache managers
@@ -109,34 +113,20 @@ Future<void> _initializeApp() async {
     Get.put(UserController());
     debugPrint('✅ Controllers initialized');
     //Get.put(UserController());
-  await DrawerProfileCache.initialize();
-
-  await CacheManager.initialize();
-
-
     debugPrint('🎉 App initialization completed successfully');
-  } catch (e) {
-    debugPrint('❌ Error during app initialization: $e');
-    rethrow;
-  }
+ 
 }
 
-Future<void> _configureSystemUI() async {
-  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
-  ]);
-}
+// Future<void> _configureSystemUI() async {
+//   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+//   await SystemChrome.setPreferredOrientations([
+//     DeviceOrientation.portraitUp,
+//     DeviceOrientation.portraitDown,
+//   ]);
+// }
 
 void main() async {
   await _initializeApp();
- 
-  //  await Firebase.initializeApp();
- 
-  //await ProfileCacheManager.initialize();
-
-
   runApp(const ProviderScope(child: InnovatorHomePage()));
 }
 
@@ -176,9 +166,8 @@ class _InnovatorHomePageState extends ConsumerState<InnovatorHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      mq = MediaQuery.of(context).size;
-    });
+     mq = MediaQuery.of(context).size; // Set once at build time
+
 
     return GetMaterialApp(
       navigatorKey: navigatorKey,
@@ -201,76 +190,12 @@ class _InnovatorHomePageState extends ConsumerState<InnovatorHomePage> {
           color: Colors.black,
           fontWeight: FontWeight.normal,
           fontSize: 19,
-        ),
+        ), 
         backgroundColor: Colors.white,
       ),
     );
   }
 
-  // List<GetPage> _buildAppPages() {
-  //   return [
-  //     GetPage(name: '/splash', page: () => const SplashScreen()),
-  //     GetPage(name: '/home', page: () => const HomeScreen()),
-  //     GetPage(name: '/chat', page: () => const ChatScreen()),
-  //     GetPage(name: '/profile', page: () => const ProfileScreen()),
-  //     GetPage(name: '/orders', page: () => const OrdersScreen()),
-  //   ];
-  // }
+  
 }
 
-// Screen Widgets
-// class HomeScreen extends StatelessWidget {
-//   const HomeScreen({super.key});
-  
-//   @override
-//   Widget build(BuildContext context) {
-//     final args = Get.arguments as Map<String, dynamic>?;
-//     return Scaffold(
-//       body: Center(
-//         child: Text('Home Screen: ${args ?? ''}'),
-//       ),
-//     );
-//   }
-// }
-
-// class ChatScreen extends StatelessWidget {
-//   const ChatScreen({super.key});
-  
-//   @override
-//   Widget build(BuildContext context) {
-//     final args = Get.arguments as Map<String, dynamic>?;
-//     return Scaffold(
-//       body: Center(
-//         child: Text('Chat Screen: ${args ?? ''}'),
-//       ),
-//     );
-//   }
-// }
-
-// class ProfileScreen extends StatelessWidget {
-//   const ProfileScreen({super.key});
-  
-//   @override
-//   Widget build(BuildContext context) {
-//     final args = Get.arguments as Map<String, dynamic>?;
-//     return Scaffold(
-//       body: Center(
-//         child: Text('Profile Screen: ${args ?? ''}'),
-//       ),
-//     );
-//   }
-// }
-
-// class OrdersScreen extends StatelessWidget {
-//   const OrdersScreen({super.key});
-  
-//   @override
-//   Widget build(BuildContext context) {
-//     final args = Get.arguments as Map<String, dynamic>?;
-//     return Scaffold(
-//       body: Center(
-//         child: Text('Orders Screen: ${args ?? ''}'),
-//       ),
-//     );
-//   }
-// }

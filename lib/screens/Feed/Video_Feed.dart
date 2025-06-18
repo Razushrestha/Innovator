@@ -57,11 +57,47 @@ class Author {
   }
 }
 
+class OptimizedFile {
+  final String url;
+  final String type;
+  final String format;
+  final List<String> qualities;
+  final String thumbnail;
+  final String original;
+  final String hls;
+  final String fileSize;
+
+  OptimizedFile({
+    required this.url,
+    required this.type,
+    required this.format,
+    required this.qualities,
+    required this.thumbnail,
+    required this.original,
+    required this.hls,
+    required this.fileSize,
+  });
+
+  factory OptimizedFile.fromJson(Map<String, dynamic> json) {
+    return OptimizedFile(
+      url: json['url'] ?? '',
+      type: json['type'] ?? '',
+      format: json['format'] ?? '',
+      qualities: List<String>.from(json['qualities'] ?? []),
+      thumbnail: json['thumbnail'] ?? '',
+      original: json['original'] ?? '',
+      hls: json['hls'] ?? '',
+      fileSize: json['fileSize'] ?? '',
+    );
+  }
+}
+
 class FeedContent {
   final String id;
   final String status;
   final String type;
   final List<String> files;
+  final List<OptimizedFile> optimizedFiles;
   final Author author;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -78,6 +114,7 @@ class FeedContent {
     required this.status,
     required this.type,
     required this.files,
+    required this.optimizedFiles,
     required this.author,
     required this.createdAt,
     required this.updatedAt,
@@ -86,14 +123,22 @@ class FeedContent {
     this.isLiked = false,
     this.isFollowed = false,
   }) {
-    _mediaUrls = files.map((file) {
-      if (file.startsWith('http')) return file;
-      return 'http://182.93.94.210:3064$file';
-    }).toList();
+    // Prioritize original, then hls, then url
+    _mediaUrls = optimizedFiles.isNotEmpty
+        ? optimizedFiles.map((file) {
+            if (file.original.isNotEmpty) return 'http://182.93.94.210:3065${file.original}';
+            if (file.hls.isNotEmpty) return 'http://182.93.94.210:3065${file.hls}';
+            if (file.url.isNotEmpty) return 'http://182.93.94.210:3065${file.url}';
+            return '';
+          }).where((url) => url.isNotEmpty).toList()
+        : files.map((file) => 'http://182.93.94.210:3065$file').toList();
 
-    _hasVideos = files.any((file) => file.toLowerCase().endsWith('.mp4') ||
-        file.toLowerCase().endsWith('.mov') ||
-        file.toLowerCase().endsWith('.avi'));
+    _hasVideos = optimizedFiles.any((file) => file.type == 'video') ||
+        files.any((file) =>
+            file.toLowerCase().endsWith('.mp4') ||
+            file.toLowerCase().endsWith('.mov') ||
+            file.toLowerCase().endsWith('.avi') ||
+            file.toLowerCase().endsWith('.m3u8'));
   }
 
   factory FeedContent.fromJson(Map<String, dynamic> json) {
@@ -102,9 +147,15 @@ class FeedContent {
       status: json['status'] ?? '',
       type: json['type'] ?? '',
       files: List<String>.from(json['files'] ?? []),
+      optimizedFiles: List<OptimizedFile>.from(
+          (json['optimizedFiles'] ?? []).map((x) => OptimizedFile.fromJson(x))),
       author: Author.fromJson(json['author'] ?? {}),
-      createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt']) : DateTime.now(),
-      updatedAt: json['updatedAt'] != null ? DateTime.parse(json['updatedAt']) : DateTime.now(),
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'])
+          : DateTime.now(),
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.parse(json['updatedAt'])
+          : DateTime.now(),
       likes: json['likes'] ?? 0,
       comments: json['comments'] ?? 0,
       isLiked: json['liked'] ?? false,
@@ -114,6 +165,14 @@ class FeedContent {
 
   bool get hasVideos => _hasVideos;
   List<String> get mediaUrls => _mediaUrls;
+
+  // Get the best available thumbnail URL
+  String? get thumbnailUrl {
+    if (optimizedFiles.isNotEmpty && optimizedFiles.first.thumbnail.isNotEmpty) {
+      return 'http://182.93.94.210:3065${optimizedFiles.first.thumbnail}';
+    }
+    return null;
+  }
 }
 
 // Main Video Feed Page
@@ -190,85 +249,87 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
   // }
 
   Future<void> _loadVideoContent() async {
-    if (_isLoading || !_hasMoreVideos) return;
+  if (_isLoading || !_hasMoreVideos) return;
 
-    setState(() {
-      _isLoading = true;
-      _hasError = false;
-    });
+  setState(() {
+    _isLoading = true;
+    _hasError = false;
+  });
 
-    try {
-      if (!_isOnline) {
-        setState(() {
-          _hasError = true;
-          _errorMessage = 'No internet connection';
-        });
-        return;
-      }
-
-      final response = await _makeApiRequest();
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> data = json.decode(response.body);
-        final List<dynamic> videoList = data['data']['videoContents'] ?? [];
-        final List<FeedContent> newVideos = [];
-
-        for (var item in videoList) {
-          final content = FeedContent.fromJson(item);
-          final isFollowing = await FollowService.checkFollowStatus(
-            content.author.email,
-          );
-          newVideos.add(FeedContent(
-            id: content.id,
-            status: content.status,
-            type: content.type,
-            files: content.files,
-            author: content.author,
-            createdAt: content.createdAt,
-            updatedAt: content.updatedAt,
-            likes: content.likes,
-            comments: content.comments,
-            isLiked: content.isLiked,
-            isFollowed: isFollowing,
-          ));
-        }
-
-        setState(() {
-          _videoContents.addAll(newVideos);
-          _hasMoreVideos = data['data']['hasMoreVideos'] ?? false;
-          _nextVideoCursor = data['data']['nextVideoCursor'];
-        });
-      } else if (response.statusCode == 401) {
-        setState(() {
-          _hasError = true;
-          _errorMessage = 'Session expired. Please log in again.';
-        });
-        await AppData().logout();
-        Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => LoginPage()), (route) => false);
-      } else {
-        setState(() {
-          _hasError = true;
-          _errorMessage = 'Failed to load videos: ${response.statusCode}';
-        });
-      }
-    } catch (e) {
+  try {
+    if (!_isOnline) {
       setState(() {
         _hasError = true;
-        _errorMessage = 'No Internet Connection';
+        _errorMessage = 'No internet connection';
       });
-    } finally {
+      return;
+    }
+
+    final response = await _makeApiRequest();
+    if (response.statusCode == 200) {
+      final Map<String, dynamic> data = json.decode(response.body);
+      final List<dynamic> videoList = data['data']['videoContents'] ?? [];
+      final List<FeedContent> newVideos = [];
+
+      for (var item in videoList) {
+        final content = FeedContent.fromJson(item);
+        final isFollowing = await FollowService.checkFollowStatus(
+          content.author.email,
+        );
+        newVideos.add(FeedContent(
+          id: content.id,
+          status: content.status,
+          type: content.type,
+          files: content.files,
+          optimizedFiles: content.optimizedFiles,
+          author: content.author,
+          createdAt: content.createdAt,
+          updatedAt: content.updatedAt,
+          likes: content.likes,
+          comments: content.comments,
+          isLiked: content.isLiked,
+          isFollowed: isFollowing,
+        ));
+      }
+
       setState(() {
-        _isLoading = false;
+        _videoContents.addAll(newVideos);
+        _hasMoreVideos = data['data']['hasMoreVideos'] ?? false;
+        _nextVideoCursor = data['data']['nextVideoCursor'];
+      });
+    } else if (response.statusCode == 401) {
+      setState(() {
+        _hasError = true;
+        _errorMessage = 'Session expired. Please log in again.';
+      });
+      await AppData().logout();
+      Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => LoginPage()),
+          (route) => false);
+    } else {
+      setState(() {
+        _hasError = true;
+        _errorMessage = 'Failed to load videos: ${response.statusCode}';
       });
     }
+  } catch (e) {
+    setState(() {
+      _hasError = true;
+      _errorMessage = 'No Internet Connection';
+    });
+  } finally {
+    setState(() {
+      _isLoading = false;
+    });
   }
+}
 
   Future<http.Response> _makeApiRequest() async {
-    final url = _nextVideoCursor == null
-        ? 'http://182.93.94.210:3064/api/v1/list-contents'
-        : 'http://182.93.94.210:3064/api/v1/list-contents';
-
+    final url = Uri.parse('http://182.93.94.210:3065/api/v1/list-contents?loadEngagement=true&quality=auto');
+    
     return await http.get(
-      Uri.parse(url),
+      url,
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -277,7 +338,7 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
     ).timeout(Duration(seconds: 30));
   }
 
-  Future<void> _refresh() async {
+   Future<void> _refresh() async {
     setState(() {
       _videoContents.clear();
       _nextVideoCursor = null;
@@ -519,7 +580,9 @@ class _VideoFeedItemState extends State<VideoFeedItem> with SingleTickerProvider
   static const int _maxLinesCollapsed = 3;
 
   late AnimationController _controller;
-
+final ContentLikeService likeService = ContentLikeService(
+    baseUrl: 'http://182.93.94.210:3065',
+  );
   @override
   void initState() {
     super.initState();
@@ -547,9 +610,7 @@ class _VideoFeedItemState extends State<VideoFeedItem> with SingleTickerProvider
         return Colors.grey.shade600;
     }
   }
-    final ContentLikeService likeService = ContentLikeService(
-    baseUrl: 'http://182.93.94.210:3064',
-  );
+    
 
   bool _isAuthorCurrentUser() {
     return AppData().isCurrentUser(widget.content.author.id);
@@ -799,16 +860,25 @@ class _VideoFeedItemState extends State<VideoFeedItem> with SingleTickerProvider
               ),
             // Video Content
             if (widget.content.hasVideos)
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 5.0),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(16.0),
-                  child: LimitedBox(
-                    maxHeight: 300.0,
-                    child: AutoPlayVideoWidget(url: widget.content.mediaUrls.first, height: 350.0),
-                  ),
-                ),
-              ),
+  Container(
+    margin: const EdgeInsets.symmetric(horizontal: 5.0),
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(16.0),
+      child: LimitedBox(
+        maxHeight: 300.0,
+        child: AutoPlayVideoWidget(
+          url: widget.content.mediaUrls.isNotEmpty
+              ? widget.content.mediaUrls.first
+              : '',
+          fallbackUrls: widget.content.mediaUrls.length > 1
+              ? widget.content.mediaUrls.sublist(1)
+              : [],
+          height: 350.0,
+          thumbnailUrl: widget.content.thumbnailUrl,
+        ),
+      ),
+    ),
+  ),
             // Action Buttons
             Container(
               padding: const EdgeInsets.all(5.0),
@@ -959,7 +1029,7 @@ class _VideoFeedItemState extends State<VideoFeedItem> with SingleTickerProvider
     }
 
     return CachedNetworkImage(
-      imageUrl: 'http://182.93.94.210:3064${widget.content.author.picture}',
+      imageUrl: 'http://182.93.94.210:3065${widget.content.author.picture}',
       imageBuilder: (context, imageProvider) => CircleAvatar(
         backgroundImage: imageProvider,
       ),
@@ -978,7 +1048,7 @@ class _VideoFeedItemState extends State<VideoFeedItem> with SingleTickerProvider
 
   Future<void> _submitComment(String comment) async {
     try {
-      final url = Uri.parse('http://182.93.94.210:3064/api/v1/add-comment');
+      final url = Uri.parse('http://182.93.94.210:3065/api/v1/add-comment');
       final response = await http.post(
         url,
         headers: {
@@ -1070,7 +1140,7 @@ class _VideoFeedItemState extends State<VideoFeedItem> with SingleTickerProvider
 
   void _copyLink() {
     Clipboard.setData(ClipboardData(
-      text: 'http://182.93.94.210:3064/content/${widget.content.id}',
+      text: 'http://182.93.94.210:3065/content/${widget.content.id}',
     ));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Link copied to clipboard')),
@@ -1086,7 +1156,7 @@ class _VideoFeedItemState extends State<VideoFeedItem> with SingleTickerProvider
     }
 
     try {
-      final url = Uri.parse('http://182.93.94.210:3064/api/v1/delete-content/${widget.content.id}');
+      final url = Uri.parse('http://182.93.94.210:3065/api/v1/delete-content/${widget.content.id}');
       final response = await http.delete(
         url,
         headers: {
@@ -1175,14 +1245,18 @@ class _VideoFeedItemState extends State<VideoFeedItem> with SingleTickerProvider
 
 // Auto Play Video Widget (unchanged)
 class AutoPlayVideoWidget extends StatefulWidget {
-  final String url;
+  final String url; // Primary URL (original)
+  final List<String> fallbackUrls; // Fallback URLs (hls, url)
   final double? height;
   final double? width;
+  final String? thumbnailUrl;
 
   const AutoPlayVideoWidget({
     required this.url,
+    required this.fallbackUrls,
     this.height,
-    this.width, 
+    this.width,
+    this.thumbnailUrl,
     Key? key,
   }) : super(key: key);
 
@@ -1200,11 +1274,12 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
   bool _isPlaying = true;
   final String videoId = UniqueKey().toString();
   static final Map<String, AutoPlayVideoWidgetState> _activeVideos = {};
-  
+  int _currentUrlIndex = 0; // Track which URL is being tried
+
   @override
   bool get wantKeepAlive => _initialized;
 
-  // Public methods to control the video from outside
+  // Public methods to control the video
   void pauseVideo() {
     if (_controller != null && !_disposed && _initialized) {
       _controller!.pause();
@@ -1230,13 +1305,13 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
           setState(() {
             _isMuted = true;
           });
-          developer.log('Video muted successfully for ID: $videoId', name: 'AutoPlayVideoWidget');
+          developer.log('Video muted successfully for ID: $videoId',
+              name: 'AutoPlayVideoWidget');
         }
       }).catchError((error) {
-        developer.log('Error muting video for ID: $videoId: $error', name: 'AutoPlayVideoWidget');
+        developer.log('Error muting video for ID: $videoId: $error',
+            name: 'AutoPlayVideoWidget');
       });
-    } else {
-      developer.log('Cannot mute video for ID: $videoId (controller null or disposed)', name: 'AutoPlayVideoWidget');
     }
   }
 
@@ -1270,27 +1345,56 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
   @override
   void initState() {
     super.initState();
-
+    WidgetsBinding.instance.addObserver(this);
     _initializeVideoPlayer();
     _activeVideos[videoId] = this;
   }
 
   void _initializeVideoPlayer() {
     if (_disposed) return;
-    
+
     _initTimer = Timer(const Duration(seconds: 30), () {
       if (!_initialized && !_disposed) {
-        _handleInitializationError();
+        _tryNextUrl();
       }
     });
 
-    _controller = VideoPlayerController.networkUrl(
-      Uri.parse(widget.url),
-      videoPlayerOptions: VideoPlayerOptions(
-        mixWithOthers: true,
-        allowBackgroundPlayback: false,
-      ),
-    );
+    _initializeWithCurrentUrl();
+  }
+
+  void _initializeWithCurrentUrl() {
+    if (_disposed) return;
+
+    String currentUrl = _currentUrlIndex == 0
+        ? widget.url
+        : widget.fallbackUrls[_currentUrlIndex - 1];
+
+    if (currentUrl.isEmpty) {
+      _handleInitializationError();
+      return;
+    }
+
+    // Check if URL is HLS (.m3u8)
+    bool isHls = currentUrl.toLowerCase().endsWith('.m3u8');
+    developer.log('Trying to initialize video with URL: $currentUrl (HLS: $isHls)',
+        name: 'AutoPlayVideoWidget');
+
+    _controller = isHls
+        ? VideoPlayerController.networkUrl(
+            Uri.parse(currentUrl),
+            formatHint: VideoFormat.hls,
+            videoPlayerOptions: VideoPlayerOptions(
+              mixWithOthers: true,
+              allowBackgroundPlayback: false,
+            ),
+          )
+        : VideoPlayerController.network(
+            currentUrl,
+            videoPlayerOptions: VideoPlayerOptions(
+              mixWithOthers: true,
+              allowBackgroundPlayback: false,
+            ),
+          );
 
     _controller!
       ..setLooping(true)
@@ -1304,31 +1408,44 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
           if (mounted) {
             _controller!.play();
           }
+          developer.log('Video initialized successfully with URL: $currentUrl',
+              name: 'AutoPlayVideoWidget');
         }
       }).catchError((error) {
         _initTimer?.cancel();
+        developer.log('Error initializing video with URL: $currentUrl: $error',
+            name: 'AutoPlayVideoWidget');
         if (!_disposed) {
-          _handleInitializationError();
+          _tryNextUrl();
         }
       });
   }
 
+  void _tryNextUrl() {
+    if (_disposed) return;
+
+    _currentUrlIndex++;
+    if (_currentUrlIndex <= widget.fallbackUrls.length) {
+      _controller?.dispose();
+      _controller = null;
+      _initializeWithCurrentUrl();
+    } else {
+      _handleInitializationError();
+    }
+  }
+
   void _handleVisibilityChanged(VisibilityInfo info) {
     if (!mounted || _disposed || _controller == null) return;
-    
-    // Don't auto-play if gallery is open
-    
+
     final visibleFraction = info.visibleFraction;
-    
+
     if (visibleFraction > 0.5) {
-      // Video is mostly visible
       _activeVideos[videoId] = this;
       _muteOtherVideos();
       if (_initialized && !_controller!.value.isPlaying && _isPlaying) {
         _controller!.play();
       }
     } else {
-      // Video is mostly hidden
       _activeVideos.remove(videoId);
       if (_initialized && _controller!.value.isPlaying) {
         _controller!.pause();
@@ -1348,7 +1465,6 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
     }
   }
 
-  // Static method to pause and mute all AutoPlay videos
   static void pauseAllAutoPlayVideos() {
     for (final entry in _activeVideos.entries) {
       entry.value._controller?.pause();
@@ -1361,13 +1477,11 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
     }
   }
 
-  // Static method to resume all AutoPlay videos with their previous states
   static void resumeAllAutoPlayVideos() {
     for (final entry in _activeVideos.entries) {
       if (entry.value._initialized && entry.value.mounted) {
         entry.value._controller?.play();
         entry.value._isPlaying = true;
-        // Keep them muted by default for auto-play behavior
         entry.value._controller?.setVolume(0.0);
         entry.value._isMuted = true;
         entry.value.setState(() {});
@@ -1407,7 +1521,7 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
 
   @override
   void dispose() {
-     _disposed = true;
+    _disposed = true;
     _activeVideos.remove(videoId);
     _initTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
@@ -1418,7 +1532,7 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
 
   void _togglePlayPause() {
     if (_controller == null || _disposed) return;
-    
+
     setState(() {
       _isPlaying = !_isPlaying;
       if (_isPlaying) {
@@ -1431,7 +1545,7 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
 
   void _toggleMute() {
     if (_controller == null || _disposed) return;
-    
+
     setState(() {
       _isMuted = !_isMuted;
       _controller!.setVolume(_isMuted ? 0.0 : 1.0);
@@ -1441,7 +1555,7 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    
+
     return VisibilityDetector(
       key: Key(videoId),
       onVisibilityChanged: _handleVisibilityChanged,
@@ -1450,14 +1564,55 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
         width: widget.width ?? MediaQuery.of(context).size.width,
         color: Colors.white,
         child: !_initialized || _controller == null
-            ? const Center(
-                child: CircularProgressIndicator(strokeWidth: 2),
+            ? Stack(
+                children: [
+                  if (widget.thumbnailUrl != null && widget.thumbnailUrl!.isNotEmpty)
+                    CachedNetworkImage(
+                      imageUrl: widget.thumbnailUrl!,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      height: double.infinity,
+                      placeholder: (context, url) => Center(
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      errorWidget: (context, url, error) {
+                        developer.log(
+                          'Failed to load thumbnail: $url, Error: $error',
+                          name: 'AutoPlayVideoWidget',
+                        );
+                        return Container(
+                          color: Colors.grey.shade200,
+                          child: Center(
+                            child: Icon(
+                              Icons.broken_image,
+                              color: Colors.grey.shade400,
+                              size: 50,
+                            ),
+                          ),
+                        );
+                      },
+                    )
+                  else
+                    Container(
+                      color: Colors.grey.shade200,
+                      child: Center(
+                        child: Icon(
+                          Icons.image_not_supported,
+                          color: Colors.grey.shade400,
+                          size: 50,
+                        ),
+                      ),
+                    ),
+                  Center(
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ],
               )
             : LayoutBuilder(
                 builder: (context, constraints) {
                   final size = _controller!.value.size;
                   final aspectRatio = size.width / size.height;
-                  
+
                   double targetWidth = constraints.maxWidth;
                   double targetHeight = constraints.maxWidth / aspectRatio;
 
@@ -1478,15 +1633,15 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
                             child: VideoPlayer(_controller!),
                           ),
                         ),
-                         Positioned.fill(
-                        child: GestureDetector(
-                          onTap: _togglePlayPause,
-                          behavior: HitTestBehavior.translucent,
-                          child: Container(
-                            color: Colors.transparent,
+                        Positioned.fill(
+                          child: GestureDetector(
+                            onTap: _togglePlayPause,
+                            behavior: HitTestBehavior.translucent,
+                            child: Container(
+                              color: Colors.transparent,
+                            ),
                           ),
                         ),
-                      ),
                         if (!_isPlaying)
                           Icon(
                             Icons.play_arrow,
@@ -1505,7 +1660,7 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
                               decoration: BoxDecoration(
                                 color: Colors.black54,
                                 shape: BoxShape.circle,
-                                border: Border.all(
+                                 border: Border.all(
                                   color: Colors.white.withAlpha(50),
                                   width: 1,
                                 ),
@@ -1527,7 +1682,6 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
     );
   }
 }
-
 // Linkify Text Widget
 class _LinkifyText extends StatelessWidget {
   final String text;

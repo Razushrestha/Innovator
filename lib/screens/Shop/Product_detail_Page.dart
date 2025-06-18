@@ -573,7 +573,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
             child: ElevatedButton(
               onPressed: (stock > 0 && !_addingToCart) ? _addToCart : null,
               style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
+                padding: const EdgeInsets.symmetric(vertical: 25),
                 backgroundColor: Colors.blue,
                 foregroundColor: Colors.white,
                 disabledBackgroundColor: Colors.grey.shade400,
