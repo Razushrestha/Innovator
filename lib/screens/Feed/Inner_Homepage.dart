@@ -261,43 +261,7 @@ class ContentResponse {
   }
 }
 
-class ContentData {
-  final List<FeedContent> videoContents;
-  final List<FeedContent> normalContents;
-  final bool hasMoreVideos;
-  final bool hasMoreNormal;
-  final String? nextVideoCursor;
-  final String? nextNormalCursor;
-  final Map<String, dynamic> optimizationInfo;
 
-  ContentData({
-    required this.videoContents,
-    required this.normalContents,
-    required this.hasMoreVideos,
-    required this.hasMoreNormal,
-    this.nextVideoCursor,
-    this.nextNormalCursor,
-    required this.optimizationInfo,
-  });
-
-  factory ContentData.fromJson(Map<String, dynamic> json) {
-    return ContentData(
-      videoContents:
-          (json['videoContents'] as List<dynamic>? ?? [])
-              .map((item) => FeedContent.fromJson(item as Map<String, dynamic>))
-              .toList(),
-      normalContents:
-          (json['normalContents'] as List<dynamic>? ?? [])
-              .map((item) => FeedContent.fromJson(item as Map<String, dynamic>))
-              .toList(),
-      hasMoreVideos: json['hasMoreVideos'] as bool? ?? false,
-      hasMoreNormal: json['hasMoreNormal'] as bool? ?? false,
-      nextVideoCursor: json['nextVideoCursor'] as String?,
-      nextNormalCursor: json['nextNormalCursor'] as String?,
-      optimizationInfo: json['optimizationInfo'] as Map<String, dynamic>? ?? {},
-    );
-  }
-}
 
 class FileTypeHelper {
   static bool isImage(String url) {
@@ -352,8 +316,7 @@ class Inner_HomePage extends StatefulWidget {
 
 class _Inner_HomePageState extends State<Inner_HomePage> {
   final ChatListController chatController = Get.put(ChatListController());
-  final List<FeedContent> _videoContents = [];
-  final List<FeedContent> _normalContents = [];
+  final List<FeedContent> _allContents = []; // Single list for better management
   final ScrollController _scrollController = ScrollController();
   bool _isLoading = false;
   String? _nextVideoCursor;
@@ -362,14 +325,10 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
   String _errorMessage = '';
   bool _hasMoreVideos = true;
   bool _hasMoreNormal = true;
-  static const _loadTriggerThreshold = 500.0;
+  static const _loadTriggerThreshold = 200.0;
   final AppData _appData = AppData();
   bool _isRefreshingToken = false;
   bool _isOnline = true;
-  
-  // Add these variables to track scroll position
-  double _lastScrollPosition = 0.0;
-  int _lastItemCount = 0;
 
   @override
   void initState() {
@@ -385,8 +344,10 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
       final result = await InternetAddress.lookup('google.com');
       setState(() {
         _isOnline = result.isNotEmpty && result[0].rawAddress.isNotEmpty;
-        _refresh();
       });
+      if (_isOnline) {
+        _refresh();
+      }
     } on SocketException catch (_) {
       setState(() {
         _isOnline = false;
@@ -405,25 +366,33 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
 
   void _scrollListener() {
     if (_debounce?.isActive ?? false) return;
-    _debounce = Timer(const Duration(milliseconds: 200), () {
+    
+    _debounce = Timer(const Duration(milliseconds: 100), () {
+      if (!_scrollController.hasClients) return;
+      
+      final double currentPosition = _scrollController.position.pixels;
+      final double maxScrollExtent = _scrollController.position.maxScrollExtent;
+      
+      // Check if we're near the bottom and should load more content
       if (!_isLoading &&
           (_hasMoreVideos || _hasMoreNormal) &&
-          _scrollController.position.pixels >=
-              _scrollController.position.maxScrollExtent - _loadTriggerThreshold) {
-        // Store current scroll position before loading
-        _lastScrollPosition = _scrollController.position.pixels;
-        _lastItemCount = _videoContents.length + _normalContents.length;
+          currentPosition >= (maxScrollExtent - _loadTriggerThreshold)) {
+        
+        print('Loading more content - Position: $currentPosition, Max: $maxScrollExtent');
+        print('Has more videos: $_hasMoreVideos, Has more normal: $_hasMoreNormal');
+        
         _loadMoreContent();
       }
     });
   }
 
   Future<void> _loadMoreContent() async {
-    if (_isLoading ||
-        (!_hasMoreNormal && !_hasMoreVideos) ||
-        _isRefreshingToken)
+    if (_isLoading || (!_hasMoreNormal && !_hasMoreVideos) || _isRefreshingToken) {
+      print('Skipping load - Loading: $_isLoading, HasMore: ${_hasMoreVideos || _hasMoreNormal}, RefreshingToken: $_isRefreshingToken');
       return;
+    }
 
+    print('Starting to load more content...');
     setState(() {
       _isLoading = true;
       _hasError = false;
@@ -434,10 +403,8 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
         final cachedContents = await CacheManager.getCachedFeed();
         setState(() {
           if (cachedContents.isNotEmpty) {
-            _videoContents.clear();
-            _normalContents.clear();
-            _videoContents.addAll(cachedContents.where((c) => c.hasVideos));
-            _normalContents.addAll(cachedContents.where((c) => !c.hasVideos));
+            _allContents.clear();
+            _allContents.addAll(cachedContents);
             _hasMoreVideos = false;
             _hasMoreNormal = false;
           }
@@ -447,67 +414,54 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
 
       if (!await _verifyToken()) return;
 
+      print('Fetching content with cursors - Video: $_nextVideoCursor, Normal: $_nextNormalCursor');
+      
       final contentData = await FeedApiService.fetchContents(
         videoCursor: _nextVideoCursor,
         normalCursor: _nextNormalCursor,
         context: context,
       );
 
+      print('Received ${contentData.videoContents.length} videos and ${contentData.normalContents.length} normal contents');
+      print('Has more - Videos: ${contentData.hasMoreVideos}, Normal: ${contentData.hasMoreNormal}');
+
       await CacheManager.cacheFeedContent([
         ...contentData.videoContents,
         ...contentData.normalContents,
       ]);
 
-      // Store the current scroll position and item count before updating
-      final currentScrollPosition = _scrollController.position.pixels;
-      final currentItemCount = _videoContents.length + _normalContents.length;
-
       setState(() {
-        _videoContents.addAll(contentData.videoContents);
-        _normalContents.addAll(contentData.normalContents);
+        // Merge new content with existing content, maintaining order
+        final newContents = <FeedContent>[];
+        
+        // Add new video contents
+        newContents.addAll(contentData.videoContents);
+        
+        // Add new normal contents
+        newContents.addAll(contentData.normalContents);
+        
+        // Add all new content to the main list
+        _allContents.addAll(newContents);
+        
+        // Update cursors and pagination flags
         _nextVideoCursor = contentData.nextVideoCursor;
         _nextNormalCursor = contentData.nextNormalCursor;
         _hasMoreVideos = contentData.hasMoreVideos;
         _hasMoreNormal = contentData.hasMoreNormal;
       });
 
-      // Maintain scroll position after adding new content
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _maintainScrollPosition(currentScrollPosition, currentItemCount);
-      });
+      print('Updated state - Total contents: ${_allContents.length}');
+      print('Next cursors - Video: $_nextVideoCursor, Normal: $_nextNormalCursor');
 
     } on SocketException {
       _handleNetworkError();
     } catch (e) {
+      print('Error loading content: $e');
       _handleGenericError(e);
     } finally {
       setState(() {
         _isLoading = false;
       });
-    }
-  }
-
-  void _maintainScrollPosition(double previousPosition, int previousItemCount) {
-    if (_scrollController.hasClients) {
-      try {
-        // Calculate if we need to adjust scroll position
-        final currentItemCount = _videoContents.length + _normalContents.length;
-        final newItemsAdded = currentItemCount - previousItemCount;
-        
-        if (newItemsAdded > 0) {
-          // Option 1: Maintain exact position (recommended for most cases)
-          _scrollController.jumpTo(previousPosition);
-          
-          // Option 2: Alternative - smooth animation to maintain position
-          // _scrollController.animateTo(
-          //   previousPosition,
-          //   duration: const Duration(milliseconds: 100),
-          //   curve: Curves.easeOut,
-          // );
-        }
-      } catch (e) {
-        print('Error maintaining scroll position: $e');
-      }
     }
   }
 
@@ -613,9 +567,9 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
   }
 
   Future<void> _refresh() async {
+    print('Refreshing feed...');
     setState(() {
-      _videoContents.clear();
-      _normalContents.clear();
+      _allContents.clear();
       _nextVideoCursor = null;
       _nextNormalCursor = null;
       _hasError = false;
@@ -637,42 +591,50 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
     return Scaffold(
       body: RefreshIndicator(
         onRefresh: _refresh,
-        child: CustomScrollView(
-          controller: _scrollController,
-          physics: const AlwaysScrollableScrollPhysics(),
-          // Add cacheExtent to improve scrolling performance
-          cacheExtent: 1000.0,
-          slivers: [
-            SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  if (index < _videoContents.length) {
-                    return _buildContentItem(_videoContents[index]);
-                  }
-                  final normalIndex = index - _videoContents.length;
-                  if (normalIndex < _normalContents.length) {
-                    return _buildContentItem(_normalContents[normalIndex]);
-                  }
-                  // Show loading indicator at the end
-                  if (index == _videoContents.length + _normalContents.length && _isLoading) {
-                    return const Padding(
-                      padding: EdgeInsets.all(16.0),
-                      child: Center(child: CircularProgressIndicator()),
-                    );
-                  }
-                  return null;
-                },
-                childCount: _videoContents.length + _normalContents.length + (_isLoading ? 1 : 0),
-              ),
-            ),
-            if (_hasError) SliverFillRemaining(child: _buildErrorView()),
-            if (_videoContents.isEmpty &&
-                _normalContents.isEmpty &&
-                !_isLoading &&
-                !_hasError)
-              SliverFillRemaining(child: _buildEmptyView()),
-          ],
-        ),
+        child: _allContents.isEmpty && _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : _hasError && _allContents.isEmpty
+                ? _buildErrorView()
+                : ListView.builder(
+                    controller: _scrollController,
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    cacheExtent: 1000.0,
+                    itemCount: _allContents.length + (_isLoading ? 1 : 0) + 
+                              (!_hasMoreVideos && !_hasMoreNormal && !_isLoading && _allContents.isNotEmpty ? 1 : 0),
+                    itemBuilder: (context, index) {
+                      // Show actual content items
+                      if (index < _allContents.length) {
+                        return _buildContentItem(_allContents[index]);
+                      }
+                      
+                      // Show loading indicator at the end
+                      if (index == _allContents.length && _isLoading) {
+                        return const Padding(
+                          padding: EdgeInsets.all(16.0),
+                          child: Center(child: CircularProgressIndicator()),
+                        );
+                      }
+                      
+                      // Show "No more content" message if we've reached the end
+                      if (index == _allContents.length && 
+                          !_isLoading && 
+                          !_hasMoreVideos && 
+                          !_hasMoreNormal && 
+                          _allContents.isNotEmpty) {
+                        return const Padding(
+                          padding: EdgeInsets.all(16.0),
+                          child: Center(
+                            child: Text(
+                              'No more content to load',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          ),
+                        );
+                      }
+                      
+                      return const SizedBox.shrink();
+                    },
+                  ),
       ),
       floatingActionButton: GetBuilder<ChatListController>(
         init: () {
@@ -770,7 +732,6 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
     );
   }
 
-  // Add these missing methods that are referenced in your build method
   Widget _buildErrorView() {
     return Center(
       child: Column(
@@ -3024,25 +2985,46 @@ class FeedApiService {
         headers['authorization'] = 'Bearer $authToken';
       }
 
-      final params = {
+      final params = <String, String>{
         'loadEngagement': 'true',
         'quality': 'auto',
-        'limit': '20', // Add limit parameter
-        if (videoCursor != null) 'videoCursor': videoCursor,
-        if (normalCursor != null) 'normalCursor': normalCursor,
+        'limit': '10', // Increased limit for better user experience
       };
+      
+      // Only add cursors if they're not null or empty
+      if (videoCursor != null && videoCursor.isNotEmpty) {
+        params['videoCursor'] = videoCursor;
+      }
+      if (normalCursor != null && normalCursor.isNotEmpty) {
+        params['normalCursor'] = normalCursor;
+      }
 
-      final uri = Uri.parse(
-        '$baseUrl/api/v1/list-contents?',
-      ).replace(queryParameters: params);
+      final uri = Uri.parse('$baseUrl/api/v1/list-contents')
+          .replace(queryParameters: params);
+
+      print('API Request URL: $uri');
+      print('Request Headers: $headers');
+      print('Video Cursor: $videoCursor');
+      print('Normal Cursor: $normalCursor');
 
       final response = await http
           .get(uri, headers: headers)
           .timeout(const Duration(seconds: 30));
 
+      print('API Response Status: ${response.statusCode}');
+      print('API Response Body Length: ${response.body.length}');
+
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
         final contentResponse = ContentResponse.fromJson(data);
+
+        print('Response Status: ${contentResponse.status}');
+        print('Video Contents Count: ${contentResponse.data.videoContents.length}');
+        print('Normal Contents Count: ${contentResponse.data.normalContents.length}');
+        print('Has More Videos: ${contentResponse.data.hasMoreVideos}');
+        print('Has More Normal: ${contentResponse.data.hasMoreNormal}');
+        print('Next Video Cursor: ${contentResponse.data.nextVideoCursor}');
+        print('Next Normal Cursor: ${contentResponse.data.nextNormalCursor}');
 
         if (contentResponse.status == 200) {
           final List<FeedContent> videoContents = [];
@@ -3078,7 +3060,7 @@ class FeedApiService {
             }
           }
 
-          return ContentData(
+          final result = ContentData(
             videoContents: videoContents,
             normalContents: normalContents,
             hasMoreVideos: contentResponse.data.hasMoreVideos,
@@ -3087,27 +3069,68 @@ class FeedApiService {
             nextNormalCursor: contentResponse.data.nextNormalCursor,
             optimizationInfo: contentResponse.data.optimizationInfo,
           );
+
+          print('Final ContentData - Videos: ${result.videoContents.length}, Normal: ${result.normalContents.length}');
+          return result;
         } else {
-          throw Exception('Invalid response structure');
+          throw Exception('Invalid response status: ${contentResponse.status}');
         }
       } else if (response.statusCode == 401) {
+        print('Authentication error - redirecting to login');
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => LoginPage()),
           (route) => false,
         );
         throw Exception('Authentication required');
+      } else {
+        print('API Error - Status: ${response.statusCode}, Body: ${response.body}');
+        throw Exception('Failed to load data: ${response.statusCode}');
       }
-
-      throw Exception('Failed to load data: ${response.statusCode}');
     } catch (e) {
-      // Navigator.pushAndRemoveUntil(
-      //   context,
-      //   MaterialPageRoute(builder: (_) => LoginPage()),
-      //   (route) => false,
-      // );
-      throw Exception('Error: $e');
+      print('FeedApiService Error: $e');
+      // Don't automatically redirect to login for network errors
+      if (e.toString().contains('Authentication required')) {
+        rethrow;
+      }
+      throw Exception('Network error: $e');
     }
+  }
+}
+
+class ContentData {
+  final List<FeedContent> videoContents;
+  final List<FeedContent> normalContents;
+  final bool hasMoreVideos;
+  final bool hasMoreNormal;
+  final String? nextVideoCursor;
+  final String? nextNormalCursor;
+  final Map<String, dynamic> optimizationInfo;
+
+  ContentData({
+    required this.videoContents,
+    required this.normalContents,
+    required this.hasMoreVideos,
+    required this.hasMoreNormal,
+    this.nextVideoCursor,
+    this.nextNormalCursor,
+    required this.optimizationInfo,
+  });
+
+  factory ContentData.fromJson(Map<String, dynamic> json) {
+    return ContentData(
+      videoContents: (json['videoContents'] as List<dynamic>? ?? [])
+          .map((item) => FeedContent.fromJson(item as Map<String, dynamic>))
+          .toList(),
+      normalContents: (json['normalContents'] as List<dynamic>? ?? [])
+          .map((item) => FeedContent.fromJson(item as Map<String, dynamic>))
+          .toList(),
+      hasMoreVideos: json['hasMoreVideos'] as bool? ?? false,
+      hasMoreNormal: json['hasMoreNormal'] as bool? ?? false,
+      nextVideoCursor: json['nextVideoCursor'] as String?,
+      nextNormalCursor: json['nextNormalCursor'] as String?,
+      optimizationInfo: json['optimizationInfo'] as Map<String, dynamic>? ?? {},
+    );
   }
 }
 
