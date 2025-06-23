@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:developer';
+import 'dart:math' as math;
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/gestures.dart';
@@ -316,7 +317,7 @@ class Inner_HomePage extends StatefulWidget {
 
 class _Inner_HomePageState extends State<Inner_HomePage> {
   final ChatListController chatController = Get.put(ChatListController());
-  final List<FeedContent> _allContents = []; // Single list for better management
+  final List<FeedContent> _allContents = [];
   final ScrollController _scrollController = ScrollController();
   bool _isLoading = false;
   String? _nextVideoCursor;
@@ -356,9 +357,17 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
   }
 
   Future<void> _initializeData() async {
-    await _appData.initialize();
-    if (await _verifyToken()) {
-      _loadMoreContent();
+    try {
+      await _appData.initialize();
+      if (await _verifyToken()) {
+        await _loadMoreContent();
+      }
+    } catch (e) {
+      debugPrint('Error initializing data: $e');
+      // In release mode, ensure we still try to load content even if initialization partially fails
+      if (await _verifyToken()) {
+        await _loadMoreContent();
+      }
     }
   }
 
@@ -373,13 +382,13 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
       final double currentPosition = _scrollController.position.pixels;
       final double maxScrollExtent = _scrollController.position.maxScrollExtent;
       
-      // Check if we're near the bottom and should load more content
+      // More lenient threshold for release mode
       if (!_isLoading &&
           (_hasMoreVideos || _hasMoreNormal) &&
           currentPosition >= (maxScrollExtent - _loadTriggerThreshold)) {
         
-        print('Loading more content - Position: $currentPosition, Max: $maxScrollExtent');
-        print('Has more videos: $_hasMoreVideos, Has more normal: $_hasMoreNormal');
+        debugPrint('Loading more content - Position: $currentPosition, Max: $maxScrollExtent');
+        debugPrint('Has more videos: $_hasMoreVideos, Has more normal: $_hasMoreNormal');
         
         _loadMoreContent();
       }
@@ -387,12 +396,27 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
   }
 
   Future<void> _loadMoreContent() async {
-    if (_isLoading || (!_hasMoreNormal && !_hasMoreVideos) || _isRefreshingToken) {
-      print('Skipping load - Loading: $_isLoading, HasMore: ${_hasMoreVideos || _hasMoreNormal}, RefreshingToken: $_isRefreshingToken');
+    // Add more defensive checks
+    if (_isLoading) {
+      debugPrint('Already loading, skipping...');
+      return;
+    }
+    
+    if (!_hasMoreNormal && !_hasMoreVideos) {
+      debugPrint('No more content available');
+      return;
+    }
+    
+    if (_isRefreshingToken) {
+      debugPrint('Token refreshing, skipping...');
       return;
     }
 
-    print('Starting to load more content...');
+    debugPrint('Starting to load more content...');
+    debugPrint('Current content count: ${_allContents.length}');
+    debugPrint('Next video cursor: $_nextVideoCursor');
+    debugPrint('Next normal cursor: $_nextNormalCursor');
+    
     setState(() {
       _isLoading = true;
       _hasError = false;
@@ -412,9 +436,12 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
         return;
       }
 
-      if (!await _verifyToken()) return;
+      if (!await _verifyToken()) {
+        debugPrint('Token verification failed');
+        return;
+      }
 
-      print('Fetching content with cursors - Video: $_nextVideoCursor, Normal: $_nextNormalCursor');
+      debugPrint('Making API call...');
       
       final contentData = await FeedApiService.fetchContents(
         videoCursor: _nextVideoCursor,
@@ -422,55 +449,82 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
         context: context,
       );
 
-      print('Received ${contentData.videoContents.length} videos and ${contentData.normalContents.length} normal contents');
-      print('Has more - Videos: ${contentData.hasMoreVideos}, Normal: ${contentData.hasMoreNormal}');
+      debugPrint('API call successful');
+      debugPrint('Received ${contentData.videoContents.length} videos and ${contentData.normalContents.length} normal contents');
+      debugPrint('Has more - Videos: ${contentData.hasMoreVideos}, Normal: ${contentData.hasMoreNormal}');
+      debugPrint('Next cursors - Video: ${contentData.nextVideoCursor}, Normal: ${contentData.nextNormalCursor}');
 
-      await CacheManager.cacheFeedContent([
-        ...contentData.videoContents,
-        ...contentData.normalContents,
-      ]);
+      // Cache the content
+      try {
+        await CacheManager.cacheFeedContent([
+          ...contentData.videoContents,
+          ...contentData.normalContents,
+        ]);
+      } catch (e) {
+        debugPrint('Cache error (non-critical): $e');
+        // Don't fail the entire operation if caching fails
+      }
 
+      // Update state with defensive checks
       setState(() {
-        // Merge new content with existing content, maintaining order
+        // Merge new content with existing content
         final newContents = <FeedContent>[];
         
         // Add new video contents
-        newContents.addAll(contentData.videoContents);
+        if (contentData.videoContents.isNotEmpty) {
+          newContents.addAll(contentData.videoContents);
+        }
         
         // Add new normal contents
-        newContents.addAll(contentData.normalContents);
+        if (contentData.normalContents.isNotEmpty) {
+          newContents.addAll(contentData.normalContents);
+        }
         
         // Add all new content to the main list
         _allContents.addAll(newContents);
         
-        // Update cursors and pagination flags
+        // Update cursors and pagination flags with null safety
         _nextVideoCursor = contentData.nextVideoCursor;
         _nextNormalCursor = contentData.nextNormalCursor;
-        _hasMoreVideos = contentData.hasMoreVideos;
-        _hasMoreNormal = contentData.hasMoreNormal;
+        
+        // Be more conservative about hasMore flags
+        _hasMoreVideos = contentData.hasMoreVideos && 
+                        (contentData.nextVideoCursor != null && contentData.nextVideoCursor!.isNotEmpty);
+        _hasMoreNormal = contentData.hasMoreNormal && 
+                        (contentData.nextNormalCursor != null && contentData.nextNormalCursor!.isNotEmpty);
+        
+        debugPrint('State updated - Total contents: ${_allContents.length}');
+        debugPrint('Has more videos: $_hasMoreVideos, Has more normal: $_hasMoreNormal');
       });
 
-      print('Updated state - Total contents: ${_allContents.length}');
-      print('Next cursors - Video: $_nextVideoCursor, Normal: $_nextNormalCursor');
-
-    } on SocketException {
+    } on SocketException catch (e) {
+      debugPrint('Socket exception: $e');
       _handleNetworkError();
-    } catch (e) {
-      print('Error loading content: $e');
+    } on FormatException catch (e) {
+      debugPrint('Format exception (JSON parsing): $e');
+      _handleGenericError(e);
+    } on TimeoutException catch (e) {
+      debugPrint('Timeout exception: $e');
+      _handleGenericError(e);
+    } catch (e, stackTrace) {
+      debugPrint('Unexpected error: $e');
+      debugPrint('Stack trace: $stackTrace');
       _handleGenericError(e);
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
-  // Rest of your existing methods remain the same...
+  // Rest of your existing methods with enhanced error handling...
   Future<void> _requestNotificationPermission() async {
     try {
       if (await Permission.notification.isDenied) {
         final status = await Permission.notification.request();
-        developer.log('Notification permission status: $status');
+        debugPrint('Notification permission status: $status');
         if (status.isDenied) {
           if (await Permission.notification.isPermanentlyDenied) {
             await openAppSettings();
@@ -486,32 +540,41 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
             criticalAlert: true,
             provisional: false,
           );
-      developer.log('FCM permission status: ${settings.authorizationStatus}');
+      debugPrint('FCM permission status: ${settings.authorizationStatus}');
 
       if (Platform.isAndroid) {
-        developer.log(
+        debugPrint(
           'Running on Android, please ensure battery optimization is disabled for Innovator',
         );
       }
     } catch (e) {
-      developer.log('Error requesting notification permission: $e');
+      debugPrint('Error requesting notification permission: $e');
     }
   }
 
   Future<bool> _verifyToken() async {
-    if (_appData.authToken == null || _appData.authToken!.isEmpty) {
-      setState(() {
-        _hasError = true;
-        _errorMessage = 'Authentication required. Please login.';
-      });
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => LoginPage()),
-        (route) => false,
-      );
+    try {
+      if (_appData.authToken == null || _appData.authToken!.isEmpty) {
+        debugPrint('No auth token available');
+        setState(() {
+          _hasError = true;
+          _errorMessage = 'Authentication required. Please login.';
+        });
+        
+        if (mounted) {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (_) => LoginPage()),
+            (route) => false,
+          );
+        }
+        return false;
+      }
+      return true;
+    } catch (e) {
+      debugPrint('Error verifying token: $e');
       return false;
     }
-    return true;
   }
 
   Future<bool> _refreshToken() async {
@@ -541,33 +604,39 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
   }
 
   void _handleApiError(int statusCode) {
+    debugPrint('API Error: $statusCode');
     setState(() {
       _hasError = true;
       _errorMessage = 'Server error: $statusCode';
+    });
+    
+    if (statusCode == 401 && mounted) {
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => LoginPage()),
         (route) => false,
       );
-    });
+    }
   }
 
   void _handleNetworkError() {
+    debugPrint('Network error occurred');
     setState(() {
       _hasError = true;
+      _errorMessage = 'Network connection error';
     });
-    Lottie.asset('animation/Googlesignup.json', height: mq.height * .05);
   }
 
   void _handleGenericError(dynamic e) {
+    debugPrint('Generic error: $e');
     setState(() {
       _hasError = true;
+      _errorMessage = 'An unexpected error occurred';
     });
-    Lottie.asset('animation/No_Internet.json');
   }
 
   Future<void> _refresh() async {
-    print('Refreshing feed...');
+    debugPrint('Refreshing feed...');
     setState(() {
       _allContents.clear();
       _nextVideoCursor = null;
@@ -599,8 +668,9 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
                     controller: _scrollController,
                     physics: const AlwaysScrollableScrollPhysics(),
                     cacheExtent: 1000.0,
-                    itemCount: _allContents.length + (_isLoading ? 1 : 0) + 
-                              (!_hasMoreVideos && !_hasMoreNormal && !_isLoading && _allContents.isNotEmpty ? 1 : 0),
+                    itemCount: _allContents.length + 
+                              (_isLoading ? 1 : 0) + 
+                              (_shouldShowEndMessage() ? 1 : 0),
                     itemBuilder: (context, index) {
                       // Show actual content items
                       if (index < _allContents.length) {
@@ -616,17 +686,29 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
                       }
                       
                       // Show "No more content" message if we've reached the end
-                      if (index == _allContents.length && 
-                          !_isLoading && 
-                          !_hasMoreVideos && 
-                          !_hasMoreNormal && 
-                          _allContents.isNotEmpty) {
-                        return const Padding(
-                          padding: EdgeInsets.all(16.0),
+                      if (_shouldShowEndMessage() && index == _allContents.length + (_isLoading ? 1 : 0)) {
+                        return Padding(
+                          padding: const EdgeInsets.all(16.0),
                           child: Center(
-                            child: Text(
-                              'No more content to load',
-                              style: TextStyle(color: Colors.grey),
+                            child: Column(
+                              children: [
+                                Text(
+                                  'No more content to load',
+                                  style: TextStyle(color: Colors.grey),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Total loaded: ${_allContents.length}',
+                                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                                ),
+                                if (kDebugMode) ...[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Videos: $_hasMoreVideos, Normal: $_hasMoreNormal',
+                                    style: TextStyle(color: Colors.grey, fontSize: 10),
+                                  ),
+                                ],
+                              ],
                             ),
                           ),
                         );
@@ -655,7 +737,7 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
                   ? () {}
                   : () async {
                       try {
-                        print('FAB pressed! Current unread count: $unreadCount');
+                        debugPrint('FAB pressed! Current unread count: $unreadCount');
 
                         if (unreadCount > 0) {
                           chatController.resetAllUnreadCounts();
@@ -674,18 +756,18 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
                           ),
                         );
 
-                        print('Returned from ChatListScreen, refreshing data...');
+                        debugPrint('Returned from ChatListScreen, refreshing data...');
                         if (Get.isRegistered<ChatListController>()) {
                           final controller = Get.find<ChatListController>();
                           if (!controller.isMqttConnected.value) {
                             await controller.initializeMQTT();
                           }
                           await controller.fetchChats();
-                          print(
+                          debugPrint(
                               'Chat data refreshed. New unread count: ${controller.totalUnreadCount}');
                         }
                       } catch (e) {
-                        print('Error in FAB onPressed: $e');
+                        debugPrint('Error in FAB onPressed: $e');
                         Get.snackbar(
                           'Error',
                           'Please Contact to Our Support Team',
@@ -712,21 +794,32 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
     );
   }
 
+  bool _shouldShowEndMessage() {
+    return !_isLoading && 
+           !_hasMoreVideos && 
+           !_hasMoreNormal && 
+           _allContents.isNotEmpty;
+  }
+
   Widget _buildContentItem(FeedContent content) {
     return RepaintBoundary(
       key: ValueKey(content.id),
       child: FeedItem(
         content: content,
         onLikeToggled: (isLiked) {
-          setState(() {
-            content.isLiked = isLiked;
-            content.likes += isLiked ? 1 : -1;
-          });
+          if (mounted) {
+            setState(() {
+              content.isLiked = isLiked;
+              content.likes += isLiked ? 1 : -1;
+            });
+          }
         },
         onFollowToggled: (isFollowed) {
-          setState(() {
-            content.isFollowed = isFollowed;
-          });
+          if (mounted) {
+            setState(() {
+              content.isFollowed = isFollowed;
+            });
+          }
         },
       ),
     );
@@ -748,27 +841,6 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
           ElevatedButton(
             onPressed: _refresh,
             child: Text('Retry'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyView() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.inbox_outlined, size: 64, color: Colors.grey),
-          SizedBox(height: 16),
-          Text(
-            'No content available',
-            style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-          ),
-          SizedBox(height: 16),
-          ElevatedButton(
-            onPressed: _refresh,
-            child: Text('Refresh'),
           ),
         ],
       ),
@@ -2988,7 +3060,7 @@ class FeedApiService {
       final params = <String, String>{
         'loadEngagement': 'true',
         'quality': 'auto',
-        'limit': '10', // Increased limit for better user experience
+        'limit': '10', // Keep consistent limit
       };
       
       // Only add cursors if they're not null or empty
@@ -3002,60 +3074,71 @@ class FeedApiService {
       final uri = Uri.parse('$baseUrl/api/v1/list-contents')
           .replace(queryParameters: params);
 
-      print('API Request URL: $uri');
-      print('Request Headers: $headers');
-      print('Video Cursor: $videoCursor');
-      print('Normal Cursor: $normalCursor');
+      debugPrint('API Request URL: $uri');
+      debugPrint('Request Headers: ${headers.keys.join(', ')}'); // Don't log auth token in release
+      debugPrint('Video Cursor: $videoCursor');
+      debugPrint('Normal Cursor: $normalCursor');
 
       final response = await http
           .get(uri, headers: headers)
           .timeout(const Duration(seconds: 30));
 
-      print('API Response Status: ${response.statusCode}');
-      print('API Response Body Length: ${response.body.length}');
+      debugPrint('API Response Status: ${response.statusCode}');
+      debugPrint('API Response Body Length: ${response.body.length}');
 
       if (response.statusCode == 200) {
-        final Map<String, dynamic> data = json.decode(response.body);
+        final Map<String, dynamic> data;
+        
+        try {
+          data = json.decode(response.body);
+        } catch (e) {
+          debugPrint('JSON parsing error: $e');
+          debugPrint('Response body preview: ${response.body.substring(0, math.min(200, response.body.length))}');
+          throw Exception('Invalid JSON response from server');
+        }
+
         final contentResponse = ContentResponse.fromJson(data);
 
-        print('Response Status: ${contentResponse.status}');
-        print('Video Contents Count: ${contentResponse.data.videoContents.length}');
-        print('Normal Contents Count: ${contentResponse.data.normalContents.length}');
-        print('Has More Videos: ${contentResponse.data.hasMoreVideos}');
-        print('Has More Normal: ${contentResponse.data.hasMoreNormal}');
-        print('Next Video Cursor: ${contentResponse.data.nextVideoCursor}');
-        print('Next Normal Cursor: ${contentResponse.data.nextNormalCursor}');
+        debugPrint('Response Status: ${contentResponse.status}');
+        debugPrint('Video Contents Count: ${contentResponse.data.videoContents.length}');
+        debugPrint('Normal Contents Count: ${contentResponse.data.normalContents.length}');
+        debugPrint('Has More Videos: ${contentResponse.data.hasMoreVideos}');
+        debugPrint('Has More Normal: ${contentResponse.data.hasMoreNormal}');
+        debugPrint('Next Video Cursor: ${contentResponse.data.nextVideoCursor}');
+        debugPrint('Next Normal Cursor: ${contentResponse.data.nextNormalCursor}');
 
         if (contentResponse.status == 200) {
           final List<FeedContent> videoContents = [];
           final List<FeedContent> normalContents = [];
 
-          // Process video contents
+          // Process video contents with better error handling
           for (var item in contentResponse.data.videoContents) {
             try {
               final isFollowing = await FollowService.checkFollowStatus(
                 item.author.email,
-              );
+              ).timeout(const Duration(seconds: 5));
               videoContents.add(item.copyWith(isFollowed: isFollowing));
             } catch (e) {
-              print(
+              debugPrint(
                 'Error checking follow status for ${item.author.email}: $e',
               );
+              // Don't fail the entire operation, just add without follow status
               videoContents.add(item);
             }
           }
 
-          // Process normal contents
+          // Process normal contents with better error handling
           for (var item in contentResponse.data.normalContents) {
             try {
               final isFollowing = await FollowService.checkFollowStatus(
                 item.author.email,
-              );
+              ).timeout(const Duration(seconds: 5));
               normalContents.add(item.copyWith(isFollowed: isFollowing));
             } catch (e) {
-              print(
+              debugPrint(
                 'Error checking follow status for ${item.author.email}: $e',
               );
+              // Don't fail the entire operation, just add without follow status
               normalContents.add(item);
             }
           }
@@ -3070,30 +3153,44 @@ class FeedApiService {
             optimizationInfo: contentResponse.data.optimizationInfo,
           );
 
-          print('Final ContentData - Videos: ${result.videoContents.length}, Normal: ${result.normalContents.length}');
+          debugPrint('Final ContentData - Videos: ${result.videoContents.length}, Normal: ${result.normalContents.length}');
+          debugPrint('Final hasMore - Videos: ${result.hasMoreVideos}, Normal: ${result.hasMoreNormal}');
+          
           return result;
         } else {
           throw Exception('Invalid response status: ${contentResponse.status}');
         }
       } else if (response.statusCode == 401) {
-        print('Authentication error - redirecting to login');
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (_) => LoginPage()),
-          (route) => false,
-        );
+        debugPrint('Authentication error - redirecting to login');
+        if (context.mounted) {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (_) => LoginPage()),
+            (route) => false,
+          );
+        }
         throw Exception('Authentication required');
       } else {
-        print('API Error - Status: ${response.statusCode}, Body: ${response.body}');
+        debugPrint('API Error - Status: ${response.statusCode}');
+        debugPrint('Error Response Body: ${response.body}');
         throw Exception('Failed to load data: ${response.statusCode}');
       }
+    } on SocketException catch (e) {
+      debugPrint('Network error: $e');
+      throw Exception('Network connection failed');
+    } on TimeoutException catch (e) {
+      debugPrint('Request timeout: $e');
+      throw Exception('Request timed out');
+    } on FormatException catch (e) {
+      debugPrint('JSON format error: $e');
+      throw Exception('Invalid server response format');
     } catch (e) {
-      print('FeedApiService Error: $e');
+      debugPrint('FeedApiService Error: $e');
       // Don't automatically redirect to login for network errors
       if (e.toString().contains('Authentication required')) {
         rethrow;
       }
-      throw Exception('Network error: $e');
+      throw Exception('Failed to fetch content: $e');
     }
   }
 }
@@ -3118,21 +3215,89 @@ class ContentData {
   });
 
   factory ContentData.fromJson(Map<String, dynamic> json) {
-    return ContentData(
-      videoContents: (json['videoContents'] as List<dynamic>? ?? [])
-          .map((item) => FeedContent.fromJson(item as Map<String, dynamic>))
-          .toList(),
-      normalContents: (json['normalContents'] as List<dynamic>? ?? [])
-          .map((item) => FeedContent.fromJson(item as Map<String, dynamic>))
-          .toList(),
-      hasMoreVideos: json['hasMoreVideos'] as bool? ?? false,
-      hasMoreNormal: json['hasMoreNormal'] as bool? ?? false,
-      nextVideoCursor: json['nextVideoCursor'] as String?,
-      nextNormalCursor: json['nextNormalCursor'] as String?,
-      optimizationInfo: json['optimizationInfo'] as Map<String, dynamic>? ?? {},
-    );
+    try {
+      return ContentData(
+        videoContents: (json['videoContents'] as List<dynamic>? ?? [])
+            .map((item) {
+              try {
+                return FeedContent.fromJson(item as Map<String, dynamic>);
+              } catch (e) {
+                debugPrint('Error parsing video content item: $e');
+                return null;
+              }
+            })
+            .where((item) => item != null)
+            .cast<FeedContent>()
+            .toList(),
+        normalContents: (json['normalContents'] as List<dynamic>? ?? [])
+            .map((item) {
+              try {
+                return FeedContent.fromJson(item as Map<String, dynamic>);
+              } catch (e) {
+                debugPrint('Error parsing normal content item: $e');
+                return null;
+              }
+            })
+            .where((item) => item != null)
+            .cast<FeedContent>()
+            .toList(),
+        hasMoreVideos: json['hasMoreVideos'] as bool? ?? true,
+        hasMoreNormal: json['hasMoreNormal'] as bool? ?? true,
+        nextVideoCursor: json['nextVideoCursor'] as String?,
+        nextNormalCursor: json['nextNormalCursor'] as String?,
+        optimizationInfo: json['optimizationInfo'] as Map<String, dynamic>? ?? {},
+      );
+    } catch (e) {
+      debugPrint('Error parsing ContentData: $e');
+      // Return empty data rather than crashing
+      return ContentData(
+        videoContents: [],
+        normalContents: [],
+        hasMoreVideos: true,
+        hasMoreNormal: true,
+        nextVideoCursor: null,
+        nextNormalCursor: null,
+        optimizationInfo: {},
+      );
+    }
   }
 }
+
+// class ContentData {
+//   final List<FeedContent> videoContents;
+//   final List<FeedContent> normalContents;
+//   final bool hasMoreVideos;
+//   final bool hasMoreNormal;
+//   final String? nextVideoCursor;
+//   final String? nextNormalCursor;
+//   final Map<String, dynamic> optimizationInfo;
+
+//   ContentData({
+//     required this.videoContents,
+//     required this.normalContents,
+//     required this.hasMoreVideos,
+//     required this.hasMoreNormal,
+//     this.nextVideoCursor,
+//     this.nextNormalCursor,
+//     required this.optimizationInfo,
+//   });
+
+//   factory ContentData.fromJson(Map<String, dynamic> json) {
+//     return ContentData(
+//       videoContents: (json['videoContents'] as List<dynamic>? ?? [])
+//           .map((item) => FeedContent.fromJson(item as Map<String, dynamic>))
+//           .toList(),
+//       normalContents: (json['normalContents'] as List<dynamic>? ?? [])
+//           .map((item) => FeedContent.fromJson(item as Map<String, dynamic>))
+//           .toList(),
+//       hasMoreVideos: json['hasMoreVideos'] as bool? ?? false,
+//       hasMoreNormal: json['hasMoreNormal'] as bool? ?? false,
+//       nextVideoCursor: json['nextVideoCursor'] as String?,
+//       nextNormalCursor: json['nextNormalCursor'] as String?,
+//       optimizationInfo: json['optimizationInfo'] as Map<String, dynamic>? ?? {},
+//     );
+//   }
+// }
 
 // Add this extension to FeedContent if not already present
 extension FeedContentExtension on FeedContent {
