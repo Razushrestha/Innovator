@@ -44,7 +44,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       );
 
       final response = await http.get(
-        Uri.parse('http://182.93.94.210:3064/api/v1/reports'),
+        Uri.parse('http://182.93.94.210:3065/api/v1/reports'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -471,7 +471,7 @@ class ReportCard extends StatelessWidget {
     try {
       // Implement your API call here
       // final response = await http.patch(
-      //   Uri.parse('http://182.93.94.210:3064/api/v1/reports/$reportId'),
+      //   Uri.parse('http://182.93.94.210:3065/api/v1/reports/$reportId'),
       //   headers: {'Content-Type': 'application/json'},
       //   body: json.encode({'status': action == 'approve' ? 'approved' : 'rejected'}),
       // );

@@ -5,8 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:get/get.dart';
-import 'package:hive/hive.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 import 'package:innovator/App_data/App_data.dart';
 import 'package:innovator/firebase_options.dart';
 import 'package:innovator/screens/Feed/Services/Feed_Cache_service.dart';
@@ -17,9 +15,10 @@ import 'package:innovator/services/fcm_handler.dart';
 import 'package:innovator/utils/Drawer/drawer_cache_manager.dart';
 
 // Global variables and constants
+// Setting the App for Windows windows/runner/runner.manifest.exe
+// Analyzing 
 late Size mq;
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
-
 
   Future<bool> sendFCMNotification({
   required String userId,
@@ -33,6 +32,7 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
   try {
     // Ensure FCMHandler is initialized with the service account key
     // This should ideally be done on the backend
+    
     final serviceAccountJson = '{...}'; // Load securely or call backend
     await FCMHandler.initialize(serviceAccountJson);
 
@@ -75,7 +75,7 @@ Future<void> _initializeApp() async {
     
     // Ensure Flutter binding is initialized
     WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
+    await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
     //await Firebase.initializeApp();
@@ -156,8 +156,6 @@ class _InnovatorHomePageState extends ConsumerState<InnovatorHomePage> {
     );
   }
 
-  
-
   @override
   void dispose() {
     _notificationTimer?.cancel();
@@ -167,7 +165,7 @@ class _InnovatorHomePageState extends ConsumerState<InnovatorHomePage> {
   @override
   Widget build(BuildContext context) {
      mq = MediaQuery.of(context).size; // Set once at build time
-
+// ronit sniriva ronut s  jronit   jdb ronih
 
     return GetMaterialApp(
       navigatorKey: navigatorKey,
@@ -195,7 +193,5 @@ class _InnovatorHomePageState extends ConsumerState<InnovatorHomePage> {
       ),
     );
   }
-
-  
 }
 

@@ -52,7 +52,7 @@ class _CartScreenState extends State<CartScreen>
   Future<void> _updateCartItemQuantity(String itemId, int newQuantity) async {
     try {
       final response = await http.patch(
-        Uri.parse('http://182.93.94.210:3064/api/v1/update-cart/$itemId'),
+        Uri.parse('http://182.93.94.210:3065/api/v1/update-cart/$itemId'),
         headers: {
           'authorization': 'Bearer ${_appData.authToken}',
           'Content-Type': 'application/json',
@@ -342,7 +342,7 @@ class _CartScreenState extends State<CartScreen>
                                           child: SafeImage(
                                             images: item.images,
                                             baseUrl:
-                                                'http://182.93.94.210:3064',
+                                                'http://182.93.94.210:3065',
                                             placeholderIcon: Icons.image,
                                             placeholderColor: _primaryColor
                                                 .withAlpha(50),

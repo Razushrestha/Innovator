@@ -219,7 +219,7 @@ class _CreatePostScreenState extends State<CreatePostScreen>
 
     try {
       final uploadUrl =
-          'http://182.93.94.210:3064/api/v1/add-files?subfolder=posts';
+          'http://182.93.94.210:3065/api/v1/add-files?subfolder=posts';
 
       var request = http.MultipartRequest('POST', Uri.parse(uploadUrl));
 
@@ -282,7 +282,7 @@ class _CreatePostScreenState extends State<CreatePostScreen>
       }
 
       final response = await http.get(
-        Uri.parse('http://182.93.94.210:3064/api/v1/user-profile'),
+        Uri.parse('http://182.93.94.210:3065/api/v1/user-profile'),
         headers: {
           'Content-Type': 'application/json',
           'authorization': 'Bearer $authToken',
@@ -492,7 +492,7 @@ class _CreatePostScreenState extends State<CreatePostScreen>
     });
 
     try {
-      final createUrl = 'http://182.93.94.210:3064/api/v1/new-content';
+      final createUrl = 'http://182.93.94.210:3065/api/v1/new-content';
 
       final body = {
         'type': _selectedPostType,
@@ -581,7 +581,7 @@ class _CreatePostScreenState extends State<CreatePostScreen>
         (userData?['level'] ?? 'user').toString().toUpperCase();
     final String email = userData?['email'] ?? '';
     final String? picturePath = userData?['picture'];
-    final String baseUrl = 'http://182.93.94.210:3064';
+    final String baseUrl = 'http://182.93.94.210:3065';
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: _backgroundColor,

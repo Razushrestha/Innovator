@@ -1,5 +1,5 @@
 class Utils {
-  static const String baseUrl = 'http://182.93.94.210:3064';
+  static const String baseUrl = 'http://182.93.94.210:3065';
 
   static bool isValidImageUrl(String? url) {
     if (url == null || url.isEmpty) return false;

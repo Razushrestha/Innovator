@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:innovator/App_data/App_data.dart';
 import 'package:innovator/innovator_home.dart';
+import 'package:innovator/screens/Profile/profile_page.dart';
+import 'package:innovator/screens/show_Specific_Profile/Show_Specific_Profile.dart';
 import 'package:intl/intl.dart';
 import 'package:innovator/screens/chatrrom/Screen/chatscreen.dart';
 import 'package:innovator/screens/comment/comment_screen.dart';
@@ -56,7 +58,7 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
       final token = AppData().authToken;
       if (token == null) throw Exception('No authentication token found');
 
-      final url = Uri.parse('http://182.93.94.210:3064/api/v1/notifications');
+      final url = Uri.parse('http://182.93.94.210:3065/api/v1/notifications');
       final response = await http.get(
         url,
         headers: {'Authorization': 'Bearer $token'},
@@ -91,7 +93,7 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
       if (token == null) throw Exception('No authentication token found');
 
       final url = Uri.parse(
-          'http://182.93.94.210:3064/api/v1/notifications?cursor=$nextCursor');
+          'http://182.93.94.210:3065/api/v1/notifications?cursor=$nextCursor');
       final response = await http.get(
         url,
         headers: {'Authorization': 'Bearer $token'},
@@ -123,7 +125,7 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
       if (token == null) throw Exception('No authentication token found');
 
       final response = await http.post(
-        Uri.parse('http://182.93.94.210:3064/api/v1/notifications/mark-read'),
+        Uri.parse('http://182.93.94.210:3065/api/v1/notifications/mark-read'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -152,7 +154,7 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
       if (token == null) throw Exception('No authentication token found');
 
       final response = await http.post(
-        Uri.parse('http://182.93.94.210:3064/api/v1/notifications/mark-all-read'),
+        Uri.parse('http://182.93.94.210:3065/api/v1/notifications/mark-all-read'),
         headers: {'Authorization': 'Bearer $token'},
       );
 
@@ -182,7 +184,7 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
       if (token == null) throw Exception('No authentication token found');
 
       final response = await http.delete(
-        Uri.parse('http://182.93.94.210:3064/api/v1/notifications/$notificationId'),
+        Uri.parse('http://182.93.94.210:3065/api/v1/notifications/$notificationId'),
         headers: {'Authorization': 'Bearer $token'},
       );
 
@@ -228,7 +230,7 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
       if (token == null) throw Exception('No authentication token found');
 
       final response = await http.delete(
-        Uri.parse('http://182.93.94.210:3064/api/v1/notifications'),
+        Uri.parse('http://182.93.94.210:3065/api/v1/notifications'),
         headers: {'Authorization': 'Bearer $token'},
       );
 
@@ -551,117 +553,192 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
   }
 
   void _navigateToNotificationDetails(NotificationModel notification) {
-    // Handle navigation based on notification type
-    switch (notification.type.toLowerCase()) {
-      case 'message':
-        if (notification.sender != null) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => ChatScreen(
-                currentUserId: AppData().currentUserId ?? '',
-                currentUserName: AppData().currentUserName ?? '',
-                currentUserPicture: AppData().currentUserProfilePicture ?? '',
-                currentUserEmail: AppData().currentUserEmail ?? '',
-                receiverId: notification.sender!.id,
-                receiverName: notification.sender!.name ?? 'Unknown',
-                receiverPicture: notification.sender!.picture ?? '',
-                receiverEmail: notification.sender!.email,
-              ),
-            ),
-          );
-        }
-        break;
-
-      case 'comment':
-        // Extract post ID from notification content or data
-        final postId = notification.data?['postId'];
-        if (postId != null) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => CommentScreen(postId: postId),
-            ),
-          );
-        }
-        break;
-
-      case 'like':
-        // Navigate to the liked post
-        final postId = notification.data?['postId'];
-        if (postId != null) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => PostDetailScreen(postId: postId),
-            ),
-          );
-        }
-        break;
-
-      case 'friend_request':
-        // Navigate to friend request screen or profile
-        if (notification.sender != null) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => ProfileScreen(userId: notification.sender!.id),
-            ),
-          );
-        }
-        break;
-
-      case 'mention':
-        // Navigate to the post or comment where user was mentioned
-        final postId = notification.data?['postId'];
-        final commentId = notification.data?['commentId'];
-        if (postId != null) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => PostDetailScreen(
-                postId: postId,
-                highlightCommentId: commentId,
-              ),
-            ),
-          );
-        }
-        break;
-
-      case 'share':
-        // Navigate to the shared post
-        final postId = notification.data?['postId'];
-        if (postId != null) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => PostDetailScreen(postId: postId),
-            ),
-          );
-        }
-        break;
-
-      default:
-        // Fallback to generic notification details screen
+  // Handle navigation based on notification type
+  switch (notification.type.toLowerCase()) {
+    case 'message':
+      if (notification.sender != null) {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => NotificationDetailScreen(
-              notification: RemoteMessage(
-                data: {
-                  'type': notification.type,
-                  'content': notification.content,
-                  'sender': notification.sender?.name ?? 'Unknown',
-                  'createdAt': notification.createdAt,
-                  ...?notification.data, // Include any additional data
-                },
-              ),
+            builder: (context) => ChatScreen(
+              currentUserId: AppData().currentUserId ?? '',
+              currentUserName: AppData().currentUserName ?? '',
+              currentUserPicture: AppData().currentUserProfilePicture ?? '',
+              currentUserEmail: AppData().currentUserEmail ?? '',
+              receiverId: notification.sender!.id,
+              receiverName: notification.sender!.name ?? 'Unknown',
+              receiverPicture: notification.sender!.picture ?? '',
+              receiverEmail: notification.sender!.email,
             ),
           ),
         );
-        break;
-    }
+      }
+      break;
+
+    case 'like':
+      // Extract post ID and sender ID from notification
+      final postId = notification.data?['postId'];
+      final senderId = notification.sender?.id;
+      
+      if (postId != null && senderId != null) {
+        // Navigate to the user's profile and scroll to the specific post
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => SpecificUserProfilePage(
+              userId: senderId,
+              // Pass the postId to scroll to it when the profile loads
+              scrollToPostId: postId,
+            ),
+          ),
+        );
+      } else if (senderId != null) {
+        // Fallback to sender's profile if postId is not available
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => SpecificUserProfilePage(
+              userId: senderId,
+            ),
+          ),
+        );
+      }
+      break;
+
+    case 'comment':
+      // Navigate to the specific commented post with comment section open
+      final postId = notification.data?['postId'];
+      final senderId = notification.sender?.id;
+      
+      if (postId != null && senderId != null) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => SpecificUserProfilePage(
+              userId: senderId,
+              scrollToPostId: postId,
+              openComments: true, // Flag to open comments
+            ),
+          ),
+        );
+      } else if (senderId != null) {
+        // Fallback to sender's profile
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => SpecificUserProfilePage(
+              userId: senderId,
+            ),
+          ),
+        );
+      }
+      break;
+
+    case 'mention':
+      // Navigate to the post or comment where user was mentioned
+      final postId = notification.data?['postId'];
+      final commentId = notification.data?['commentId'];
+      final senderId = notification.sender?.id;
+      
+      if (commentId != null && postId != null && senderId != null) {
+        // Navigate to comment screen with the specific comment highlighted
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => SpecificUserProfilePage(
+              userId: senderId,
+              scrollToPostId: postId,
+              highlightCommentId: commentId,
+            ),
+          ),
+        );
+      } else if (postId != null && senderId != null) {
+        // Navigate to post detail if only postId is available
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => SpecificUserProfilePage(
+              userId: senderId,
+              scrollToPostId: postId,
+            ),
+          ),
+        );
+      } else if (senderId != null) {
+        // Fallback to sender's profile
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => SpecificUserProfilePage(
+              userId: senderId,
+            ),
+          ),
+        );
+      }
+      break;
+
+    case 'share':
+      // Navigate to the shared post
+      final postId = notification.data?['postId'];
+      final senderId = notification.sender?.id;
+      
+      if (postId != null && senderId != null) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => SpecificUserProfilePage(
+              userId: senderId,
+              scrollToPostId: postId,
+            ),
+          ),
+        );
+      } else if (senderId != null) {
+        // Fallback to sender's profile
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => SpecificUserProfilePage(
+              userId: senderId,
+            ),
+          ),
+        );
+      }
+      break;
+
+    case 'friend_request':
+      // Navigate to friend request screen or profile
+      if (notification.sender != null) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => SpecificUserProfilePage(
+              userId: notification.sender!.id,
+            ),
+          ),
+        );
+      }
+      break;
+
+    default:
+      // Fallback to generic notification details screen
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => NotificationDetailScreen(
+            notification: RemoteMessage(
+              data: {
+                'type': notification.type,
+                'content': notification.content,
+                'sender': notification.sender?.name ?? 'Unknown',
+                'createdAt': notification.createdAt,
+                ...?notification.data,
+              },
+            ),
+          ),
+        ),
+      );
+      break;
   }
+}
 
   IconData _getNotificationIcon(String type) {
     switch (type.toLowerCase()) {

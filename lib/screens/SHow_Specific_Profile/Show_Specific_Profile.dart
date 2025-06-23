@@ -10,14 +10,18 @@ import 'package:innovator/screens/Feed/Inner_Homepage.dart';
 import 'package:innovator/screens/Follow/follow_Button.dart';
 import 'package:flutter/services.dart';
 import 'package:innovator/screens/chatrrom/Screen/chat_listscreen.dart';
+import 'package:innovator/screens/comment/comment_screen.dart';
 import 'package:innovator/screens/show_Specific_Profile/User_Image_Gallery.dart';
 import 'package:innovator/screens/show_Specific_Profile/show_Specific_followers.dart';
 import 'package:innovator/widget/FloatingMenuwidget.dart';
 
 class SpecificUserProfilePage extends StatefulWidget {
   final String userId;
+    final String? scrollToPostId;  // ID of the post to scroll to
+  final bool? openComments;      // Whether to open comments
+  final String? highlightCommentId;
 
-  const SpecificUserProfilePage({Key? key, required this.userId})
+  const SpecificUserProfilePage({Key? key, required this.userId, this.scrollToPostId, this.openComments, this.highlightCommentId})
     : super(key: key);
 
   @override
@@ -68,7 +72,57 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
     _animationController.forward();
     _initializeFeed();
     _scrollController.addListener(_scrollListener);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.scrollToPostId != null && _contents.isNotEmpty) {
+        _scrollToPost(widget.scrollToPostId!);
+      }
+    });
   }
+
+   void _scrollToPost(String postId) {
+    final index = _contents.indexWhere((content) => content.id == postId);
+    if (index != -1 && _scrollController.hasClients) {
+      // Calculate the position to scroll to
+      final position = _scrollController.position;
+      final itemExtent = 500.0; // Approximate height of each feed item
+      final targetOffset = index * itemExtent;
+      
+      _scrollController.animateTo(
+        targetOffset.clamp(0.0, position.maxScrollExtent),
+        duration: Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
+      );
+
+      // If we need to open comments, do it after scrolling
+      if (widget.openComments == true) {
+        Future.delayed(Duration(milliseconds: 600), () {
+          _openCommentsForPost(postId, widget.highlightCommentId);
+        });
+      }
+    }
+  }
+
+  void _openCommentsForPost(String postId, String? highlightCommentId) {
+    // Find the post in the contents
+    final post = _contents.firstWhere(
+      (content) => content.id == postId,
+     // orElse: () => content.id == postId,
+    );
+    
+    if (post != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => CommentScreen(
+            postId: postId,
+            // Pass any other required parameters
+          ),
+        ),
+      );
+    }
+  }
+
 
   @override
   void dispose() {
@@ -117,8 +171,8 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
 
       final url =
           _lastId == null
-              ? 'http://182.93.94.210:3064/api/v1/getUserContent/${widget.userId}?page=0'
-              : 'http://182.93.94.210:3064/api/v1/getUserContent/${widget.userId}?page=${(_contents.length / 10).ceil()}';
+              ? 'http://182.93.94.210:3065/api/v1/getUserContent/${widget.userId}?page=0'
+              : 'http://182.93.94.210:3065/api/v1/getUserContent/${widget.userId}?page=${(_contents.length / 10).ceil()}';
 
       final response = await http
           .get(
@@ -193,7 +247,7 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
     try {
       final response = await http.get(
         Uri.parse(
-          'http://182.93.94.210:3064/api/v1/stalk-profile/${widget.userId}',
+          'http://182.93.94.210:3065/api/v1/stalk-profile/${widget.userId}',
         ),
         headers: {
           'Content-Type': 'application/json',
@@ -580,7 +634,7 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
                                 backgroundImage: profileData['picture'] != null &&
                                         profileData['picture'].isNotEmpty
                                     ? CachedNetworkImageProvider(
-                                        'http://182.93.94.210:3064${profileData['picture']}',
+                                        'http://182.93.94.210:3065${profileData['picture']}',
                                       )
                                     : null,
                                 child: profileData['picture'] == null ||

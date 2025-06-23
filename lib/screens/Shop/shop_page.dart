@@ -30,7 +30,7 @@ class _ShopPageState extends State<ShopPage>
   bool _isError = false;
   String? _errorMessage;
   final ScrollController _scrollController = ScrollController();
-  final String _baseUrl = "http://182.93.94.210:3064";
+  final String _baseUrl = "http://182.93.94.210:3065";
   final double _scrollThreshold = 200.0;
   final int _pageSize = 10;
   Map<String, bool> _addingToCart = {};

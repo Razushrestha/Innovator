@@ -142,7 +142,7 @@ class _SignupState extends State<Signup> {
 
       // Make API call
       final response = await http.post(
-        Uri.parse('http://182.93.94.210:3064/api/v1/register-user'),
+        Uri.parse('http://182.93.94.210:3065/api/v1/register-user'),
         headers: {
           'Content-Type': 'application/json',
         },

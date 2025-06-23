@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:innovator/App_data/App_data.dart';
 
 class CommentService {
-  static const String _baseUrl = 'http://182.93.94.210:3064/api/v1';
+  static const String _baseUrl = 'http://182.93.94.210:3065/api/v1';
 
   Future<Map<String, dynamic>> addComment({
     required String contentId,

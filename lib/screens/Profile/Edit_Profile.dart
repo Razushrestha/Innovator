@@ -117,7 +117,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
 
     try {
       final appData = AppData();
-      final url = Uri.parse('http://182.93.94.210:3064/api/v1/set-details');
+      final url = Uri.parse('http://182.93.94.210:3065/api/v1/set-details');
       final headers = {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ${appData.authToken}',
@@ -312,7 +312,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                       backgroundImage: snapshot.hasData && 
                           snapshot.data!.picture != null
                           ? NetworkImage(
-                              'http://182.93.94.210:3064${snapshot.data!.picture}')
+                              'http://182.93.94.210:3065${snapshot.data!.picture}')
                           : null,
                       child: snapshot.connectionState == ConnectionState.waiting
                           ? const CircularProgressIndicator(color: primaryColor)

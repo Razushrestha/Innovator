@@ -9,6 +9,7 @@ import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:innovator/screens/Events/Events.dart';
 import 'package:innovator/utils/Drawer/custom_drawer.dart';
 import 'package:lottie/lottie.dart';
 import 'package:innovator/App_data/App_data.dart';
@@ -46,11 +47,14 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget> with SingleTick
     {'icon': Icons.home, 'name': 'FEED', 'action': 'navigate_golf'},
     {'icon': Icons.school, 'name': 'COURSE', 'action': 'open_search'},
     {'icon': Icons.add_a_photo, 'name': 'ADD POST', 'action': 'add_photo'},
+    {'icon': Icons.event, 'name': 'Events', 'action': 'show_events'},
+
   ];
 
   final List<Map<String, dynamic>> _bottomIcons = [
     {'icon': Icons.shop, 'name': 'SHOP', 'action': 'open_settings'},
     {'icon': Icons.search, 'name': 'SEARCH', 'action': 'view_profile'},
+    {'icon': Icons.notifications, 'name': 'Notification', 'action': 'notification'},
     {'icon': Icons.menu, 'name': 'Drawer', 'action': 'drawer'},
   ];
 
@@ -114,6 +118,12 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget> with SingleTick
           MaterialPageRoute(builder: (_) => const CreatePostScreen()),
         );
         break;
+      case 'show_events':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) =>  EventsHomePage()),
+        );
+        break;
       case 'open_settings':
         Navigator.push(
           context,
@@ -124,6 +134,11 @@ class _FloatingMenuWidgetState extends State<FloatingMenuWidget> with SingleTick
         Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const SearchPage()),
+        );
+      case 'notification':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const NotificationListScreen()),
         );
         break;
       case 'drawer':

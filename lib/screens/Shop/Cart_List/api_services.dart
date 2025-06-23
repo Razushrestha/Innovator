@@ -6,7 +6,7 @@ import 'package:innovator/screens/Shop/Cart_List/cart_model.dart';
 
 class ApiService {
   
-  static const String baseUrl = 'http://182.93.94.210:3064/api/v1';
+  static const String baseUrl = 'http://182.93.94.210:3065/api/v1';
   final AppData appData = AppData();
 
   Future<CartListResponse> getCartList() async {
@@ -29,7 +29,7 @@ class ApiService {
 
   Future<void> deleteCartItem(String itemId) async {
   final response = await http.delete(
-    Uri.parse('http://182.93.94.210:3064/api/v1/delete-cart/$itemId'),
+    Uri.parse('http://182.93.94.210:3065/api/v1/delete-cart/$itemId'),
     headers: {
       'authorization': 'Bearer ${appData.authToken}',
       'Content-Type': 'application/json',

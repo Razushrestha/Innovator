@@ -329,7 +329,7 @@ class AppData {
       // Show local notifications for new notifications
       for (var notification in data) {
         await NotificationService().showNotification(
-          id: notification['id'] ?? DateTime.now().millisecondsSinceEpoch % 1000,
+          id: notification['_id'] ?? DateTime.now().millisecondsSinceEpoch % 1000,
           title: notification['title'] ?? 'New Notification',
           body: notification['body'] ?? 'You have a new notification!',
           payload: notification.toString(),

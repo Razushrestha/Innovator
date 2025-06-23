@@ -29,11 +29,11 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:lottie/lottie.dart';
 import 'dart:io';
-import 'package:innovator/screens/Follow/follow_Button.dart'; // Add FollowButton import
+import 'package:innovator/screens/Follow/follow_Button.dart';
 import 'package:innovator/screens/Follow/follow-Service.dart';
-import 'package:visibility_detector/visibility_detector.dart'; // Add FollowService import
+import 'package:visibility_detector/visibility_detector.dart';
 
-// Models (Author and FeedContent remain unchanged)
+// Models
 class Author {
   final String id;
   final String name;
@@ -123,7 +123,6 @@ class FeedContent {
     this.isLiked = false,
     this.isFollowed = false,
   }) {
-    // Prioritize original, then hls, then url
     _mediaUrls = optimizedFiles.isNotEmpty
         ? optimizedFiles.map((file) {
             if (file.original.isNotEmpty) return 'http://182.93.94.210:3065${file.original}';
@@ -166,7 +165,6 @@ class FeedContent {
   bool get hasVideos => _hasVideos;
   List<String> get mediaUrls => _mediaUrls;
 
-  // Get the best available thumbnail URL
   String? get thumbnailUrl {
     if (optimizedFiles.isNotEmpty && optimizedFiles.first.thumbnail.isNotEmpty) {
       return 'http://182.93.94.210:3065${optimizedFiles.first.thumbnail}';
@@ -175,7 +173,7 @@ class FeedContent {
   }
 }
 
-// Main Video Feed Page
+// Main Video Feed Page (Reels Style)
 class VideoFeedPage extends StatefulWidget {
   const VideoFeedPage({Key? key}) : super(key: key);
 
@@ -184,8 +182,6 @@ class VideoFeedPage extends StatefulWidget {
 }
 
 class _VideoFeedPageState extends State<VideoFeedPage> {
-    final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-
   final List<FeedContent> _videoContents = [];
   final ScrollController _scrollController = ScrollController();
   bool _isLoading = false;
@@ -194,12 +190,16 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
   bool _hasMoreVideos = true;
   String? _nextVideoCursor;
   bool _isOnline = true;
+  final PageController _pageController = PageController();
+  int _currentPage = 0;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  bool _isRefreshing = false;
+  final GlobalKey<RefreshIndicatorState> _refreshIndicatorKey = GlobalKey<RefreshIndicatorState>();
 
   @override
   void initState() {
     super.initState();
     _initializeAppData();
-    _scrollController.addListener(_scrollListener);
     _checkConnectivity();
   }
 
@@ -228,102 +228,82 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
     }
   }
 
-  void _scrollListener() {
-    if (!_isLoading &&
-        _hasMoreVideos &&
-        _scrollController.position.pixels >=
-            _scrollController.position.maxScrollExtent - 500.0) {
-      _loadVideoContent();
-    }
-  }
-
-  //  void _handleFeedToggle(bool isPost) {
-  //   if (isPost) {
-  //     // Navigate back to post feed or your main page
-  //     Navigator.pop(context);
-  //   }
-  //   else{
-  //     Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => Homepage()), (route) => false);
-  //   }
-  //   // If !isPost, we're already on video feed, so no action needed
-  // }
-
   Future<void> _loadVideoContent() async {
-  if (_isLoading || !_hasMoreVideos) return;
+    if (_isLoading || !_hasMoreVideos) return;
 
-  setState(() {
-    _isLoading = true;
-    _hasError = false;
-  });
+    setState(() {
+      _isLoading = true;
+      _hasError = false;
+    });
 
-  try {
-    if (!_isOnline) {
-      setState(() {
-        _hasError = true;
-        _errorMessage = 'No internet connection';
-      });
-      return;
-    }
-
-    final response = await _makeApiRequest();
-    if (response.statusCode == 200) {
-      final Map<String, dynamic> data = json.decode(response.body);
-      final List<dynamic> videoList = data['data']['videoContents'] ?? [];
-      final List<FeedContent> newVideos = [];
-
-      for (var item in videoList) {
-        final content = FeedContent.fromJson(item);
-        final isFollowing = await FollowService.checkFollowStatus(
-          content.author.email,
-        );
-        newVideos.add(FeedContent(
-          id: content.id,
-          status: content.status,
-          type: content.type,
-          files: content.files,
-          optimizedFiles: content.optimizedFiles,
-          author: content.author,
-          createdAt: content.createdAt,
-          updatedAt: content.updatedAt,
-          likes: content.likes,
-          comments: content.comments,
-          isLiked: content.isLiked,
-          isFollowed: isFollowing,
-        ));
+    try {
+      if (!_isOnline) {
+        setState(() {
+          _hasError = true;
+          _errorMessage = 'No internet connection';
+        });
+        return;
       }
 
-      setState(() {
-        _videoContents.addAll(newVideos);
-        _hasMoreVideos = data['data']['hasMoreVideos'] ?? false;
-        _nextVideoCursor = data['data']['nextVideoCursor'];
-      });
-    } else if (response.statusCode == 401) {
+      final response = await _makeApiRequest();
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        final List<dynamic> videoList = data['data']['videoContents'] ?? [];
+        final List<FeedContent> newVideos = [];
+
+        for (var item in videoList) {
+          final content = FeedContent.fromJson(item);
+          final isFollowing = await FollowService.checkFollowStatus(
+            content.author.email,
+          );
+          newVideos.add(FeedContent(
+            id: content.id,
+            status: content.status,
+            type: content.type,
+            files: content.files,
+            optimizedFiles: content.optimizedFiles,
+            author: content.author,
+            createdAt: content.createdAt,
+            updatedAt: content.updatedAt,
+            likes: content.likes,
+            comments: content.comments,
+            isLiked: content.isLiked,
+            isFollowed: isFollowing,
+          ));
+        }
+
+        setState(() {
+          _videoContents.addAll(newVideos);
+          _hasMoreVideos = data['data']['hasMoreVideos'] ?? false;
+          _nextVideoCursor = data['data']['nextVideoCursor'];
+        });
+      } else if (response.statusCode == 401) {
+        setState(() {
+          _hasError = true;
+          _errorMessage = 'Session expired. Please log in again.';
+        });
+        await AppData().logout();
+        Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (_) => LoginPage()),
+            (route) => false);
+      } else {
+        setState(() {
+          _hasError = true;
+          _errorMessage = 'Failed to load videos: ${response.statusCode}';
+        });
+      }
+    } catch (e) {
       setState(() {
         _hasError = true;
-        _errorMessage = 'Session expired. Please log in again.';
+        _errorMessage = 'No Internet Connection';
       });
-      await AppData().logout();
-      Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (_) => LoginPage()),
-          (route) => false);
-    } else {
+    } finally {
       setState(() {
-        _hasError = true;
-        _errorMessage = 'Failed to load videos: ${response.statusCode}';
+        _isLoading = false;
       });
     }
-  } catch (e) {
-    setState(() {
-      _hasError = true;
-      _errorMessage = 'No Internet Connection';
-    });
-  } finally {
-    setState(() {
-      _isLoading = false;
-    });
   }
-}
 
   Future<http.Response> _makeApiRequest() async {
     final url = Uri.parse('http://182.93.94.210:3065/api/v1/list-contents?loadEngagement=true&quality=auto');
@@ -338,150 +318,183 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
     ).timeout(Duration(seconds: 30));
   }
 
-   Future<void> _refresh() async {
-    setState(() {
-      _videoContents.clear();
-      _nextVideoCursor = null;
-      _hasError = false;
-      _hasMoreVideos = true;
-    });
+  Future<void> _refresh() async {
+  if (_isRefreshing) return;
+  
+  setState(() {
+    _isRefreshing = true;
+    _videoContents.clear();
+    _nextVideoCursor = null;
+    _hasError = false;
+    _hasMoreVideos = true;
+    _currentPage = 0;
+  });
+  
+  try {
     await _loadVideoContent();
+    // Reset page controller to first video
+    if (_videoContents.isNotEmpty && _pageController.hasClients) {
+      _pageController.animateToPage(
+        0,
+        duration: Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
+  } finally {
+    if (mounted) {
+      setState(() {
+        _isRefreshing = false;
+      });
+    }
   }
+}
 
   @override
   void dispose() {
     _scrollController.dispose();
+    _pageController.dispose();
     super.dispose();
   }
 
+  Widget _buildReelsView() {
+  return RefreshIndicator(
+    key: _refreshIndicatorKey,
+    onRefresh: _refresh,
+    color: Colors.deepOrange,
+    backgroundColor: Colors.white,
+    strokeWidth: 3.0,
+    displacement: 40.0,
+    child: PageView.builder(
+      controller: _pageController,
+      scrollDirection: Axis.vertical,
+      itemCount: _videoContents.length + (_hasMoreVideos ? 1 : 0),
+      onPageChanged: (index) {
+        setState(() {
+          _currentPage = index;
+        });
+        // Load more videos when we're near the end
+        if (index >= _videoContents.length - 3 && _hasMoreVideos && !_isLoading) {
+          _loadVideoContent();
+        }
+      },
+      itemBuilder: (context, index) {
+        if (index == _videoContents.length) {
+          return _isLoading
+              ? Center(child: CircularProgressIndicator())
+              : SizedBox.shrink();
+        }
+        
+        return ReelsVideoItem(
+          content: _videoContents[index],
+          onFollowToggled: (isFollowed) {
+            setState(() {
+              _videoContents[index].isFollowed = isFollowed;
+            });
+          },
+          onLikeToggled: (isLiked) {
+            setState(() {
+              _videoContents[index].isLiked = isLiked;
+              _videoContents[index].likes += isLiked ? 1 : -1;
+            });
+          },
+          isCurrent: index == _currentPage,
+        );
+      },
+    ),
+  );
+}
+
   @override
   Widget build(BuildContext context) {
-        final content = _videoContents;
-
     return Scaffold(
-
       key: _scaffoldKey,
       body: Stack(
         children: [
-        RefreshIndicator(
-          onRefresh: _refresh,
-          child: CustomScrollView(
-            controller: _scrollController,
-            slivers: [
-              if (_hasError)
-                SliverFillRemaining(
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Lottie.asset(
-                          _isOnline
-                              ? 'animation/No-Content.json'
-                              : 'animation/No_Internet.json',
-                          height: 200,
-                        ),
-                        Text(
-                          _errorMessage,
-                          style: TextStyle(
-                            color: _errorMessage.contains('expired')
-                                ? Colors.orange
-                                : Colors.red,
-                            fontSize: 16,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        SizedBox(height: 16),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.deepOrange,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(30),
-                            ),
-                          ),
-                          onPressed: _hasError && _errorMessage.contains('log in')
-                              ? () => Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => LoginPage()), (route) => false)
-                              : _refresh,
-                          child: Text(
-                            _hasError && _errorMessage.contains('log in')
-                                ? 'Log In'
-                                : 'Retry',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                        ),
-                      ],
-                    ),
+          if (_hasError)
+            Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Lottie.asset(
+                    _isOnline
+                        ? 'animation/No-Content.json'
+                        : 'animation/No_Internet.json',
+                    height: 200,
                   ),
-                ),
-              if (_videoContents.isEmpty && !_isLoading && !_hasError)
-                SliverFillRemaining(
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Lottie.asset('animation/No-Content.json', height: 200),
-                        Text('No video content available'),
-                        SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: _refresh,
-                          child: Text('Refresh'),
-                        ),
-                      ],
+                  Text(
+                    _errorMessage,
+                    style: TextStyle(
+                      color: _errorMessage.contains('expired')
+                          ? Colors.orange
+                          : Colors.red,
+                      fontSize: 16,
                     ),
+                    textAlign: TextAlign.center,
                   ),
-                ),
-              SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    if (index == _videoContents.length) {
-                      return _isLoading
-                          ? Padding(
-                              padding: EdgeInsets.all(16.0),
-                              child: Center(child: CircularProgressIndicator()),
-                            )
-                          : SizedBox.shrink();
-                    }
-                    return RepaintBoundary(
-                            key: ValueKey(_videoContents),
-
-                      child: VideoFeedItem(
-                        
-                        content: _videoContents[index],
-                        onFollowToggled: (isFollowed) {
-                          setState(() {
-                            _videoContents[index].isFollowed = isFollowed;
-                          });
-                        },
-                      
-                              onLikeToggled: (isLiked) {
-                                setState(() {
-                                  _videoContents[index].isLiked = isLiked;
-                                  _videoContents[index].likes += isLiked ? 1 : -1;
-                                });
-                              },
+                  SizedBox(height: 16),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.deepOrange,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
                       ),
-                    );
-                  },
-                  childCount: _videoContents.length + (_hasMoreVideos ? 1 : 0),
-                ),
+                    ),
+                    onPressed: _hasError && _errorMessage.contains('log in')
+                        ? () => Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => LoginPage()), (route) => false)
+                        : _refresh,
+                    child: Text(
+                      _hasError && _errorMessage.contains('log in')
+                          ? 'Log In'
+                          : 'Retry',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            )
+          else if (_videoContents.isEmpty && !_isLoading && !_isRefreshing)
+            Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Lottie.asset('animation/No-Content.json', height: 200),
+                  Text('No video content available'),
+                  SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: _refresh,
+                    child: Text('Refresh'),
+                  ),
+                ],
+              ),
+            )
+          else if (_isRefreshing && _videoContents.isEmpty)
+  Center(
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        CircularProgressIndicator(color: Colors.deepOrange),
+        SizedBox(height: 16),
+        Text('Loading fresh content...', style: TextStyle(color: Colors.white)),
+      ],
+    ),
+  )
+          else
+            _buildReelsView(),
+          
+          Positioned(
+            top: mq.height * 0.01,
+            right: mq.width * 0.03,
+            child: FeedToggleButton(
+              initialValue: false,
+              accentColor: Color.fromRGBO(244, 135, 6, 1),
+              onToggle: (bool isPost) {
+                if (isPost) {
+                  Navigator.pop(context);
+                }
+              },
+            ),
           ),
-        ),
-       Positioned(
-  top: mq.height * 0.01,
-  right: mq.width * 0.03,
-  child: FeedToggleButton(
-    initialValue: false, // false for video feed (current page)
-    accentColor: Color.fromRGBO(244, 135, 6, 1),
-    onToggle: (bool isPost) {
-      if (isPost) { // When switching to post feed
-        Navigator.pop(context); // Go back to post feed
-      }
-      // If isPost is false, stay on current page (already on video feed)
-    },
-  ),
-),
-        ]
+        ],
       ),
       floatingActionButton: GetBuilder<ChatListController>(
         init: () {
@@ -502,7 +515,6 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                   ? () {}
                   : () async {
                       try {
-                        print('FAB pressed! Current unread count: $unreadCount');
                         if (unreadCount > 0) {
                           chatController.resetAllUnreadCounts();
                         }
@@ -517,17 +529,14 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                             ),
                           ),
                         );
-                        print('Returned from ChatListScreen, refreshing data...');
                         if (Get.isRegistered<ChatListController>()) {
                           final controller = Get.find<ChatListController>();
                           if (!controller.isMqttConnected.value) {
                             await controller.initializeMQTT();
                           }
                           await controller.fetchChats();
-                          print('Chat data refreshed. New unread count: ${controller.totalUnreadCount}');
                         }
                       } catch (e) {
-                        print('Error in FAB onPressed: $e');
                         Get.snackbar(
                           'Error',
                           'Please Contact to Our Support Team',
@@ -555,52 +564,39 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
   }
 }
 
-// Video Feed Item Widget
-class VideoFeedItem extends StatefulWidget {
+// Reels Video Item Widget
+class ReelsVideoItem extends StatefulWidget {
   final FeedContent content;
   final Function(bool)? onFollowToggled;
   final Function(bool) onLikeToggled;
+  final bool isCurrent;
 
-
-  const VideoFeedItem({
+  const ReelsVideoItem({
     Key? key,
     required this.content,
-    this.onFollowToggled, required this.onLikeToggled,
+    this.onFollowToggled,
+    required this.onLikeToggled,
+    required this.isCurrent,
   }) : super(key: key);
 
   @override
-  _VideoFeedItemState createState() => _VideoFeedItemState();
+  _ReelsVideoItemState createState() => _ReelsVideoItemState();
 }
 
-class _VideoFeedItemState extends State<VideoFeedItem> with SingleTickerProviderStateMixin {
+class _ReelsVideoItemState extends State<ReelsVideoItem> {
   bool _showComments = false;
   bool _isLiked = false;
-  int _likeCount = 0;
-  bool _isExpanded = false;
-  static const int _maxLinesCollapsed = 3;
-
-  late AnimationController _controller;
-final ContentLikeService likeService = ContentLikeService(
+  bool _isFollowing = false;
+  final ContentLikeService likeService = ContentLikeService(
     baseUrl: 'http://182.93.94.210:3065',
   );
+
   @override
   void initState() {
     super.initState();
     _isLiked = widget.content.isLiked;
-    _likeCount = widget.content.likes;
-    _controller = AnimationController(
-      vsync: this,
-      duration: Duration(milliseconds: 300),
-    );
+    _isFollowing = widget.content.isFollowed;
   }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  
 
   Color _getTypeColor(String type) {
     switch (type.toLowerCase()) {
@@ -610,476 +606,245 @@ final ContentLikeService likeService = ContentLikeService(
         return Colors.grey.shade600;
     }
   }
-    
 
   bool _isAuthorCurrentUser() {
     return AppData().isCurrentUser(widget.content.author.id);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final bool isOwnContent = _isAuthorCurrentUser();
-
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 10.0),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20.0),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 20.0,
-            offset: const Offset(0, 4),
-            spreadRadius: 0,
+  Widget _buildSideActionBar() {
+    return Positioned(
+      right: 10,
+      bottom: 80,
+      child: Column(
+        children: [
+          // Like Button
+          Column(
+            children: [
+              LikeButton(
+                contentId: widget.content.id,
+                initialLikeStatus: widget.content.isLiked,
+                likeService: likeService,
+                onLikeToggled: (isLiked) {
+                  widget.onLikeToggled(isLiked);
+                  SoundPlayer player = SoundPlayer();
+                  player.playlikeSound();
+                },
+              ),
+              SizedBox(height: 8),
+              Text(
+                '${widget.content.likes}',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
           ),
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8.0,
-            offset: const Offset(0, 2),
-            spreadRadius: 0,
+          SizedBox(height: 20),
+          // Comment Button
+          Column(
+            children: [
+              IconButton(
+                icon: Icon(
+                  _showComments ? Icons.chat : Icons.chat_bubble_outline,
+                  color: Colors.white,
+                  size: 32,
+                ),
+                onPressed: () {
+                  setState(() {
+                    _showComments = !_showComments;
+                  });
+                },
+              ),
+              Text(
+                '${widget.content.comments}',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 20),
+          // Share Button
+          IconButton(
+            icon: Icon(Icons.share, color: Colors.white, size: 32),
+            onPressed: () => _showShareOptions(context),
+          ),
+          SizedBox(height: 20),
+          // More Options
+          IconButton(
+            icon: Icon(Icons.more_vert, color: Colors.white, size: 32),
+            onPressed: () => _showOptionsDialog(context),
           ),
         ],
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    );
+  }
+
+  Widget _buildUserInfo() {
+  return Positioned(
+    left: 16,
+    bottom: 80,
+    right: 100,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Author Info
+        Row(
           children: [
-            // Header Section
-            Container(
-              padding: const EdgeInsets.all(16.0),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.white, Colors.grey.shade50],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+            CircleAvatar(
+              radius: 16,
+              backgroundImage: widget.content.author.picture.isNotEmpty
+                  ? CachedNetworkImageProvider(
+                      'http://182.93.94.210:3065${widget.content.author.picture}')
+                  : null,
+              child: widget.content.author.picture.isEmpty
+                  ? Text(widget.content.author.name.isNotEmpty
+                      ? widget.content.author.name[0].toUpperCase()
+                      : '?')
+                  : null,
+            ),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                widget.content.author.name,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
                 ),
-              ),
-              child: Row(
-                children: [
-                  Hero(
-                    tag: 'avatar_${widget.content.author.id}_${_isAuthorCurrentUser() ? Get.find<UserController>().profilePictureVersion.value : 0}',
-                    child: Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: LinearGradient(
-                          colors: [
-                            Colors.blue.shade400,
-                            Colors.purple.shade400,
-                          ],
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.blue.withAlpha(30),
-                            blurRadius: 12.0,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(2.0),
-                        child: _buildAuthorAvatar(),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16.0),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                widget.content.author.name,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 16.0,
-                                  color: Color(0xFF1A1A1A),
-                                  letterSpacing: -0.3,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            if (!isOwnContent) ...[
-                              const SizedBox(width: 8.0),
-                              Container(
-                                width: 4.0,
-                                height: 4.0,
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade400,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              const SizedBox(width: 8.0),
-                              AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                child: FollowButton(
-                                  targetUserEmail: widget.content.author.email,
-                                  initialFollowStatus: widget.content.isFollowed,
-                                  onFollowSuccess: () {
-                                    widget.onFollowToggled?.call(true);
-                                  },
-                                  onUnfollowSuccess: () {
-                                    widget.onFollowToggled?.call(false);
-                                  },
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                        const SizedBox(height: 4.0),
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8.0,
-                                vertical: 2.0,
-                              ),
-                              decoration: BoxDecoration(
-                                color: _getTypeColor(widget.content.type).withAlpha(50),
-                                borderRadius: BorderRadius.circular(12.0),
-                              ),
-                              child: Text(
-                                widget.content.type,
-                                style: TextStyle(
-                                  color: _getTypeColor(widget.content.type),
-                                  fontSize: 13.0,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8.0),
-                            Text(
-                              widget.content.createdAt.timeAgo(),
-                              style: TextStyle(
-                                color: Colors.grey.shade600,
-                                fontSize: 12.0,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12.0),
-                      onTap: () => _showOptionsDialog(context),
-                      child: Container(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Icon(
-                          Icons.more_horiz_rounded,
-                          color: Colors.grey.shade600,
-                          size: 20.0,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+                overflow: TextOverflow.ellipsis,
               ),
             ),
-            // Status Text
-            if (widget.content.status.isNotEmpty)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        final span = TextSpan(
-                          text: widget.content.status,
-                          style: const TextStyle(fontSize: 15.0),
-                        );
-                        final tp = TextPainter(
-                          text: span,
-                          maxLines: _maxLinesCollapsed,
-                          textDirection: TextDirection.ltr,
-                        );
-                        tp.layout(maxWidth: constraints.maxWidth);
-                        final needsExpandCollapse = tp.didExceedMaxLines;
+            if (!_isAuthorCurrentUser()) ...[
+              SizedBox(width: 8),
+              FollowButton(
+                targetUserEmail: widget.content.author.email,
+                initialFollowStatus: _isFollowing,
+                onFollowSuccess: () {
+                  setState(() {
+                    _isFollowing = true;
+                  });
+                  widget.onFollowToggled?.call(true);
+                },
+                onUnfollowSuccess: () {
+                  setState(() {
+                    _isFollowing = false;
+                  });
+                  widget.onFollowToggled?.call(false);
+                },
+              ),
+            ],
+          ],
+        ),
+        SizedBox(height: 8),
+        // Expandable Status Text
+        if (widget.content.status.isNotEmpty)
+          ExpandableStatusText(
+            text: widget.content.status,
+            maxLines: 2,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              height: 1.3,
+            ),
+          ),
+      ],
+    ),
+  );
+}
 
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            AnimatedSize(
-                              duration: const Duration(milliseconds: 300),
-                              curve: Curves.easeInOut,
-                              child: _LinkifyText(
-                                text: widget.content.status,
-                                style: const TextStyle(
-                                  fontSize: 16.0,
-                                  height: 1.5,
-                                  color: Color(0xFF2D2D2D),
-                                  fontWeight: FontWeight.w500,
-                                  letterSpacing: 0.1,
-                                ),
-                                maxLines: _isExpanded ? null : _maxLinesCollapsed,
-                                overflow: _isExpanded ? null : TextOverflow.ellipsis,
-                              ),
-                            ),
-                            if (needsExpandCollapse)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 8.0),
-                                child: GestureDetector(
-                                  onTap: () {
-                                    setState(() {
-                                      _isExpanded = !_isExpanded;
-                                    });
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12.0,
-                                      vertical: 6.0,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.blue.shade50,
-                                      borderRadius: BorderRadius.circular(16.0),
-                                    ),
-                                    child: Text(
-                                      _isExpanded ? 'Show Less' : 'Show More',
-                                      style: TextStyle(
-                                        color: Colors.blue.shade700,
-                                        fontSize: 13.0,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        );
-                      },
-                    ),
+ Widget _buildCommentsSection() {
+  return Positioned(
+    bottom: 0,
+    left: 0,
+    right: 0,
+    child: AnimatedContainer(
+      duration: Duration(milliseconds: 300),
+      height: _showComments ? MediaQuery.of(context).size.height * 0.5 : 0, // Dynamic height
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: _showComments
+          ? SingleChildScrollView(
+              child: CommentSection(
+                contentId: widget.content.id,
+                onCommentAdded: () {
+                  setState(() {
+                    widget.content.comments++;
+                  });
+                },
+              ),
+            )
+          : SizedBox.shrink(),
+    ),
+  );
+}
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        if (_showComments) {
+          setState(() {
+            _showComments = false;
+          });
+        } else {
+          // Trigger play/pause only if comments section is not open
+          final videoWidgetState = context.findAncestorStateOfType<AutoPlayVideoWidgetState>();
+          videoWidgetState?._togglePlayPause();
+        }
+      },
+      child: Stack(
+        children: [
+          // Video Player
+          Container(
+            color: Colors.black,
+            child: Center( 
+              child: widget.content.hasVideos
+                  ? AutoPlayVideoWidget(
+                      url: widget.content.mediaUrls.isNotEmpty
+                          ? widget.content.mediaUrls.first
+                          : '',
+                      fallbackUrls: widget.content.mediaUrls.length > 1
+                          ? widget.content.mediaUrls.sublist(1)
+                          : [],
+                      height: MediaQuery.of(context).size.height,
+                      width: MediaQuery.of(context).size.width,
+                      thumbnailUrl: widget.content.thumbnailUrl,
+                      autoPlay: widget.isCurrent,
+                    )
+                  : Center(child: Text('No video available', style: TextStyle(color: Colors.white))),
+            ),
+          ),
+          // Gradient Overlay
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              height: 200,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: [
+                    Colors.black.withOpacity(0.8),
+                    Colors.transparent,
                   ],
                 ),
               ),
-            // Video Content
-            if (widget.content.hasVideos)
-  Container(
-    margin: const EdgeInsets.symmetric(horizontal: 5.0),
-    child: ClipRRect(
-      borderRadius: BorderRadius.circular(16.0),
-      child: LimitedBox(
-        maxHeight: 300.0,
-        child: AutoPlayVideoWidget(
-          url: widget.content.mediaUrls.isNotEmpty
-              ? widget.content.mediaUrls.first
-              : '',
-          fallbackUrls: widget.content.mediaUrls.length > 1
-              ? widget.content.mediaUrls.sublist(1)
-              : [],
-          height: 350.0,
-          thumbnailUrl: widget.content.thumbnailUrl,
-        ),
-      ),
-    ),
-  ),
-            // Action Buttons
-            Container(
-              padding: const EdgeInsets.all(5.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                    _buildActionButton(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Column(
-                          children: [
-                            LikeButton(
-                              contentId: widget.content.id,
-                              initialLikeStatus: widget.content.isLiked,
-                              likeService: likeService,
-                              onLikeToggled: (isLiked) {
-                                widget.onLikeToggled(isLiked);
-                                SoundPlayer player = SoundPlayer();
-                                player.playlikeSound();
-                              },
-                            ),
-                          ],
-                        ),
-                        const SizedBox(width: 8.0),
-                        Text(
-                          '${widget.content.likes}',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey.shade700,
-                            fontSize: 14.0,
-                          ),
-                        ),
-                      ],
-                    ),
-                    onTap: () {},
-                  ),
-                  _buildActionButton(
-                    child: Column(
-                      children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              child: Icon(
-                                _showComments
-                                    ? Icons.chat_bubble
-                                    : Icons.chat_bubble_outline,
-                                color:
-                                    _showComments
-                                        ? Colors.blue.shade600
-                                        : Colors.grey.shade600,
-                                size: 20.0,
-                              ),
-                            ),
-                            const SizedBox(width: 8.0),
-                            Text(
-                              '${widget.content.comments}',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                color:
-                                    _showComments
-                                        ? Colors.blue.shade600
-                                        : Colors.grey.shade700,
-                                fontSize: 14.0,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    onTap: () {
-                      setState(() {
-                        _showComments = !_showComments;
-                      });
-                    },
-                  ),
-                  _buildActionButton(
-                    child: Icon(
-                      Icons.share_outlined,
-                      color: Colors.grey.shade600,
-                      size: 20.0,
-                    ),
-                    onTap: () => _showShareOptions(context),
-                  ),
-                ],
-              ),
             ),
-            // Comments Section
-            AnimatedSize(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeInOut,
-              child:
-                  _showComments
-                      ? Container(
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade50,
-                          borderRadius: const BorderRadius.only(
-                            bottomLeft: Radius.circular(20.0),
-                            bottomRight: Radius.circular(20.0),
-                          ),
-                        ),
-                        padding: const EdgeInsets.all(16.0),
-                        child: CommentSection(
-                          contentId: widget.content.id,
-                          onCommentAdded: () {
-                            setState(() {
-                              widget.content.comments++;
-                            });
-                          },
-                        ),
-                      )
-                      : const SizedBox.shrink(),
-            ),
-          ],
-        ),
+          ),
+          // UI Elements
+          _buildUserInfo(),
+          _buildSideActionBar(),
+          _buildCommentsSection(),
+        ],
       ),
     );
-  }
-
-  Widget _buildActionButton({
-    required Widget child,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12.0),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-          child: child,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAuthorAvatar() {
-    if (widget.content.author.picture.isEmpty) {
-      return CircleAvatar(
-        child: Text(
-          widget.content.author.name.isNotEmpty
-              ? widget.content.author.name[0].toUpperCase()
-              : '?',
-        ),
-      );
-    }
-
-    return CachedNetworkImage(
-      imageUrl: 'http://182.93.94.210:3065${widget.content.author.picture}',
-      imageBuilder: (context, imageProvider) => CircleAvatar(
-        backgroundImage: imageProvider,
-      ),
-      placeholder: (context, url) => const CircleAvatar(
-        child: CircularProgressIndicator(strokeWidth: 2.0),
-      ),
-      errorWidget: (context, url, error) => CircleAvatar(
-        child: Text(
-          widget.content.author.name.isNotEmpty
-              ? widget.content.author.name[0].toUpperCase()
-              : '?',
-        ),
-      ),
-    );
-  }
-
-  Future<void> _submitComment(String comment) async {
-    try {
-      final url = Uri.parse('http://182.93.94.210:3065/api/v1/add-comment');
-      final response = await http.post(
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ${AppData().authToken}',
-        },
-        body: jsonEncode({
-          'contentId': widget.content.id,
-          'userId': AppData().currentUserId,
-          'comment': comment,
-        }),
-      );
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        setState(() {
-          widget.content.comments += 1;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Comment added')),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to add comment')),
-        );
-      }
-    } catch (e) {
-      log('Error$e');
-      // ScaffoldMessenger.of(context).showSnackBar(
-      //   SnackBar(content: Text('Error: $e')),
-      // );
-    }
   }
 
   void _showOptionsDialog(BuildContext context) {
@@ -1169,7 +934,7 @@ final ContentLikeService likeService = ContentLikeService(
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Content deleted')),
         );
-        context.findAncestorStateOfType<_VideoFeedPageState>()?._refresh();
+        Navigator.pop(context);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to delete content')),
@@ -1243,13 +1008,15 @@ final ContentLikeService likeService = ContentLikeService(
   }
 }
 
-// Auto Play Video Widget (unchanged)
+// Auto Play Video Widget (Updated for Reels)
+// Auto Play Video Widget (Fixed for proper autoplay on scroll)
 class AutoPlayVideoWidget extends StatefulWidget {
-  final String url; // Primary URL (original)
-  final List<String> fallbackUrls; // Fallback URLs (hls, url)
+  final String url;
+  final List<String> fallbackUrls;
   final double? height;
   final double? width;
   final String? thumbnailUrl;
+  final bool autoPlay;
 
   const AutoPlayVideoWidget({
     required this.url,
@@ -1257,6 +1024,7 @@ class AutoPlayVideoWidget extends StatefulWidget {
     this.height,
     this.width,
     this.thumbnailUrl,
+    this.autoPlay = true,
     Key? key,
   }) : super(key: key);
 
@@ -1268,86 +1036,40 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
     with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   VideoPlayerController? _controller;
   bool _initialized = false;
-  bool _isMuted = true; // Start muted
+  bool _isMuted = false;
   bool _disposed = false;
   Timer? _initTimer;
   bool _isPlaying = true;
+  bool _wasPlayingBeforePause = true; // Track if video was playing before manual pause
   final String videoId = UniqueKey().toString();
-  static final Map<String, AutoPlayVideoWidgetState> _activeVideos = {};
-  int _currentUrlIndex = 0; // Track which URL is being tried
+  int _currentUrlIndex = 0;
 
   @override
   bool get wantKeepAlive => _initialized;
-
-  // Public methods to control the video
-  void pauseVideo() {
-    if (_controller != null && !_disposed && _initialized) {
-      _controller!.pause();
-      setState(() {
-        _isPlaying = false;
-      });
-    }
-  }
-
-  void playVideo() {
-    if (_controller != null && !_disposed && _initialized) {
-      _controller!.play();
-      setState(() {
-        _isPlaying = true;
-      });
-    }
-  }
-
-  void muteVideo() {
-    if (_controller != null && !_disposed && _initialized) {
-      _controller!.setVolume(0.0).then((_) {
-        if (mounted) {
-          setState(() {
-            _isMuted = true;
-          });
-          developer.log('Video muted successfully for ID: $videoId',
-              name: 'AutoPlayVideoWidget');
-        }
-      }).catchError((error) {
-        developer.log('Error muting video for ID: $videoId: $error',
-            name: 'AutoPlayVideoWidget');
-      });
-    }
-  }
-
-  void unmuteVideo() {
-    if (_controller != null && !_disposed && _initialized) {
-      _controller!.setVolume(1.0);
-      setState(() {
-        _isMuted = false;
-      });
-    }
-  }
-
-  void pauseAndMute() {
-    pauseVideo();
-    muteVideo();
-  }
-
-  void resumeWithPreviousState(bool wasMuted) {
-    if (wasMuted) {
-      muteVideo();
-    } else {
-      unmuteVideo();
-    }
-    playVideo();
-  }
-
-  bool get isMuted => _isMuted;
-  bool get isPlaying => _isPlaying;
-  bool get isInitialized => _initialized;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _initializeVideoPlayer();
-    _activeVideos[videoId] = this;
+  }
+
+  @override
+  void didUpdateWidget(covariant AutoPlayVideoWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    
+    // Handle autoplay changes based on visibility
+    if (widget.autoPlay != oldWidget.autoPlay) {
+      if (widget.autoPlay && _initialized && !_disposed) {
+        // Video should start playing
+        if (_wasPlayingBeforePause) {
+          _resumeVideo();
+        }
+      } else if (!widget.autoPlay && _initialized && !_disposed) {
+        // Video should pause
+        _pauseVideo();
+      }
+    }
   }
 
   void _initializeVideoPlayer() {
@@ -1374,11 +1096,7 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
       return;
     }
 
-    // Check if URL is HLS (.m3u8)
     bool isHls = currentUrl.toLowerCase().endsWith('.m3u8');
-    developer.log('Trying to initialize video with URL: $currentUrl (HLS: $isHls)',
-        name: 'AutoPlayVideoWidget');
-
     _controller = isHls
         ? VideoPlayerController.networkUrl(
             Uri.parse(currentUrl),
@@ -1388,8 +1106,8 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
               allowBackgroundPlayback: false,
             ),
           )
-        : VideoPlayerController.network(
-            currentUrl,
+        : VideoPlayerController.networkUrl(Uri.parse(
+            currentUrl),
             videoPlayerOptions: VideoPlayerOptions(
               mixWithOthers: true,
               allowBackgroundPlayback: false,
@@ -1398,23 +1116,21 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
 
     _controller!
       ..setLooping(true)
-      ..setVolume(0.0) // Start muted
+      ..setVolume(_isMuted ? 0.0 : 1.0)
       ..initialize().then((_) {
         _initTimer?.cancel();
         if (!_disposed && mounted) {
           setState(() {
             _initialized = true;
           });
-          if (mounted) {
+          // Auto-play only if the widget is marked for autoplay
+          if (mounted && widget.autoPlay && _wasPlayingBeforePause) {
             _controller!.play();
+            _isPlaying = true;
           }
-          developer.log('Video initialized successfully with URL: $currentUrl',
-              name: 'AutoPlayVideoWidget');
         }
       }).catchError((error) {
         _initTimer?.cancel();
-        developer.log('Error initializing video with URL: $currentUrl: $error',
-            name: 'AutoPlayVideoWidget');
         if (!_disposed) {
           _tryNextUrl();
         }
@@ -1434,65 +1150,28 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
     }
   }
 
-  void _handleVisibilityChanged(VisibilityInfo info) {
-    if (!mounted || _disposed || _controller == null) return;
-
-    final visibleFraction = info.visibleFraction;
-
-    if (visibleFraction > 0.5) {
-      _activeVideos[videoId] = this;
-      _muteOtherVideos();
-      if (_initialized && !_controller!.value.isPlaying && _isPlaying) {
-        _controller!.play();
-      }
-    } else {
-      _activeVideos.remove(videoId);
-      if (_initialized && _controller!.value.isPlaying) {
-        _controller!.pause();
-      }
-    }
-  }
-
-  void _muteOtherVideos() {
-    for (final entry in _activeVideos.entries) {
-      if (entry.key != videoId) {
-        entry.value._controller?.pause();
-        entry.value._isMuted = true;
-        if (entry.value.mounted) {
-          entry.value.setState(() {});
-        }
-      }
-    }
-  }
-
-  static void pauseAllAutoPlayVideos() {
-    for (final entry in _activeVideos.entries) {
-      entry.value._controller?.pause();
-      entry.value._controller?.setVolume(0.0);
-      entry.value._isMuted = true;
-      entry.value._isPlaying = false;
-      if (entry.value.mounted) {
-        entry.value.setState(() {});
-      }
-    }
-  }
-
-  static void resumeAllAutoPlayVideos() {
-    for (final entry in _activeVideos.entries) {
-      if (entry.value._initialized && entry.value.mounted) {
-        entry.value._controller?.play();
-        entry.value._isPlaying = true;
-        entry.value._controller?.setVolume(0.0);
-        entry.value._isMuted = true;
-        entry.value.setState(() {});
-      }
-    }
-  }
-
   void _handleInitializationError() {
     if (mounted && !_disposed) {
       setState(() {
         _initialized = false;
+      });
+    }
+  }
+
+  void _pauseVideo() {
+    if (_controller != null && _initialized && !_disposed) {
+      _controller!.pause();
+      setState(() {
+        _isPlaying = false;
+      });
+    }
+  }
+
+  void _resumeVideo() {
+    if (_controller != null && _initialized && !_disposed) {
+      _controller!.play();
+      setState(() {
+        _isPlaying = true;
       });
     }
   }
@@ -1508,7 +1187,7 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
         _controller!.pause();
         break;
       case AppLifecycleState.resumed:
-        if (_initialized && mounted && _isPlaying) {
+        if (_initialized && mounted && _isPlaying && widget.autoPlay) {
           _controller!.play();
         }
         break;
@@ -1522,7 +1201,6 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
   @override
   void dispose() {
     _disposed = true;
-    _activeVideos.remove(videoId);
     _initTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _controller?.dispose();
@@ -1535,6 +1213,7 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
 
     setState(() {
       _isPlaying = !_isPlaying;
+      _wasPlayingBeforePause = _isPlaying; // Update the tracking variable
       if (_isPlaying) {
         _controller!.play();
       } else {
@@ -1556,200 +1235,86 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
   Widget build(BuildContext context) {
     super.build(context);
 
-    return VisibilityDetector(
-      key: Key(videoId),
-      onVisibilityChanged: _handleVisibilityChanged,
-      child: Container(
-        height: widget.height ?? MediaQuery.of(context).size.height,
-        width: widget.width ?? MediaQuery.of(context).size.width,
-        color: Colors.white,
-        child: !_initialized || _controller == null
-            ? Stack(
-                children: [
-                  if (widget.thumbnailUrl != null && widget.thumbnailUrl!.isNotEmpty)
-                    CachedNetworkImage(
-                      imageUrl: widget.thumbnailUrl!,
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                      height: double.infinity,
-                      placeholder: (context, url) => Center(
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                      errorWidget: (context, url, error) {
-                        developer.log(
-                          'Failed to load thumbnail: $url, Error: $error',
-                          name: 'AutoPlayVideoWidget',
-                        );
-                        return Container(
-                          color: Colors.grey.shade200,
-                          child: Center(
-                            child: Icon(
-                              Icons.broken_image,
-                              color: Colors.grey.shade400,
-                              size: 50,
-                            ),
-                          ),
-                        );
-                      },
-                    )
-                  else
-                    Container(
-                      color: Colors.grey.shade200,
-                      child: Center(
-                        child: Icon(
-                          Icons.image_not_supported,
-                          color: Colors.grey.shade400,
-                          size: 50,
-                        ),
-                      ),
+    return Container(
+      height: widget.height ?? MediaQuery.of(context).size.height,
+      width: widget.width ?? MediaQuery.of(context).size.width,
+      color: Colors.black,
+      child: !_initialized || _controller == null
+          ? Stack(
+              children: [
+                if (widget.thumbnailUrl != null && widget.thumbnailUrl!.isNotEmpty)
+                  CachedNetworkImage(
+                    imageUrl: widget.thumbnailUrl!,
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    height: double.infinity,
+                    placeholder: (context, url) => Center(
+                      child: CircularProgressIndicator(strokeWidth: 2),
                     ),
-                  Center(
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                ],
-              )
-            : LayoutBuilder(
-                builder: (context, constraints) {
-                  final size = _controller!.value.size;
-                  final aspectRatio = size.width / size.height;
-
-                  double targetWidth = constraints.maxWidth;
-                  double targetHeight = constraints.maxWidth / aspectRatio;
-
-                  if (targetHeight > constraints.maxHeight) {
-                    targetHeight = constraints.maxHeight;
-                    targetWidth = constraints.maxHeight * aspectRatio;
-                  }
-
-                  return Center(
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        GestureDetector(
-                          onTap: _togglePlayPause,
-                          child: SizedBox(
-                            width: targetWidth,
-                            height: targetHeight,
-                            child: VideoPlayer(_controller!),
-                          ),
-                        ),
-                        Positioned.fill(
-                          child: GestureDetector(
-                            onTap: _togglePlayPause,
-                            behavior: HitTestBehavior.translucent,
-                            child: Container(
-                              color: Colors.transparent,
-                            ),
-                          ),
-                        ),
-                        if (!_isPlaying)
-                          Icon(
-                            Icons.play_arrow,
+                    errorWidget: (context, url, error) {
+                      return Container(
+                        color: Colors.grey.shade800,
+                        child: Center(
+                          child: Icon(
+                            Icons.broken_image,
+                            color: Colors.grey.shade600,
                             size: 50,
-                            color: Colors.white.withAlpha(80),
-                          ),
-                        Positioned(
-                          bottom: 8,
-                          right: 8,
-                          child: GestureDetector(
-                            onTap: _toggleMute,
-                            behavior: HitTestBehavior.opaque,
-                            child: Container(
-                              width: 36,
-                              height: 36,
-                              decoration: BoxDecoration(
-                                color: Colors.black54,
-                                shape: BoxShape.circle,
-                                 border: Border.all(
-                                  color: Colors.white.withAlpha(50),
-                                  width: 1,
-                                ),
-                              ),
-                              child: Icon(
-                                _isMuted ? Icons.volume_off : Icons.volume_up,
-                                color: Colors.white,
-                                size: 20,
-                              ),
-                            ),
                           ),
                         ),
-                      ],
+                      );
+                    },
+                  )
+                else
+                  Container(
+                    color: Colors.grey.shade800,
+                    child: Center(
+                      child: Icon(
+                        Icons.image_not_supported,
+                        color: Colors.grey.shade600,
+                        size: 50,
+                      ),
                     ),
-                  );
-                },
-              ),
-      ),
-    );
-  }
-}
-// Linkify Text Widget
-class _LinkifyText extends StatelessWidget {
-  final String text;
-  final TextStyle? style;
-  final int? maxLines;
-  final TextOverflow? overflow;
-
-  const _LinkifyText({
-    required this.text,
-    this.style,
-    this.maxLines,
-    this.overflow,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final RegExp urlRegExp = RegExp(
-      r'(https?:\/\/[^\s]+)',
-      caseSensitive: false,
-    );
-
-    final List<InlineSpan> spans = [];
-    final matches = urlRegExp.allMatches(text);
-
-    int lastMatchEnd = 0;
-    for (final match in matches) {
-      if (match.start > lastMatchEnd) {
-        spans.add(
-          TextSpan(
-            text: text.substring(lastMatchEnd, match.start),
-            style: style,
-          ),
-        );
-      }
-      final url = match.group(0)!;
-      spans.add(
-        TextSpan(
-          text: url,
-          style: style?.copyWith(
-            color: Colors.blue,
-            decoration: TextDecoration.underline,
-          ) ?? const TextStyle(
-            color: Colors.blue,
-            decoration: TextDecoration.underline,
-          ),
-          recognizer: TapGestureRecognizer()
-            ..onTap = () async {
-              final uri = Uri.parse(url);
-              if (await canLaunchUrl(uri)) {
-                await launchUrl(uri, mode: LaunchMode.externalApplication);
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Could not launch $url')),
-                );
-              }
-            },
-        ),
-      );
-      lastMatchEnd = match.end;
-    }
-    if (lastMatchEnd < text.length) {
-      spans.add(TextSpan(text: text.substring(lastMatchEnd), style: style));
-    }
-
-    return RichText(
-      text: TextSpan(children: spans),
-      maxLines: maxLines,
-      overflow: overflow ?? TextOverflow.clip,
+                  ),
+                Center(
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ],
+            )
+          : Stack(
+              alignment: Alignment.center,
+              children: [
+                SizedBox(
+                  width: double.infinity,
+                  height: double.infinity,
+                  child: FittedBox(
+                    fit: BoxFit.contain,
+                    child: SizedBox(
+                      width: _controller!.value.size.width,
+                      height: _controller!.value.size.height,
+                      child: VideoPlayer(_controller!),
+                    ),
+                  ),
+                ),
+                if (!_isPlaying)
+                  Icon(
+                    Icons.play_arrow,
+                    size: 50,
+                    color: Colors.white.withOpacity(0.7),
+                  ),
+                Positioned(
+                  bottom: 20,
+                  right: 20,
+                  child: IconButton(
+                    icon: Icon(
+                      _isMuted ? Icons.volume_off : Icons.volume_up,
+                      color: Colors.white,
+                      size: 28,
+                    ),
+                    onPressed: _toggleMute,
+                  ),
+                ),
+              ],
+            ),
     );
   }
 }
@@ -1771,5 +1336,88 @@ extension DateTimeExtension on DateTime {
     } else {
       return 'Just now';
     }
+  }
+}
+
+
+class ExpandableStatusText extends StatefulWidget {
+  final String text;
+  final int maxLines;
+  final TextStyle? style;
+
+  const ExpandableStatusText({
+    Key? key,
+    required this.text,
+    this.maxLines = 2,
+    this.style,
+  }) : super(key: key);
+
+  @override
+  _ExpandableStatusTextState createState() => _ExpandableStatusTextState();
+}
+
+class _ExpandableStatusTextState extends State<ExpandableStatusText> {
+  bool _isExpanded = false;
+  bool _isTextOverflowing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkTextOverflow();
+    });
+  }
+
+  void _checkTextOverflow() {
+    final TextPainter textPainter = TextPainter(
+      text: TextSpan(
+        text: widget.text,
+        style: widget.style ?? TextStyle(color: Colors.white),
+      ),
+      maxLines: widget.maxLines,
+      textDirection: TextDirection.ltr,
+    );
+
+    textPainter.layout(maxWidth: MediaQuery.of(context).size.width - 120); // Account for padding and side buttons
+
+    if (textPainter.didExceedMaxLines) {
+      setState(() {
+        _isTextOverflowing = true;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          widget.text,
+          style: widget.style ?? TextStyle(color: Colors.white),
+          maxLines: _isExpanded ? null : widget.maxLines,
+          overflow: _isExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
+        ),
+        if (_isTextOverflowing)
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                _isExpanded = !_isExpanded;
+              });
+            },
+            child: Padding(
+              padding: const EdgeInsets.only(top: 4.0),
+              child: Text(
+                _isExpanded ? 'Show Less' : 'Show More',
+                style: TextStyle(
+                  color: Colors.blue,
+                  fontWeight: FontWeight.w500,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
   }
 }

@@ -138,7 +138,7 @@ class AuthException implements Exception {
 }
 
 class UserProfileService {
-  static const String baseUrl = 'http://182.93.94.210:3064/api/v1';
+  static const String baseUrl = 'http://182.93.94.210:3065/api/v1';
 
   static Future<UserProfile> getUserProfile() async {
     try {
@@ -389,8 +389,8 @@ class _UserProfileScreenState extends State<UserProfileScreen>
 
       final url =
           _lastId == null
-              ? 'http://182.93.94.210:3064/api/v1/getUserContent/${widget.userId}?page=0'
-              : 'http://182.93.94.210:3064/api/v1/getUserContent/${widget.userId}?page=${(_contents.length / 10).ceil()}';
+              ? 'http://182.93.94.210:3065/api/v1/getUserContent/${widget.userId}?page=0'
+              : 'http://182.93.94.210:3065/api/v1/getUserContent/${widget.userId}?page=${(_contents.length / 10).ceil()}';
 
       final response = await http
           .get(
@@ -617,7 +617,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                             backgroundImage:
                                 follow.picture != null
                                     ? NetworkImage(
-                                      'http://182.93.94.210:3064${follow.picture}',
+                                      'http://182.93.94.210:3065${follow.picture}',
                                     )
                                     : null,
                             child:
@@ -736,7 +736,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                             backgroundImage:
                                 follower.picture != null
                                     ? NetworkImage(
-                                      'http://182.93.94.210:3064${follower.picture}',
+                                      'http://182.93.94.210:3065${follower.picture}',
                                     )
                                     : NetworkImage(''),
                             child:

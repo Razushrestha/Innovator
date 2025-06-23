@@ -314,7 +314,7 @@ class _CommentSectionState extends State<CommentSection> {
       contentPadding: const EdgeInsets.symmetric(horizontal: 8.0),
       leading: CircleAvatar(
         backgroundImage: NetworkImage(
-          'http://182.93.94.210:3064${comment.user.picture}',
+          'http://182.93.94.210:3065${comment.user.picture}',
         ),
         radius: 20,
       ),

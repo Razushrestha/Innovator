@@ -366,6 +366,10 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
   final AppData _appData = AppData();
   bool _isRefreshingToken = false;
   bool _isOnline = true;
+  
+  // Add these variables to track scroll position
+  double _lastScrollPosition = 0.0;
+  int _lastItemCount = 0;
 
   @override
   void initState() {
@@ -391,25 +395,28 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
   }
 
   Future<void> _initializeData() async {
-  await _appData.initialize();
-  if (await _verifyToken()) {
-    _loadMoreContent();
+    await _appData.initialize();
+    if (await _verifyToken()) {
+      _loadMoreContent();
+    }
   }
-}
 
   Timer? _debounce;
 
   void _scrollListener() {
-  if (_debounce?.isActive ?? false) return;
-  _debounce = Timer(const Duration(milliseconds: 200), () {
-    if (!_isLoading &&
-        (_hasMoreVideos || _hasMoreNormal) &&
-        _scrollController.position.pixels >=
-            _scrollController.position.maxScrollExtent - _loadTriggerThreshold) {
-      _loadMoreContent();
-    }
-  });
-}
+    if (_debounce?.isActive ?? false) return;
+    _debounce = Timer(const Duration(milliseconds: 200), () {
+      if (!_isLoading &&
+          (_hasMoreVideos || _hasMoreNormal) &&
+          _scrollController.position.pixels >=
+              _scrollController.position.maxScrollExtent - _loadTriggerThreshold) {
+        // Store current scroll position before loading
+        _lastScrollPosition = _scrollController.position.pixels;
+        _lastItemCount = _videoContents.length + _normalContents.length;
+        _loadMoreContent();
+      }
+    });
+  }
 
   Future<void> _loadMoreContent() async {
     if (_isLoading ||
@@ -451,6 +458,10 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
         ...contentData.normalContents,
       ]);
 
+      // Store the current scroll position and item count before updating
+      final currentScrollPosition = _scrollController.position.pixels;
+      final currentItemCount = _videoContents.length + _normalContents.length;
+
       setState(() {
         _videoContents.addAll(contentData.videoContents);
         _normalContents.addAll(contentData.normalContents);
@@ -459,6 +470,12 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
         _hasMoreVideos = contentData.hasMoreVideos;
         _hasMoreNormal = contentData.hasMoreNormal;
       });
+
+      // Maintain scroll position after adding new content
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _maintainScrollPosition(currentScrollPosition, currentItemCount);
+      });
+
     } on SocketException {
       _handleNetworkError();
     } catch (e) {
@@ -470,9 +487,33 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
     }
   }
 
+  void _maintainScrollPosition(double previousPosition, int previousItemCount) {
+    if (_scrollController.hasClients) {
+      try {
+        // Calculate if we need to adjust scroll position
+        final currentItemCount = _videoContents.length + _normalContents.length;
+        final newItemsAdded = currentItemCount - previousItemCount;
+        
+        if (newItemsAdded > 0) {
+          // Option 1: Maintain exact position (recommended for most cases)
+          _scrollController.jumpTo(previousPosition);
+          
+          // Option 2: Alternative - smooth animation to maintain position
+          // _scrollController.animateTo(
+          //   previousPosition,
+          //   duration: const Duration(milliseconds: 100),
+          //   curve: Curves.easeOut,
+          // );
+        }
+      } catch (e) {
+        print('Error maintaining scroll position: $e');
+      }
+    }
+  }
+
+  // Rest of your existing methods remain the same...
   Future<void> _requestNotificationPermission() async {
     try {
-      // Request notification permission for Android 13+
       if (await Permission.notification.isDenied) {
         final status = await Permission.notification.request();
         developer.log('Notification permission status: $status');
@@ -483,7 +524,6 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
         }
       }
 
-      // Request FCM permission
       NotificationSettings settings = await FirebaseMessaging.instance
           .requestPermission(
             alert: true,
@@ -543,9 +583,6 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
   }
 
   Future<String?> _getRefreshToken() async {
-    //return await SecureStorage().getRefreshToken(); // Or your actual storage method
-
-    // Implement your refresh token retrieval logic
     return null;
   }
 
@@ -564,8 +601,6 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
   void _handleNetworkError() {
     setState(() {
       _hasError = true;
-
-      //_errorMessage = 'Network error. Please check your connection.';
     });
     Lottie.asset('animation/Googlesignup.json', height: mq.height * .05);
   }
@@ -573,7 +608,6 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
   void _handleGenericError(dynamic e) {
     setState(() {
       _hasError = true;
-      //_errorMessage = 'Error: ${e.toString()}';
     });
     Lottie.asset('animation/No_Internet.json');
   }
@@ -593,9 +627,9 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
 
   @override
   void dispose() {
-_debounce?.cancel();
-  _scrollController.dispose();
-      super.dispose();
+    _debounce?.cancel();
+    _scrollController.dispose();
+    super.dispose();
   }
 
   @override
@@ -606,6 +640,8 @@ _debounce?.cancel();
         child: CustomScrollView(
           controller: _scrollController,
           physics: const AlwaysScrollableScrollPhysics(),
+          // Add cacheExtent to improve scrolling performance
+          cacheExtent: 1000.0,
           slivers: [
             SliverList(
               delegate: SliverChildBuilderDelegate(
@@ -617,18 +653,18 @@ _debounce?.cancel();
                   if (normalIndex < _normalContents.length) {
                     return _buildContentItem(_normalContents[normalIndex]);
                   }
+                  // Show loading indicator at the end
+                  if (index == _videoContents.length + _normalContents.length && _isLoading) {
+                    return const Padding(
+                      padding: EdgeInsets.all(16.0),
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  }
                   return null;
                 },
-                childCount:
-                    _videoContents.length +
-                    _normalContents.length +
-                    (_isLoading ? 1 : 0),
+                childCount: _videoContents.length + _normalContents.length + (_isLoading ? 1 : 0),
               ),
             ),
-            if (_isLoading)
-              SliverToBoxAdapter(
-                child: Center(child: CircularProgressIndicator()),
-              ),
             if (_hasError) SliverFillRemaining(child: _buildErrorView()),
             if (_videoContents.isEmpty &&
                 _normalContents.isEmpty &&
@@ -640,7 +676,6 @@ _debounce?.cancel();
       ),
       floatingActionButton: GetBuilder<ChatListController>(
         init: () {
-          // Ensure ChatListController is initialized
           if (!Get.isRegistered<ChatListController>()) {
             Get.put(ChatListController());
           }
@@ -654,63 +689,48 @@ _debounce?.cancel();
 
             return CustomFAB(
               gifAsset: 'animation/chaticon.gif',
-              onPressed:
-                  isLoading
-                      ? () {}
-                      : () async {
-                        try {
-                          print(
-                            'FAB pressed! Current unread count: $unreadCount',
-                          );
+              onPressed: isLoading
+                  ? () {}
+                  : () async {
+                      try {
+                        print('FAB pressed! Current unread count: $unreadCount');
 
-                          if (unreadCount > 0) {
-                            chatController.resetAllUnreadCounts();
-                          }
-
-                          // Navigate to ChatListScreen
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder:
-                                  (_) => ChatListScreen(
-                                    currentUserId:
-                                        AppData().currentUserId ?? '',
-                                    currentUserName:
-                                        AppData().currentUserName ?? '',
-                                    currentUserPicture:
-                                        AppData().currentUserProfilePicture ??
-                                        '',
-                                    currentUserEmail:
-                                        AppData().currentUserEmail ?? '',
-                                  ),
-                            ),
-                          );
-                          // Refresh data when returning from chat screen
-                          print(
-                            'Returned from ChatListScreen, refreshing data...',
-                          );
-                          // Ensure controller is still available
-                          if (Get.isRegistered<ChatListController>()) {
-                            final controller = Get.find<ChatListController>();
-                            // Initialize MQTT if not connected
-                            if (!controller.isMqttConnected.value) {
-                              await controller.initializeMQTT();
-                            }
-                            // Fetch latest chats
-                            await controller.fetchChats();
-                            print(
-                              'Chat data refreshed. New unread count: ${controller.totalUnreadCount}',
-                            );
-                          }
-                        } catch (e) {
-                          print('Error in FAB onPressed: $e');
-                          Get.snackbar(
-                            'Error',
-                            'Please Contact to Our Support Team',
-                            snackPosition: SnackPosition.BOTTOM,
-                          );
+                        if (unreadCount > 0) {
+                          chatController.resetAllUnreadCounts();
                         }
-                      },
+
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ChatListScreen(
+                              currentUserId: AppData().currentUserId ?? '',
+                              currentUserName: AppData().currentUserName ?? '',
+                              currentUserPicture:
+                                  AppData().currentUserProfilePicture ?? '',
+                              currentUserEmail: AppData().currentUserEmail ?? '',
+                            ),
+                          ),
+                        );
+
+                        print('Returned from ChatListScreen, refreshing data...');
+                        if (Get.isRegistered<ChatListController>()) {
+                          final controller = Get.find<ChatListController>();
+                          if (!controller.isMqttConnected.value) {
+                            await controller.initializeMQTT();
+                          }
+                          await controller.fetchChats();
+                          print(
+                              'Chat data refreshed. New unread count: ${controller.totalUnreadCount}');
+                        }
+                      } catch (e) {
+                        print('Error in FAB onPressed: $e');
+                        Get.snackbar(
+                          'Error',
+                          'Please Contact to Our Support Team',
+                          snackPosition: SnackPosition.BOTTOM,
+                        );
+                      }
+                    },
               backgroundColor: Colors.transparent,
               elevation: 100.0,
               size: 56.0,
@@ -720,7 +740,6 @@ _debounce?.cancel();
               badgeTextColor: Colors.white,
               badgeSize: 24.0,
               badgeTextSize: 12.0,
-              // Add subtle animation based on connection status
               animationDuration: Duration(
                 milliseconds: isMqttConnected ? 300 : 500,
               ),
@@ -751,68 +770,25 @@ _debounce?.cancel();
     );
   }
 
-  Widget _buildLoadingIndicator() {
-    return _isLoading
-        ? const Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Center(child: CircularProgressIndicator()),
-        )
-        : const SizedBox.shrink();
-  }
-
+  // Add these missing methods that are referenced in your build method
   Widget _buildErrorView() {
-    if (!_isOnline) {
-      _refresh();
-    }
-    if (_isOnline) {
-      _loadMoreContent();
-    }
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (!_isOnline) ...[
-              Lottie.asset('animation/No_Internet.json'),
-              const Text('You\'re offline. ', style: TextStyle(fontSize: 16)),
-            ] else ...[
-              Text(
-                _errorMessage,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color:
-                      _errorMessage.contains('expired') ||
-                              _errorMessage.contains('Authentication')
-                          ? Colors.orange
-                          : Colors.red,
-                ),
-              ),
-            ],
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 15,
-                ),
-                backgroundColor: Colors.deepOrange,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(30),
-                ),
-              ),
-              onPressed: () {
-                _checkConnectivity();
-                _refresh();
-              },
-              icon: const Icon(Icons.refresh, color: Colors.white),
-              label: const Text(
-                'Refresh',
-                style: TextStyle(color: Colors.white),
-              ),
-            ),
-          ],
-        ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.error_outline, size: 64, color: Colors.grey),
+          SizedBox(height: 16),
+          Text(
+            _errorMessage.isNotEmpty ? _errorMessage : 'Something went wrong',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+          ),
+          SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: _refresh,
+            child: Text('Retry'),
+          ),
+        ],
       ),
     );
   }
@@ -822,12 +798,17 @@ _debounce?.cancel();
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Lottie.asset('animation/No-Content.json'),
-          const Icon(Icons.inbox, size: 48, color: Colors.grey),
-          const SizedBox(height: 16),
-          const Text('No content available'),
-          const SizedBox(height: 16),
-          ElevatedButton(onPressed: _refresh, child: const Text('Refresh')),
+          Icon(Icons.inbox_outlined, size: 64, color: Colors.grey),
+          SizedBox(height: 16),
+          Text(
+            'No content available',
+            style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+          ),
+          SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: _refresh,
+            child: Text('Refresh'),
+          ),
         ],
       ),
     );
@@ -1058,7 +1039,7 @@ class _FeedItemState extends State<FeedItem>
                   // Enhanced Avatar
                   Hero(
                     tag:
-                        'avatar_${widget.content.author.id}_${_isAuthorCurrentUser() ? Get.find<UserController>().profilePictureVersion.value : 0}',
+                    'avatar_${widget.content.author.id}_${_isAuthorCurrentUser() ? Get.find<UserController>().profilePictureVersion.value : 0}',
                     child: Container(
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
@@ -3200,7 +3181,6 @@ class AutoPlayVideoWidget extends StatefulWidget {
   const AutoPlayVideoWidget({
     required this.url,
     this.thumbnailUrl,
-
     this.height,
     this.width,
     Key? key,
@@ -3214,7 +3194,7 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
     with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   VideoPlayerController? _controller;
   bool _initialized = false;
-  bool _isMuted = true; // Start muted
+  bool _isMuted = true;
   bool _disposed = false;
   Timer? _initTimer;
   bool _isPlaying = true;
@@ -3224,11 +3204,23 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
   @override
   bool get wantKeepAlive => true;
 
+  // Helper method to safely call setState
+  void _safeSetState(VoidCallback fn) {
+    if (mounted && !_disposed) {
+      // Schedule setState for the next frame to avoid build-time conflicts
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !_disposed) {
+          setState(fn);
+        }
+      });
+    }
+  }
+
   // Public methods to control the video from outside
   void pauseVideo() {
     if (_controller != null && !_disposed && _initialized) {
       _controller!.pause();
-      setState(() {
+      _safeSetState(() {
         _isPlaying = false;
       });
     }
@@ -3237,7 +3229,7 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
   void playVideo() {
     if (_controller != null && !_disposed && _initialized) {
       _controller!.play();
-      setState(() {
+      _safeSetState(() {
         _isPlaying = true;
       });
     }
@@ -3245,37 +3237,27 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
 
   void muteVideo() {
     if (_controller != null && !_disposed && _initialized) {
-      _controller!
-          .setVolume(0.0)
-          .then((_) {
-            if (mounted) {
-              setState(() {
-                _isMuted = true;
-              });
-              developer.log(
-                'Video muted successfully for ID: $videoId',
-                name: 'AutoPlayVideoWidget',
-              );
-            }
-          })
-          .catchError((error) {
-            developer.log(
-              'Error muting video for ID: $videoId: $error',
-              name: 'AutoPlayVideoWidget',
-            );
-          });
-    } else {
-      developer.log(
-        'Cannot mute video for ID: $videoId (controller null or disposed)',
-        name: 'AutoPlayVideoWidget',
-      );
+      _controller!.setVolume(0.0).then((_) {
+        _safeSetState(() {
+          _isMuted = true;
+        });
+        developer.log(
+          'Video muted successfully for ID: $videoId',
+          name: 'AutoPlayVideoWidget',
+        );
+      }).catchError((error) {
+        developer.log(
+          'Error muting video for ID: $videoId: $error',
+          name: 'AutoPlayVideoWidget',
+        );
+      });
     }
   }
 
   void unmuteVideo() {
     if (_controller != null && !_disposed && _initialized) {
       _controller!.setVolume(1.0);
-      setState(() {
+      _safeSetState(() {
         _isMuted = false;
       });
     }
@@ -3302,7 +3284,7 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
   @override
   void initState() {
     super.initState();
-
+    WidgetsBinding.instance.addObserver(this);
     _initializeVideoPlayer();
     VideoPlaybackManager().registerVideo(this);
     _activeVideos[videoId] = this;
@@ -3327,95 +3309,105 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
 
     _controller!
       ..setLooping(true)
-      ..setVolume(0.0) // Start muted
-      ..initialize()
-          .then((_) {
-            _initTimer?.cancel();
-            if (!_disposed && mounted) {
-              setState(() {
-                _initialized = true;
-              });
-              if (mounted) {
-                _controller!.play();
-              }
-            }
-          })
-          .catchError((error) {
-            _initTimer?.cancel();
-            if (!_disposed) {
-              _handleInitializationError();
+      ..setVolume(0.0)
+      ..initialize().then((_) {
+        _initTimer?.cancel();
+        if (!_disposed) {
+          // Use safe setState for initialization
+          _safeSetState(() {
+            _initialized = true;
+          });
+          // Play after state is set
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && !_disposed) {
+              _controller!.play();
             }
           });
+        }
+      }).catchError((error) {
+        _initTimer?.cancel();
+        if (!_disposed) {
+          _handleInitializationError();
+        }
+      });
   }
 
   void _handleVisibilityChanged(VisibilityInfo info) {
     if (!mounted || _disposed || _controller == null) return;
 
-    // Don't auto-play if gallery is open
-
     final visibleFraction = info.visibleFraction;
 
-    if (visibleFraction > 0.5) {
-      // Video is mostly visible
-      _activeVideos[videoId] = this;
-      _muteOtherVideos();
-      if (_initialized && !_controller!.value.isPlaying && _isPlaying) {
-        _controller!.play();
+    // Always use post frame callback for visibility changes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _disposed) return;
+
+      if (visibleFraction > 0.5) {
+        _activeVideos[videoId] = this;
+        _muteOtherVideos();
+        if (_initialized && !_controller!.value.isPlaying && _isPlaying) {
+          _controller!.play();
+        }
+      } else {
+        _activeVideos.remove(videoId);
+        if (_initialized && _controller!.value.isPlaying) {
+          _controller!.pause();
+        }
       }
-    } else {
-      // Video is mostly hidden
-      _activeVideos.remove(videoId);
-      if (_initialized && _controller!.value.isPlaying) {
-        _controller!.pause();
-      }
-    }
+    });
   }
 
   void _muteOtherVideos() {
-    for (final entry in _activeVideos.entries) {
-      if (entry.key != videoId) {
-        entry.value._controller?.pause();
-        entry.value._isMuted = true;
-        if (entry.value.mounted) {
-          entry.value.setState(() {});
+    // Schedule for next frame to avoid build conflicts
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final entry in _activeVideos.entries) {
+        if (entry.key != videoId && entry.value.mounted && !entry.value._disposed) {
+          entry.value._controller?.pause();
+          entry.value._controller?.setVolume(0.0);
+          // Use safe setState for other videos
+          entry.value._safeSetState(() {
+            entry.value._isMuted = true;
+            entry.value._isPlaying = false;
+          });
         }
       }
-    }
+    });
   }
 
-  // Static method to pause and mute all AutoPlay videos
+  // Fixed static methods to use safe setState
   static void pauseAllAutoPlayVideos() {
-    for (final entry in _activeVideos.entries) {
-      entry.value._controller?.pause();
-      entry.value._controller?.setVolume(0.0);
-      entry.value._isMuted = true;
-      entry.value._isPlaying = false;
-      if (entry.value.mounted) {
-        entry.value.setState(() {});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final entry in _activeVideos.entries) {
+        if (entry.value.mounted && !entry.value._disposed) {
+          entry.value._controller?.pause();
+          entry.value._controller?.setVolume(0.0);
+          entry.value._safeSetState(() {
+            entry.value._isMuted = true;
+            entry.value._isPlaying = false;
+          });
+        }
       }
-    }
+    });
   }
 
-  // Static method to resume all AutoPlay videos with their previous states
   static void resumeAllAutoPlayVideos() {
-    for (final entry in _activeVideos.entries) {
-      if (entry.value._initialized && entry.value.mounted) {
-        entry.value._controller?.play();
-        entry.value._isPlaying = true;
-        // Keep them muted by default for auto-play behavior
-        entry.value._controller?.setVolume(0.0);
-        entry.value._isMuted = true;
-        entry.value.setState(() {});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final entry in _activeVideos.entries) {
+        if (entry.value._initialized && entry.value.mounted && !entry.value._disposed) {
+          entry.value._controller?.play();
+          entry.value._controller?.setVolume(0.0);
+          entry.value._safeSetState(() {
+            entry.value._isPlaying = true;
+            entry.value._isMuted = true;
+          });
+        }
       }
-    }
+    });
   }
 
   void _handleInitializationError([Object? error]) {
-    if (mounted && !_disposed) {
-      setState(() {
-        _initialized = false;
-      });
-    }
+    _safeSetState(() {
+      _initialized = false;
+    });
   }
 
   @override
@@ -3423,21 +3415,25 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
     super.didChangeAppLifecycleState(state);
     if (_controller == null || _disposed) return;
 
-    switch (state) {
-      case AppLifecycleState.paused:
-      case AppLifecycleState.inactive:
-        _controller!.pause();
-        break;
-      case AppLifecycleState.resumed:
-        if (_initialized && mounted && _isPlaying) {
-          _controller!.play();
-        }
-        break;
-      case AppLifecycleState.detached:
-      case AppLifecycleState.hidden:
-        _controller!.pause();
-        break;
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _disposed) return;
+
+      switch (state) {
+        case AppLifecycleState.paused:
+        case AppLifecycleState.inactive:
+          _controller!.pause();
+          break;
+        case AppLifecycleState.resumed:
+          if (_initialized && mounted && _isPlaying) {
+            _controller!.play();
+          }
+          break;
+        case AppLifecycleState.detached:
+        case AppLifecycleState.hidden:
+          _controller!.pause();
+          break;
+      }
+    });
   }
 
   @override
@@ -3452,8 +3448,9 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
     super.dispose();
   }
 
+  // Fixed toggle methods - can use direct setState since they're user-triggered
   void _togglePlayPause() {
-    if (_controller == null || _disposed) return;
+    if (_controller == null || _disposed || !_initialized) return;
 
     setState(() {
       _isPlaying = !_isPlaying;
@@ -3466,7 +3463,7 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
   }
 
   void _toggleMute() {
-    if (_controller == null || _disposed) return;
+    if (_controller == null || _disposed || !_initialized) return;
 
     setState(() {
       _isMuted = !_isMuted;
@@ -3485,92 +3482,109 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
         height: widget.height ?? MediaQuery.of(context).size.height,
         width: widget.width ?? MediaQuery.of(context).size.width,
         color: Colors.white,
-        child:
-            !_initialized || _controller == null
-                ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
-                : LayoutBuilder(
-                  builder: (context, constraints) {
-                    final size = _controller!.value.size;
-                    final aspectRatio = size.width / size.height;
-
-                    double targetWidth = constraints.maxWidth;
-                    double targetHeight = constraints.maxWidth / aspectRatio;
-
-                    if (targetHeight > constraints.maxHeight) {
-                      targetHeight = constraints.maxHeight;
-                      targetWidth = constraints.maxHeight * aspectRatio;
-                    }
-
-                    return Center(
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          if (_controller != null && _initialized)
-                            VideoPlayer(_controller!),
-                           (_controller == null || !_initialized) ? widget.thumbnailUrl != null ?
-                            CachedNetworkImage(
-                              imageUrl: widget.thumbnailUrl ?? '',
-                              fit: BoxFit.cover,
-                              placeholder:
-                                  (context, url) => Center(
-                                    child: CircularProgressIndicator(),
-                                  ),
-                              errorWidget:
-                                  (context, url, error) =>
-                                      Container(color: Colors.grey),
-                            ) :  Center(child: Icon(Icons.videocam_off)) :
-                          GestureDetector(
-                            onTap: _togglePlayPause,
-                            child: SizedBox(
-                              width: targetWidth,
-                              height: targetHeight,
-                              child: VideoPlayer(_controller!),
-                            ),
-                          ),
-                          Positioned.fill(
-                            child: GestureDetector(
-                              onTap: _togglePlayPause,
-                              behavior: HitTestBehavior.translucent,
-                              child: Container(color: Colors.transparent),
-                            ),
-                          ),
-                          if (!_isPlaying)
-                            Icon(
-                              Icons.play_arrow,
-                              size: 50,
-                              color: Colors.white.withAlpha(80),
-                            ),
-                          Positioned(
-                            bottom: 8,
-                            right: 8,
-                            child: GestureDetector(
-                              onTap: _toggleMute,
-                              behavior: HitTestBehavior.opaque,
-                              child: Container(
-                                width: 36,
-                                height: 36,
-                                decoration: BoxDecoration(
-                                  color: Colors.black54,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Colors.white.withAlpha(50),
-                                    width: 1,
-                                  ),
-                                ),
-                                child: Icon(
-                                  _isMuted ? Icons.volume_off : Icons.volume_up,
-                                  color: Colors.white,
-                                  size: 20,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
+        child: !_initialized || _controller == null
+            ? _buildLoadingOrThumbnail()
+            : _buildVideoPlayer(),
       ),
+    );
+  }
+
+  Widget _buildLoadingOrThumbnail() {
+    if (widget.thumbnailUrl != null) {
+      return CachedNetworkImage(
+        imageUrl: widget.thumbnailUrl!,
+        fit: BoxFit.cover,
+        placeholder: (context, url) => const Center(
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+        errorWidget: (context, url, error) => Container(
+          color: Colors.grey,
+          child: const Center(
+            child: Icon(Icons.videocam_off, color: Colors.white),
+          ),
+        ),
+      );
+    } else {
+      return const Center(
+        child: CircularProgressIndicator(strokeWidth: 2),
+      );
+    }
+  }
+
+  Widget _buildVideoPlayer() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = _controller!.value.size;
+        final aspectRatio = size.width / size.height;
+
+        double targetWidth = constraints.maxWidth;
+        double targetHeight = constraints.maxWidth / aspectRatio;
+
+        if (targetHeight > constraints.maxHeight) {
+          targetHeight = constraints.maxHeight;
+          targetWidth = constraints.maxHeight * aspectRatio;
+        }
+
+        return Center(
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              GestureDetector(
+                onTap: _togglePlayPause,
+                behavior: HitTestBehavior.opaque,
+                child: SizedBox(
+                  width: targetWidth,
+                  height: targetHeight,
+                  child: VideoPlayer(_controller!),
+                ),
+              ),
+              
+              if (!_isPlaying)
+                IgnorePointer(
+                  child: Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.play_arrow,
+                      size: 50,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              
+              Positioned(
+                bottom: 16,
+                right: 16,
+                child: GestureDetector(
+                  onTap: _toggleMute,
+                  behavior: HitTestBehavior.opaque,
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Icon(
+                      _isMuted ? Icons.volume_off : Icons.volume_up,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

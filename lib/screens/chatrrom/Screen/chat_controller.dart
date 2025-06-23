@@ -454,7 +454,7 @@ Future<void> _initializeNotifications() async {
         throw Exception('No auth token available');
       }
 
-      const String baseUrl = 'http://182.93.94.210:3064/api/v1';
+      const String baseUrl = 'http://182.93.94.210:3065/api/v1';
       final url = '$baseUrl/messages/$receiverId';
       log('ChatController: Fetching messages from: $url');
 
@@ -661,7 +661,7 @@ Future<void> _initializeNotifications() async {
       final token = AppData().authToken;
       if (token == null) return;
 
-      const String baseUrl = 'http://182.93.94.210:3064/api/v1';
+      const String baseUrl = 'http://182.93.94.210:3065/api/v1';
       final url = '$baseUrl/message/$messageId/read';
 
       final response = await http.put(
@@ -710,7 +710,7 @@ Future<void> _initializeNotifications() async {
       final token = AppData().authToken;
       if (token == null) return false;
 
-      const String baseUrl = 'http://182.93.94.210:3064/api/v1';
+      const String baseUrl = 'http://182.93.94.210:3065/api/v1';
       final url = '$baseUrl/message/$messageId';
 
       final response = await http.delete(
@@ -741,7 +741,7 @@ Future<void> _initializeNotifications() async {
       final token = AppData().authToken;
       if (token == null) return false;
 
-      const String baseUrl = 'http://182.93.94.210:3064/api/v1';
+      const String baseUrl = 'http://182.93.94.210:3065/api/v1';
       final url = '$baseUrl/message/$messageId/everyone';
 
       final response = await http.delete(
@@ -772,7 +772,7 @@ Future<void> _initializeNotifications() async {
       final token = AppData().authToken;
       if (token == null) return false;
 
-      const String baseUrl = 'http://182.93.94.210:3064/api/v1';
+      const String baseUrl = 'http://182.93.94.210:3065/api/v1';
       final url = '$baseUrl/conversation/$currentUserId?otherUserId=$receiverId';
 
       final response = await http.delete(

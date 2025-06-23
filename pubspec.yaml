@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.13+18
+version: 1.0.15+20
 
 environment:
   sdk: ^3.7.2
@@ -36,10 +36,7 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   get: ^4.7.2
-  firebase_auth: ^5.5.2
   lottie: ^3.3.1
-  firebase_core: ^3.13.0
-  firebase_storage: ^12.4.5
   firebase_messaging: ^15.2.5
   googleapis_auth: ^2.0.0
   google_sign_in: ^6.3.0
@@ -75,6 +72,8 @@ dependencies:
   flutter_cache_manager_dio: ^4.0.0
   flutter_cache_manager: ^3.4.1
   equatable: ^2.0.7
+  firebase_core: ^3.14.0
+  firebase_auth: ^5.6.0
 
 dev_dependencies:
   flutter_test:
@@ -137,12 +136,13 @@ flutter:
   # see https://flutter.dev/to/font-from-package
 
 msix_config:
-  display_name: Innovator
+  display_name: INNOVATORS
   description: Innovator is a platform that connects innovators with investors and mentors.
-  publisher_display_name: Ronit Shrivastav
-  identity_name: company.innovator.innovation
-  msix_version: 1.0.0.1
+  publisher_display_name: Ronit
+  publisher: CN=E382EDEF-998A-42F1-8DF1-EF21274F9EEF
+  identity_name: Ronit.INNOVATORS
+  msix_version: 1.0.0.0
   logo_path: C:\Users\Ronit\Innovator\assets\icon\icon.png
-  capabilities: internetClient, microphone, webcam
+  capabilities: internetClient
   certificate_path: C:\Users\Ronit\Documents\RONIT.pfx
   certificate_password: 123456789

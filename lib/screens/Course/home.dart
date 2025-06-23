@@ -363,8 +363,30 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Widget _buildCategoryCard(Category category) {
     return GestureDetector(
       onTap: () {
-      Navigator.push(context, MaterialPageRoute(builder: (_) => CourseDetailPage()));
+showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Alert'),
+          content: Text('We Are on Server Technical Issues'),
+          actions: [
+            TextButton(
+              child: Text('Cancel'),
+              onPressed: () {
+                Navigator.of(context).pop(); // Close the dialog
+              },
+            ),
+            TextButton(
+              child: Text('OK'),
+              onPressed: () {
+                Navigator.of(context).pop(); // Close the dialog
+               
+              },
+            ),
+          ],
+        );
       },
+    );      },
       child: Container(
         decoration: BoxDecoration(
           color: category.color,
