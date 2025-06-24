@@ -125,12 +125,12 @@ class FeedContent {
   }) {
     _mediaUrls = optimizedFiles.isNotEmpty
         ? optimizedFiles.map((file) {
-            if (file.original.isNotEmpty) return 'http://182.93.94.210:3065${file.original}';
-            if (file.hls.isNotEmpty) return 'http://182.93.94.210:3065${file.hls}';
-            if (file.url.isNotEmpty) return 'http://182.93.94.210:3065${file.url}';
+            if (file.original.isNotEmpty) return 'http://182.93.94.210:3066${file.original}';
+            if (file.hls.isNotEmpty) return 'http://182.93.94.210:3066${file.hls}';
+            if (file.url.isNotEmpty) return 'http://182.93.94.210:3066${file.url}';
             return '';
           }).where((url) => url.isNotEmpty).toList()
-        : files.map((file) => 'http://182.93.94.210:3065$file').toList();
+        : files.map((file) => 'http://182.93.94.210:3066$file').toList();
 
     _hasVideos = optimizedFiles.any((file) => file.type == 'video') ||
         files.any((file) =>
@@ -167,7 +167,7 @@ class FeedContent {
 
   String? get thumbnailUrl {
     if (optimizedFiles.isNotEmpty && optimizedFiles.first.thumbnail.isNotEmpty) {
-      return 'http://182.93.94.210:3065${optimizedFiles.first.thumbnail}';
+      return 'http://182.93.94.210:3066${optimizedFiles.first.thumbnail}';
     }
     return null;
   }
@@ -306,7 +306,7 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
   }
 
   Future<http.Response> _makeApiRequest() async {
-    final url = Uri.parse('http://182.93.94.210:3065/api/v1/list-contents?loadEngagement=true&quality=auto');
+    final url = Uri.parse('http://182.93.94.210:3066/api/v1/list-contents?loadEngagement=true&quality=auto');
     
     return await http.get(
       url,
@@ -588,7 +588,7 @@ class _ReelsVideoItemState extends State<ReelsVideoItem> {
   bool _isLiked = false;
   bool _isFollowing = false;
   final ContentLikeService likeService = ContentLikeService(
-    baseUrl: 'http://182.93.94.210:3065',
+    baseUrl: 'http://182.93.94.210:3066',
   );
 
   @override
@@ -697,7 +697,7 @@ class _ReelsVideoItemState extends State<ReelsVideoItem> {
               radius: 16,
               backgroundImage: widget.content.author.picture.isNotEmpty
                   ? CachedNetworkImageProvider(
-                      'http://182.93.94.210:3065${widget.content.author.picture}')
+                      'http://182.93.94.210:3066${widget.content.author.picture}')
                   : null,
               child: widget.content.author.picture.isEmpty
                   ? Text(widget.content.author.name.isNotEmpty
@@ -905,7 +905,7 @@ class _ReelsVideoItemState extends State<ReelsVideoItem> {
 
   void _copyLink() {
     Clipboard.setData(ClipboardData(
-      text: 'http://182.93.94.210:3065/content/${widget.content.id}',
+      text: 'http://182.93.94.210:3066/content/${widget.content.id}',
     ));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Link copied to clipboard')),
@@ -921,7 +921,7 @@ class _ReelsVideoItemState extends State<ReelsVideoItem> {
     }
 
     try {
-      final url = Uri.parse('http://182.93.94.210:3065/api/v1/delete-content/${widget.content.id}');
+      final url = Uri.parse('http://182.93.94.210:3066/api/v1/delete-content/${widget.content.id}');
       final response = await http.delete(
         url,
         headers: {

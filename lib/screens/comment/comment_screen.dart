@@ -36,7 +36,7 @@ class _CommentScreenState extends State<CommentScreen> {
       if (token == null) return;
 
       final response = await http.get(
-        Uri.parse('http://182.93.94.210:3065/api/v1/posts/${widget.postId}/comments'),
+        Uri.parse('http://182.93.94.210:3066/api/v1/posts/${widget.postId}/comments'),
         headers: {'Authorization': 'Bearer $token'},
       );
 
@@ -66,7 +66,7 @@ class _CommentScreenState extends State<CommentScreen> {
       if (token == null) return;
 
       final response = await http.post(
-        Uri.parse('http://182.93.94.210:3065/api/v1/posts/${widget.postId}/comments'),
+        Uri.parse('http://182.93.94.210:3066/api/v1/posts/${widget.postId}/comments'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',

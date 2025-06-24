@@ -38,7 +38,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       if (token == null) return;
 
       final response = await http.get(
-        Uri.parse('http://182.93.94.210:3065/api/v1/posts/${widget.postId}'),
+        Uri.parse('http://182.93.94.210:3066/api/v1/posts/${widget.postId}'),
         headers: {'Authorization': 'Bearer $token'},
       );
 
@@ -64,7 +64,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       if (token == null) return;
 
       final response = await http.post(
-        Uri.parse('http://182.93.94.210:3065/api/v1/posts/${widget.postId}/like'),
+        Uri.parse('http://182.93.94.210:3066/api/v1/posts/${widget.postId}/like'),
         headers: {'Authorization': 'Bearer $token'},
       );
 

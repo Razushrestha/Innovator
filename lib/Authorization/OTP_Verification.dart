@@ -46,7 +46,7 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
 
     try {
       // API endpoint for forget password
-      final url = Uri.parse('http://182.93.94.210:3065/api/v1/forget-password');
+      final url = Uri.parse('http://182.93.94.210:3066/api/v1/forget-password');
       
       // Request body
       final body = jsonEncode({
@@ -116,7 +116,7 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
 
     try {
       // API endpoint for resending OTP
-      final url = Uri.parse('http://182.93.94.210:3065/api/v1/send-otp');
+      final url = Uri.parse('http://182.93.94.210:3066/api/v1/send-otp');
       
       // Request body
       final body = jsonEncode({

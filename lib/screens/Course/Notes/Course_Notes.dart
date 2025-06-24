@@ -187,7 +187,7 @@ class _NotesTabState extends State<NotesTab> {
       developer.log('Fetching notes with auth token: ${_appData.authToken != null ? "Token exists" : "No token"}');
 
       final response = await http.get(
-        Uri.parse('http://182.93.94.210:3065/api/v1/list-courses'),
+        Uri.parse('http://182.93.94.210:3066/api/v1/list-courses'),
         headers: headers,
       );
 
@@ -247,7 +247,7 @@ class _NotesTabState extends State<NotesTab> {
 
   void openPdfViewer(String pdfPath, String title) {
     // Construct full URL for PDF
-    final String baseUrl = 'http://182.93.94.210:3065';
+    final String baseUrl = 'http://182.93.94.210:3066';
     final String fullPdfUrl = '$baseUrl$pdfPath';
 
     Navigator.push(

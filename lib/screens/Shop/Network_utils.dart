@@ -3,7 +3,7 @@ import 'dart:developer' as developer;
 import 'package:http/http.dart' as http;
 
 class NetworkUtils {
-  static const String baseUrl = "http://182.93.94.210:3065";
+  static const String baseUrl = "http://182.93.94.210:3066";
   
   // Generic GET request handler with improved error handling and logging
   static Future<Map<String, dynamic>> get(

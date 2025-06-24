@@ -54,7 +54,7 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
 
     try {
       final response = await http.get(
-        Uri.parse('http://182.93.94.210:3065/api/v1/followers/${widget.userId}'),
+        Uri.parse('http://182.93.94.210:3066/api/v1/followers/${widget.userId}'),
         headers: {
           'authorization': 'Bearer ${appData.authToken}',
           'Content-Type': 'application/json',
@@ -90,7 +90,7 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
 
     try {
       final response = await http.get(
-        Uri.parse('http://182.93.94.210:3065/api/v1/following/${widget.userId}'),
+        Uri.parse('http://182.93.94.210:3066/api/v1/following/${widget.userId}'),
         headers: {
           'authorization': 'Bearer ${appData.authToken}',
           'Content-Type': 'application/json',
@@ -140,7 +140,7 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
         return ListTile(
           leading: CircleAvatar(
             backgroundImage: follower['picture'] != null 
-                ? NetworkImage('http://182.93.94.210:3065${follower['picture']}')
+                ? NetworkImage('http://182.93.94.210:3066${follower['picture']}')
                 : const AssetImage('assets/default_avatar.png') as ImageProvider,
           ),
           title: Text(follower['name'] ?? 'User'),
@@ -175,7 +175,7 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
         return ListTile(
           leading: CircleAvatar(
             backgroundImage: user['picture'] != null 
-                ? NetworkImage('http://182.93.94.210:3065${user['picture']}')
+                ? NetworkImage('http://182.93.94.210:3066${user['picture']}')
                 : const AssetImage('assets/default_avatar.png') as ImageProvider,
           ),
           title: Text(user['name'] ?? 'User'),
@@ -281,7 +281,7 @@ class _FollowersFollowingContentState extends State<FollowersFollowingContent> w
 
     try {
       final response = await http.get(
-        Uri.parse('http://182.93.94.210:3065/api/v1/followers/${widget.userId}'),
+        Uri.parse('http://182.93.94.210:3066/api/v1/followers/${widget.userId}'),
         headers: {
           'authorization': 'Bearer ${appData.authToken}',
           'Content-Type': 'application/json',
@@ -317,7 +317,7 @@ class _FollowersFollowingContentState extends State<FollowersFollowingContent> w
 
     try {
       final response = await http.get(
-        Uri.parse('http://182.93.94.210:3065/api/v1/following/${widget.userId}'),
+        Uri.parse('http://182.93.94.210:3066/api/v1/following/${widget.userId}'),
         headers: {
           'authorization': 'Bearer ${appData.authToken}',
           'Content-Type': 'application/json',
@@ -368,7 +368,7 @@ class _FollowersFollowingContentState extends State<FollowersFollowingContent> w
         return ListTile(
           leading: CircleAvatar(
             backgroundImage: follower['picture'] != null 
-                ? NetworkImage('http://182.93.94.210:3065${follower['picture']}')
+                ? NetworkImage('http://182.93.94.210:3066${follower['picture']}')
                 : const AssetImage('assets/default_avatar.png') as ImageProvider,
           ),
           title: Text(follower['name'] ?? 'User'),
@@ -404,7 +404,7 @@ class _FollowersFollowingContentState extends State<FollowersFollowingContent> w
         return ListTile(
           leading: CircleAvatar(
             backgroundImage: user['picture'] != null 
-                ? NetworkImage('http://182.93.94.210:3065${user['picture']}')
+                ? NetworkImage('http://182.93.94.210:3066${user['picture']}')
                 : const AssetImage('assets/default_avatar.png') as ImageProvider,
           ),
           title: GestureDetector(

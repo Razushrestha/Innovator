@@ -96,7 +96,7 @@ class _UserImageGalleryState extends State<UserImageGallery> {
                 if (file is String &&
                     file.isNotEmpty &&
                     _isImageFile(file)) {
-                  newImages.add('http://182.93.94.210:3065$file');
+                  newImages.add('http://182.93.94.210:3066$file');
                 }
               }
               newLastId = post['_id']; // Update lastId to the last post's ID
@@ -172,8 +172,8 @@ class _UserImageGalleryState extends State<UserImageGallery> {
 
   Future<http.Response> _makeApiRequest() async {
     final url = _lastId == null
-        ? 'http://182.93.94.210:3065/api/v1/list-contents?email=${widget.userEmail}'
-        : 'http://182.93.94.210:3065/api/v1/list-contents?lastId=$_lastId&email=${widget.userEmail}';
+        ? 'http://182.93.94.210:3066/api/v1/list-contents?email=${widget.userEmail}'
+        : 'http://182.93.94.210:3066/api/v1/list-contents?lastId=$_lastId&email=${widget.userEmail}';
 
     debugPrint('Request URL: $url');
     final response = await http.get(

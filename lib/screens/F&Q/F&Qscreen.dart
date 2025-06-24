@@ -55,7 +55,7 @@ class _FAQScreenState extends State<FAQScreen> with SingleTickerProviderStateMix
     try {
       final appData = AppData();
       final response = await http.post(
-        Uri.parse('http://182.93.94.210:3065/api/v1/support'),
+        Uri.parse('http://182.93.94.210:3066/api/v1/support'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer ${appData.authToken}',

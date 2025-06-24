@@ -13,7 +13,6 @@ import 'package:innovator/App_data/App_data.dart';
 import 'package:innovator/Authorization/Login.dart';
 import 'package:innovator/controllers/user_controller.dart';
 import 'package:innovator/screens/Feed/Optimize%20Media/OptimizeMediaScreen.dart';
-import 'package:innovator/screens/Feed/Services/Feed_Cache_service.dart';
 import 'package:innovator/screens/Feed/VideoPlayer/videoplayerpackage.dart';
 import 'package:innovator/screens/Follow/follow-Service.dart';
 import 'package:innovator/screens/Follow/follow_Button.dart';
@@ -34,9 +33,78 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:video_player/video_player.dart';
 import 'dart:typed_data';
 import 'dart:developer' as developer;
-import 'package:share_plus/share_plus.dart'; // <-- Add this import
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:visibility_detector/visibility_detector.dart';
+
+// VideoPlaybackManager class
+class VideoPlaybackManager {
+  static final VideoPlaybackManager _instance = VideoPlaybackManager._internal();
+  factory VideoPlaybackManager() => _instance;
+  VideoPlaybackManager._internal();
+
+  final Set<AutoPlayVideoWidgetState> _registeredVideos = {};
+
+  void registerVideo(AutoPlayVideoWidgetState video) {
+    _registeredVideos.add(video);
+  }
+
+  void unregisterVideo(AutoPlayVideoWidgetState video) {
+    _registeredVideos.remove(video);
+  }
+
+  void pauseAllVideos() {
+    for (final video in _registeredVideos) {
+      if (video.mounted) {
+        video.pauseVideo();
+      }
+    }
+  }
+
+  void resumeAllVideos() {
+    for (final video in _registeredVideos) {
+      if (video.mounted) {
+        video.playVideo();
+      }
+    }
+  }
+}
+
+// Enhanced CacheManager class
+class CacheManager {
+  static const String _cacheKey = 'feed_cache';
+  static const int _maxCacheSize = 100;
+  static List<FeedContent> _memoryCache = [];
+  
+  static Future<void> cacheFeedContent(List<FeedContent> contents) async {
+    try {
+      _memoryCache.addAll(contents);
+      
+      if (_memoryCache.length > _maxCacheSize) {
+        _memoryCache = _memoryCache.sublist(_memoryCache.length - _maxCacheSize);
+      }
+      
+      debugPrint('Cached ${contents.length} feed items. Total cache size: ${_memoryCache.length}');
+    } catch (e) {
+      debugPrint('Error caching feed content: $e');
+    }
+  }
+  
+  static Future<List<FeedContent>> getCachedFeed() async {
+    try {
+      debugPrint('Retrieved ${_memoryCache.length} cached feed items');
+      return List.from(_memoryCache);
+    } catch (e) {
+      debugPrint('Error getting cached feed: $e');
+      return [];
+    }
+  }
+  
+  static void clearCache() {
+    _memoryCache.clear();
+    debugPrint('Feed cache cleared');
+  }
+}
 
 // Enhanced Author model
 class Author {
@@ -62,7 +130,7 @@ class Author {
   }
 }
 
-// Enhanced FeedContent model with better error handling
+// Enhanced FeedContent model
 class FeedContent {
   final String id;
   String status;
@@ -106,7 +174,6 @@ class FeedContent {
     this.loadPriority = 'normal',
   }) {
     try {
-      // Process both original files and optimized files
       final allUrls = [
         ...files.map((file) => _formatUrl(file)),
         ...optimizedFiles
@@ -114,7 +181,7 @@ class FeedContent {
             .map((file) => _formatUrl(file['url'])),
       ];
 
-      _mediaUrls = allUrls.toSet().toList(); // Remove duplicates
+      _mediaUrls = allUrls.toSet().toList();
 
       _hasImages =
           _mediaUrls.any((url) => FileTypeHelper.isImage(url)) ||
@@ -141,13 +208,9 @@ class FeedContent {
 
   String _formatUrl(String url) {
     if (url.startsWith('http')) {
-      developer.log('Using original URL: $url', name: 'FeedContent');
       return url;
     }
-    final formatted =
-        'http://182.93.94.210:3065${url.startsWith('/') ? url : '/$url'}';
-    developer.log('Formatted URL: $formatted', name: 'FeedContent');
-    return formatted;
+    return 'http://182.93.94.210:3066${url.startsWith('/') ? url : '/$url'}';
   }
 
   factory FeedContent.fromJson(Map<String, dynamic> json) {
@@ -194,14 +257,12 @@ class FeedContent {
   bool get hasPdfs => _hasPdfs;
   bool get hasWordDocs => _hasWordDocs;
 
-  // Get the best quality video URL from optimized files
   String? get bestVideoUrl {
     try {
       final videoFiles =
           optimizedFiles.where((file) => file['type'] == 'video').toList();
       if (videoFiles.isEmpty) return null;
 
-      // Sort by quality (assuming qualities are in order)
       videoFiles.sort((a, b) {
         final aQualities = List<String>.from(a['qualities'] ?? []);
         final bQualities = List<String>.from(b['qualities'] ?? []);
@@ -216,17 +277,14 @@ class FeedContent {
     }
   }
 
-  // Get thumbnail URL
   String? get thumbnailUrl {
     try {
-      // First try to get from optimized files
       for (final file in optimizedFiles) {
         if (file['thumbnail'] != null) {
           return _formatUrl(file['thumbnail']);
         }
       }
 
-      // Fallback to first image file
       final imageUrl = _mediaUrls.firstWhere(
         (url) => FileTypeHelper.isImage(url),
         orElse: () => '',
@@ -261,8 +319,6 @@ class ContentResponse {
     );
   }
 }
-
-
 
 class FileTypeHelper {
   static bool isImage(String url) {
@@ -326,10 +382,16 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
   String _errorMessage = '';
   bool _hasMoreVideos = true;
   bool _hasMoreNormal = true;
-  static const _loadTriggerThreshold = 200.0;
   final AppData _appData = AppData();
   bool _isRefreshingToken = false;
   bool _isOnline = true;
+  Timer? _debounce;
+  Timer? _autoLoadTimer;
+  DateTime _lastLoadTime = DateTime.now();
+  
+  // Memory management
+  static const int _maxContentItems = 200;
+  static const int _contentToRemove = 50;
 
   @override
   void initState() {
@@ -338,6 +400,19 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
     _initializeData();
     _scrollController.addListener(_scrollListener);
     _checkConnectivity();
+    _startAutoLoadTimer();
+  }
+
+  // ENHANCED AUTO LOAD TIMER - More aggressive loading
+  void _startAutoLoadTimer() {
+    _autoLoadTimer = Timer.periodic(Duration(seconds: 2), (timer) {
+      if (!_isLoading && 
+          (_hasMoreVideos || _hasMoreNormal) && 
+          _allContents.length < 30) { // Increased threshold
+        debugPrint('🔄 Auto-loading more content. Current items: ${_allContents.length}');
+        _loadMoreContent();
+      }
+    });
   }
 
   Future<void> _checkConnectivity() async {
@@ -361,170 +436,201 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
       await _appData.initialize();
       if (await _verifyToken()) {
         await _loadMoreContent();
+        
+        // Load more content initially to ensure sufficient items
+        if (_allContents.length < 20 && (_hasMoreVideos || _hasMoreNormal)) {
+          await Future.delayed(Duration(milliseconds: 300));
+          await _loadMoreContent();
+        }
+        
+        // Third load if still insufficient
+        if (_allContents.length < 15 && (_hasMoreVideos || _hasMoreNormal)) {
+          await Future.delayed(Duration(milliseconds: 300));
+          await _loadMoreContent();
+        }
       }
     } catch (e) {
       debugPrint('Error initializing data: $e');
-      // In release mode, ensure we still try to load content even if initialization partially fails
       if (await _verifyToken()) {
         await _loadMoreContent();
       }
     }
   }
 
-  Timer? _debounce;
-
+  // ENHANCED SCROLL LISTENER - More aggressive triggers
   void _scrollListener() {
     if (_debounce?.isActive ?? false) return;
     
-    _debounce = Timer(const Duration(milliseconds: 100), () {
+    _debounce = Timer(const Duration(milliseconds: 50), () {
       if (!_scrollController.hasClients) return;
       
       final double currentPosition = _scrollController.position.pixels;
       final double maxScrollExtent = _scrollController.position.maxScrollExtent;
       
-      // More lenient threshold for release mode
-      if (!_isLoading &&
-          (_hasMoreVideos || _hasMoreNormal) &&
-          currentPosition >= (maxScrollExtent - _loadTriggerThreshold)) {
-        
-        debugPrint('Loading more content - Position: $currentPosition, Max: $maxScrollExtent');
-        debugPrint('Has more videos: $_hasMoreVideos, Has more normal: $_hasMoreNormal');
-        
+      // Multiple aggressive trigger points
+      final threshold20 = maxScrollExtent * 0.2;  // Very early loading
+      final threshold40 = maxScrollExtent * 0.4;  // Early loading
+      final threshold60 = maxScrollExtent * 0.6;  // Medium loading
+      final threshold80 = maxScrollExtent * 0.8;  // Late loading
+      final nearBottom = maxScrollExtent - 100;   // Almost at bottom
+      
+      // Check if we need more content
+      final hasLowContent = _allContents.length < 25;
+      final isScrollingDown = currentPosition >= threshold20;
+      
+      bool shouldLoad = !_isLoading && 
+                       (_hasMoreVideos || _hasMoreNormal) &&
+                       maxScrollExtent > 0 &&
+                       (isScrollingDown || hasLowContent);
+      
+      if (shouldLoad) {
+        debugPrint('🔄 Scroll loading triggered - Position: ${currentPosition.toInt()}/${maxScrollExtent.toInt()}, Items: ${_allContents.length}');
         _loadMoreContent();
       }
     });
   }
 
+  // ENHANCED LOAD MORE CONTENT - Better error handling and retry logic
   Future<void> _loadMoreContent() async {
-    // Add more defensive checks
     if (_isLoading) {
-      debugPrint('Already loading, skipping...');
+      debugPrint('⏳ Already loading, skipping...');
       return;
     }
     
     if (!_hasMoreNormal && !_hasMoreVideos) {
-      debugPrint('No more content available');
+      debugPrint('🛑 No more content available');
       return;
     }
     
     if (_isRefreshingToken) {
-      debugPrint('Token refreshing, skipping...');
+      debugPrint('🔑 Token refresh in progress, skipping...');
       return;
     }
 
-    debugPrint('Starting to load more content...');
-    debugPrint('Current content count: ${_allContents.length}');
-    debugPrint('Next video cursor: $_nextVideoCursor');
-    debugPrint('Next normal cursor: $_nextNormalCursor');
-    
     setState(() {
       _isLoading = true;
       _hasError = false;
     });
 
-    try {
-      if (!_isOnline) {
-        final cachedContents = await CacheManager.getCachedFeed();
-        setState(() {
-          if (cachedContents.isNotEmpty) {
-            _allContents.clear();
-            _allContents.addAll(cachedContents);
-            _hasMoreVideos = false;
-            _hasMoreNormal = false;
-          }
-        });
-        return;
-      }
+    _lastLoadTime = DateTime.now();
 
-      if (!await _verifyToken()) {
-        debugPrint('Token verification failed');
-        return;
-      }
-
-      debugPrint('Making API call...');
-      
-      final contentData = await FeedApiService.fetchContents(
-        videoCursor: _nextVideoCursor,
-        normalCursor: _nextNormalCursor,
-        context: context,
-      );
-
-      debugPrint('API call successful');
-      debugPrint('Received ${contentData.videoContents.length} videos and ${contentData.normalContents.length} normal contents');
-      debugPrint('Has more - Videos: ${contentData.hasMoreVideos}, Normal: ${contentData.hasMoreNormal}');
-      debugPrint('Next cursors - Video: ${contentData.nextVideoCursor}, Normal: ${contentData.nextNormalCursor}');
-
-      // Cache the content
+    // Retry logic
+    int retryCount = 0;
+    const maxRetries = 3;
+    
+    while (retryCount < maxRetries) {
       try {
-        await CacheManager.cacheFeedContent([
-          ...contentData.videoContents,
-          ...contentData.normalContents,
-        ]);
-      } catch (e) {
-        debugPrint('Cache error (non-critical): $e');
-        // Don't fail the entire operation if caching fails
-      }
-
-      // Update state with defensive checks
-      setState(() {
-        // Merge new content with existing content
-        final newContents = <FeedContent>[];
+        debugPrint('📡 Loading attempt ${retryCount + 1}/$maxRetries');
         
-        // Add new video contents
-        if (contentData.videoContents.isNotEmpty) {
-          newContents.addAll(contentData.videoContents);
+        if (!_isOnline) {
+          final cachedContents = await CacheManager.getCachedFeed();
+          setState(() {
+            if (cachedContents.isNotEmpty) {
+              _allContents.clear();
+              _allContents.addAll(cachedContents);
+              _hasMoreVideos = false;
+              _hasMoreNormal = false;
+            }
+            _isLoading = false;
+          });
+          return;
         }
-        
-        // Add new normal contents
-        if (contentData.normalContents.isNotEmpty) {
-          newContents.addAll(contentData.normalContents);
-        }
-        
-        // Add all new content to the main list
-        _allContents.addAll(newContents);
-        
-        // Update cursors and pagination flags with null safety
-        _nextVideoCursor = contentData.nextVideoCursor;
-        _nextNormalCursor = contentData.nextNormalCursor;
-        
-        // Be more conservative about hasMore flags
-        _hasMoreVideos = contentData.hasMoreVideos && 
-                        (contentData.nextVideoCursor != null && contentData.nextVideoCursor!.isNotEmpty);
-        _hasMoreNormal = contentData.hasMoreNormal && 
-                        (contentData.nextNormalCursor != null && contentData.nextNormalCursor!.isNotEmpty);
-        
-        debugPrint('State updated - Total contents: ${_allContents.length}');
-        debugPrint('Has more videos: $_hasMoreVideos, Has more normal: $_hasMoreNormal');
-      });
 
-    } on SocketException catch (e) {
-      debugPrint('Socket exception: $e');
-      _handleNetworkError();
-    } on FormatException catch (e) {
-      debugPrint('Format exception (JSON parsing): $e');
-      _handleGenericError(e);
-    } on TimeoutException catch (e) {
-      debugPrint('Timeout exception: $e');
-      _handleGenericError(e);
-    } catch (e, stackTrace) {
-      debugPrint('Unexpected error: $e');
-      debugPrint('Stack trace: $stackTrace');
-      _handleGenericError(e);
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+        if (!await _verifyToken()) {
+          setState(() {
+            _isLoading = false;
+          });
+          return;
+        }
+
+        final contentData = await FeedApiService.fetchContents(
+          videoCursor: _nextVideoCursor,
+          normalCursor: _nextNormalCursor,
+          context: context,
+        );
+
+        // Cache the content
+        try {
+          await CacheManager.cacheFeedContent([
+            ...contentData.videoContents,
+            ...contentData.normalContents,
+          ]);
+        } catch (e) {
+          debugPrint('Cache error (non-critical): $e');
+        }
+
+        if (mounted) {
+          setState(() {
+            final newContents = <FeedContent>[];
+            
+            if (contentData.videoContents.isNotEmpty) {
+              newContents.addAll(contentData.videoContents);
+              debugPrint('✅ Added ${contentData.videoContents.length} video contents');
+            }
+            
+            if (contentData.normalContents.isNotEmpty) {
+              newContents.addAll(contentData.normalContents);
+              debugPrint('✅ Added ${contentData.normalContents.length} normal contents');
+            }
+            
+            _allContents.addAll(newContents);
+            debugPrint('📊 Total feed items: ${_allContents.length}');
+            
+            // Memory management
+            _manageMemory();
+            
+            _nextVideoCursor = contentData.nextVideoCursor;
+            _nextNormalCursor = contentData.nextNormalCursor;
+            
+            _hasMoreVideos = contentData.hasMoreVideos;
+            _hasMoreNormal = contentData.hasMoreNormal;
+            
+            debugPrint('🔄 Has more - Videos: $_hasMoreVideos, Normal: $_hasMoreNormal');
+            
+            _isLoading = false;
+          });
+        }
+
+        // Break out of retry loop on success
+        break;
+
+      } catch (e, stackTrace) {
+        retryCount++;
+        debugPrint('❌ Error in _loadMoreContent attempt $retryCount: $e');
+        
+        if (retryCount >= maxRetries) {
+          if (mounted) {
+            setState(() {
+              _isLoading = false;
+              if (e.toString().contains('Authentication') || e.toString().contains('401')) {
+                _hasError = true;
+                _errorMessage = 'Please login again';
+              } else {
+                _hasError = true;
+                _errorMessage = 'Failed to load content. Please try again.';
+              }
+            });
+          }
+        } else {
+          // Wait before retry
+          await Future.delayed(Duration(seconds: retryCount));
+        }
       }
     }
   }
 
-  // Rest of your existing methods with enhanced error handling...
+  void _manageMemory() {
+    if (_allContents.length > _maxContentItems) {
+      final itemsToRemove = _allContents.length - (_maxContentItems - _contentToRemove);
+      _allContents.removeRange(0, itemsToRemove);
+      debugPrint('🧹 Memory management: Removed $itemsToRemove old content items');
+    }
+  }
+
   Future<void> _requestNotificationPermission() async {
     try {
       if (await Permission.notification.isDenied) {
         final status = await Permission.notification.request();
-        debugPrint('Notification permission status: $status');
         if (status.isDenied) {
           if (await Permission.notification.isPermanentlyDenied) {
             await openAppSettings();
@@ -540,7 +646,6 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
             criticalAlert: true,
             provisional: false,
           );
-      debugPrint('FCM permission status: ${settings.authorizationStatus}');
 
       if (Platform.isAndroid) {
         debugPrint(
@@ -555,7 +660,6 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
   Future<bool> _verifyToken() async {
     try {
       if (_appData.authToken == null || _appData.authToken!.isEmpty) {
-        debugPrint('No auth token available');
         setState(() {
           _hasError = true;
           _errorMessage = 'Authentication required. Please login.';
@@ -577,66 +681,8 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
     }
   }
 
-  Future<bool> _refreshToken() async {
-    try {
-      final refreshToken = await _getRefreshToken();
-      if (refreshToken == null) return false;
-
-      final response = await http.post(
-        Uri.parse('http://182.93.94.210:3065/api/v1/refresh-token'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({'refreshToken': refreshToken}),
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        await _appData.setAuthToken(data['accessToken']);
-        return true;
-      }
-    } catch (e) {
-      debugPrint('Token refresh failed: $e');
-    }
-    return false;
-  }
-
-  Future<String?> _getRefreshToken() async {
-    return null;
-  }
-
-  void _handleApiError(int statusCode) {
-    debugPrint('API Error: $statusCode');
-    setState(() {
-      _hasError = true;
-      _errorMessage = 'Server error: $statusCode';
-    });
-    
-    if (statusCode == 401 && mounted) {
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => LoginPage()),
-        (route) => false,
-      );
-    }
-  }
-
-  void _handleNetworkError() {
-    debugPrint('Network error occurred');
-    setState(() {
-      _hasError = true;
-      _errorMessage = 'Network connection error';
-    });
-  }
-
-  void _handleGenericError(dynamic e) {
-    debugPrint('Generic error: $e');
-    setState(() {
-      _hasError = true;
-      _errorMessage = 'An unexpected error occurred';
-    });
-  }
-
   Future<void> _refresh() async {
-    debugPrint('Refreshing feed...');
+    debugPrint('🔄 Refreshing feed...');
     setState(() {
       _allContents.clear();
       _nextVideoCursor = null;
@@ -645,12 +691,23 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
       _hasMoreVideos = true;
       _hasMoreNormal = true;
     });
+    
+    // Clear cache on refresh
+    CacheManager.clearCache();
+    
     await _loadMoreContent();
+    
+    // Load additional content after refresh
+    if (_allContents.length < 15 && (_hasMoreVideos || _hasMoreNormal)) {
+      await Future.delayed(Duration(milliseconds: 500));
+      await _loadMoreContent();
+    }
   }
 
   @override
   void dispose() {
     _debounce?.cancel();
+    _autoLoadTimer?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
@@ -667,47 +724,52 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
                 : ListView.builder(
                     controller: _scrollController,
                     physics: const AlwaysScrollableScrollPhysics(),
-                    cacheExtent: 1000.0,
+                    cacheExtent: 2000.0, // Increased cache extent
                     itemCount: _allContents.length + 
                               (_isLoading ? 1 : 0) + 
                               (_shouldShowEndMessage() ? 1 : 0),
                     itemBuilder: (context, index) {
-                      // Show actual content items
                       if (index < _allContents.length) {
                         return _buildContentItem(_allContents[index]);
                       }
                       
-                      // Show loading indicator at the end
                       if (index == _allContents.length && _isLoading) {
-                        return const Padding(
-                          padding: EdgeInsets.all(16.0),
-                          child: Center(child: CircularProgressIndicator()),
+                        return Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            children: [
+                              const Center(child: CircularProgressIndicator()),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Loading more content...',
+                                style: TextStyle(color: Colors.grey[600]),
+                              ),
+                            ],
+                          ),
                         );
                       }
                       
-                      // Show "No more content" message if we've reached the end
                       if (_shouldShowEndMessage() && index == _allContents.length + (_isLoading ? 1 : 0)) {
                         return Padding(
                           padding: const EdgeInsets.all(16.0),
                           child: Center(
                             child: Column(
                               children: [
-                                Text(
-                                  'No more content to load',
-                                  style: TextStyle(color: Colors.grey),
-                                ),
+                                Icon(Icons.check_circle, color: Colors.green, size: 48),
                                 const SizedBox(height: 8),
                                 Text(
-                                  'Total loaded: ${_allContents.length}',
+                                  'You\'re all caught up!',
+                                  style: TextStyle(
+                                    color: Colors.grey[600],
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Total loaded: ${_allContents.length} posts',
                                   style: TextStyle(color: Colors.grey, fontSize: 12),
                                 ),
-                                if (kDebugMode) ...[
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'Videos: $_hasMoreVideos, Normal: $_hasMoreNormal',
-                                    style: TextStyle(color: Colors.grey, fontSize: 10),
-                                  ),
-                                ],
                               ],
                             ),
                           ),
@@ -737,8 +799,6 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
                   ? () {}
                   : () async {
                       try {
-                        debugPrint('FAB pressed! Current unread count: $unreadCount');
-
                         if (unreadCount > 0) {
                           chatController.resetAllUnreadCounts();
                         }
@@ -756,15 +816,12 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
                           ),
                         );
 
-                        debugPrint('Returned from ChatListScreen, refreshing data...');
                         if (Get.isRegistered<ChatListController>()) {
                           final controller = Get.find<ChatListController>();
                           if (!controller.isMqttConnected.value) {
                             await controller.initializeMQTT();
                           }
                           await controller.fetchChats();
-                          debugPrint(
-                              'Chat data refreshed. New unread count: ${controller.totalUnreadCount}');
                         }
                       } catch (e) {
                         debugPrint('Error in FAB onPressed: $e');
@@ -848,6 +905,223 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
   }
 }
 
+// Enhanced FeedApiService class
+class FeedApiService {
+  static const String baseUrl = 'http://182.93.94.210:3066';
+
+  static Future<ContentData> fetchContents({
+    String? videoCursor,
+    String? normalCursor,
+    required BuildContext context,
+  }) async {
+    try {
+      final String? authToken = AppData().authToken;
+      final Map<String, String> headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      };
+
+      if (authToken != null && authToken.isNotEmpty) {
+        headers['authorization'] = 'Bearer $authToken';
+      }
+
+      final params = <String, String>{
+        'loadEngagement': 'true',
+        'quality': 'auto',
+        'limit': '30', // Increased limit for better loading
+      };
+      
+      if (videoCursor != null && videoCursor.isNotEmpty) {
+        params['videoCursor'] = videoCursor;
+      }
+      if (normalCursor != null && normalCursor.isNotEmpty) {
+        params['normalCursor'] = normalCursor;
+      }
+
+      final uri = Uri.parse('$baseUrl/api/v1/list-contents')
+          .replace(queryParameters: params);
+
+      debugPrint('🌐 Fetching from: $uri');
+
+      final response = await http
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 30));
+
+      debugPrint('📡 Response status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        final contentResponse = ContentResponse.fromJson(data);
+
+        if (contentResponse.status == 200) {
+          final List<FeedContent> videoContents = [];
+          final List<FeedContent> normalContents = [];
+
+          // Process contents with reduced timeout
+          for (var item in contentResponse.data.videoContents) {
+            try {
+              final isFollowing = await FollowService.checkFollowStatus(
+                item.author.email,
+              ).timeout(const Duration(seconds: 2));
+              videoContents.add(item.copyWith(isFollowed: isFollowing));
+            } catch (e) {
+              videoContents.add(item);
+            }
+          }
+
+          for (var item in contentResponse.data.normalContents) {
+            try {
+              final isFollowing = await FollowService.checkFollowStatus(
+                item.author.email,
+              ).timeout(const Duration(seconds: 2));
+              normalContents.add(item.copyWith(isFollowed: isFollowing));
+            } catch (e) {
+              normalContents.add(item);
+            }
+          }
+
+          debugPrint('✅ Fetched ${videoContents.length} videos, ${normalContents.length} normal contents');
+
+          return ContentData(
+            videoContents: videoContents,
+            normalContents: normalContents,
+            hasMoreVideos: contentResponse.data.hasMoreVideos,
+            hasMoreNormal: contentResponse.data.hasMoreNormal,
+            nextVideoCursor: contentResponse.data.nextVideoCursor,
+            nextNormalCursor: contentResponse.data.nextNormalCursor,
+            optimizationInfo: contentResponse.data.optimizationInfo,
+          );
+        } else {
+          throw Exception('Invalid response status: ${contentResponse.status}');
+        }
+      } else if (response.statusCode == 401) {
+        if (context.mounted) {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (_) => LoginPage()),
+            (route) => false,
+          );
+        }
+        throw Exception('Authentication required');
+      } else {
+        throw Exception('Failed to load data: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('❌ FeedApiService error: $e');
+      rethrow;
+    }
+  }
+}
+
+class ContentData {
+  final List<FeedContent> videoContents;
+  final List<FeedContent> normalContents;
+  final bool hasMoreVideos;
+  final bool hasMoreNormal;
+  final String? nextVideoCursor;
+  final String? nextNormalCursor;
+  final Map<String, dynamic> optimizationInfo;
+
+  ContentData({
+    required this.videoContents,
+    required this.normalContents,
+    required this.hasMoreVideos,
+    required this.hasMoreNormal,
+    this.nextVideoCursor,
+    this.nextNormalCursor,
+    required this.optimizationInfo,
+  });
+
+  factory ContentData.fromJson(Map<String, dynamic> json) {
+    try {
+      return ContentData(
+        videoContents: (json['videoContents'] as List<dynamic>? ?? [])
+            .map((item) {
+              try {
+                return FeedContent.fromJson(item as Map<String, dynamic>);
+              } catch (e) {
+                debugPrint('Error parsing video content: $e');
+                return null;
+              }
+            })
+            .where((item) => item != null)
+            .cast<FeedContent>()
+            .toList(),
+        normalContents: (json['normalContents'] as List<dynamic>? ?? [])
+            .map((item) {
+              try {
+                return FeedContent.fromJson(item as Map<String, dynamic>);
+              } catch (e) {
+                debugPrint('Error parsing normal content: $e');
+                return null;
+              }
+            })
+            .where((item) => item != null)
+            .cast<FeedContent>()
+            .toList(),
+        hasMoreVideos: json['hasMoreVideos'] as bool? ?? true,
+        hasMoreNormal: json['hasMoreNormal'] as bool? ?? true,
+        nextVideoCursor: json['nextVideoCursor'] as String?,
+        nextNormalCursor: json['nextNormalCursor'] as String?,
+        optimizationInfo: json['optimizationInfo'] as Map<String, dynamic>? ?? {},
+      );
+    } catch (e) {
+      debugPrint('Error parsing ContentData: $e');
+      return ContentData(
+        videoContents: [],
+        normalContents: [],
+        hasMoreVideos: true,
+        hasMoreNormal: true,
+        nextVideoCursor: null,
+        nextNormalCursor: null,
+        optimizationInfo: {},
+      );
+    }
+  }
+}
+
+// FeedContent extension
+extension FeedContentExtension on FeedContent {
+  FeedContent copyWith({
+    String? id,
+    String? status,
+    String? type,
+    List<String>? files,
+    List<dynamic>? optimizedFiles,
+    Author? author,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? views,
+    bool? isShared,
+    int? likes,
+    int? comments,
+    bool? isLiked,
+    bool? isFollowed,
+    bool? engagementLoaded,
+    String? loadPriority,
+  }) {
+    return FeedContent(
+      id: id ?? this.id,
+      status: status ?? this.status,
+      type: type ?? this.type,
+      files: files ?? this.files,
+      optimizedFiles: optimizedFiles ?? this.optimizedFiles,
+      author: author ?? this.author,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      views: views ?? this.views,
+      isShared: isShared ?? this.isShared,
+      likes: likes ?? this.likes,
+      comments: comments ?? this.comments,
+      isLiked: isLiked ?? this.isLiked,
+      isFollowed: isFollowed ?? this.isFollowed,
+      engagementLoaded: engagementLoaded ?? this.engagementLoaded,
+      loadPriority: loadPriority ?? this.loadPriority,
+    );
+  }
+}
+
+// FeedItem Widget
 class FeedItem extends StatefulWidget {
   final FeedContent content;
   final Function(bool) onLikeToggled;
@@ -868,16 +1142,31 @@ class _FeedItemState extends State<FeedItem>
     with SingleTickerProviderStateMixin {
   bool _isExpanded = false;
   static const int _maxLinesCollapsed = 3;
-  bool _hasRecordedView = false; // Flag to prevent duplicate view API calls
+  bool _hasRecordedView = false;
 
   late AnimationController _controller;
-  bool isChecked = false;
-
   final ContentLikeService likeService = ContentLikeService(
-    baseUrl: 'http://182.93.94.210:3065',
+    baseUrl: 'http://182.93.94.210:3066',
   );
   late String formattedTimeAgo;
   bool _showComments = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: Duration(milliseconds: 300),
+    );
+    formattedTimeAgo = _formatTimeAgo(widget.content.createdAt);
+    _recordView();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   String _formatTimeAgo(DateTime dateTime) {
     final difference = DateTime.now().difference(dateTime);
@@ -897,71 +1186,35 @@ class _FeedItemState extends State<FeedItem>
     }
   }
 
-  @override
-  void initState() {
-    super.initState();
-
-    _controller = AnimationController(
-      vsync: this,
-      duration: Duration(milliseconds: 300),
-    );
-    formattedTimeAgo = _formatTimeAgo(widget.content.createdAt);
-    _recordView(); // Call the view API when the widget is initialized
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
   Future<bool> _checkConnectivity() async {
     try {
       final List<ConnectivityResult> connectivityResult =
           await Connectivity().checkConnectivity();
 
-      // Check if any connection is available (WiFi, Mobile, Ethernet)
       return connectivityResult.contains(ConnectivityResult.wifi) ||
           connectivityResult.contains(ConnectivityResult.mobile) ||
           connectivityResult.contains(ConnectivityResult.ethernet);
     } catch (e) {
-      developer.log('Error checking connectivity: $e');
       return false;
     }
   }
 
   Future<void> _recordView() async {
-    if (_hasRecordedView) return; // Prevent multiple calls
+    if (_hasRecordedView) return;
 
-    // Check connectivity before making API call
     bool isConnected = await _checkConnectivity();
-    if (!isConnected) {
-      developer.log(
-        'No internet connection. Skipping view recording for content ID: ${widget.content.id}',
-      );
-
-      return;
-    }
+    if (!isConnected) return;
 
     _hasRecordedView = true;
 
     try {
       final String? authToken = AppData().authToken;
-      if (authToken == null || authToken.isEmpty) {
-        Get.snackbar(
-          'Error',
-          'Authentication required to record view.',
-          backgroundColor: Colors.red,
-          colorText: Colors.white,
-          duration: const Duration(seconds: 3),
-        );
-        return;
-      }
+      if (authToken == null || authToken.isEmpty) return;
 
       final response = await http
           .post(
             Uri.parse(
-              'http://182.93.94.210:3065/api/v1/content/view/${widget.content.id}',
+              'http://182.93.94.210:3066/api/v1/content/view/${widget.content.id}',
             ),
             headers: {
               'Content-Type': 'application/json',
@@ -969,16 +1222,12 @@ class _FeedItemState extends State<FeedItem>
               'authorization': 'Bearer $authToken',
             },
           )
-          .timeout(Duration(seconds: 100));
+          .timeout(Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 200 && data['message'] == 'View incremented') {
-          developer.log(
-            'View recorded for content ID: ${widget.content.id}, Views: ${data['data']['views']}',
-          );
-        } else {
-          log('Error Failed to record View');
+          developer.log('View recorded for content ID: ${widget.content.id}');
         }
       } else if (response.statusCode == 401) {
         Navigator.pushAndRemoveUntil(
@@ -986,20 +1235,15 @@ class _FeedItemState extends State<FeedItem>
           MaterialPageRoute(builder: (_) => LoginPage()),
           (route) => false,
         );
-      } else {
-        log('Error${response.statusCode}');
       }
     } catch (e) {
       _hasRecordedView = false;
-      developer.log(
-        'Error recording view for content ID: ${widget.content.id}, Error: $e',
-      );
+      developer.log('Error recording view: $e');
     }
   }
 
   bool _isAuthorCurrentUser() {
     if (AppData().isCurrentUser(widget.content.author.id)) {
-      developer.log('isAuthorCurrentUser: Matched via AppData');
       return true;
     }
 
@@ -1008,21 +1252,11 @@ class _FeedItemState extends State<FeedItem>
       try {
         final String? currentUserId = JwtHelper.extractUserId(token);
         if (currentUserId != null) {
-          final result = currentUserId == widget.content.author.id;
-          developer.log(
-            'isAuthorCurrentUser: JWT check, currentUserId=$currentUserId, authorId=${widget.content.author.id}, result=$result',
-          );
-          return result;
-        } else {
-          developer.log(
-            'isAuthorCurrentUser: JWT token does not contain user ID',
-          );
+          return currentUserId == widget.content.author.id;
         }
       } catch (e) {
-        developer.log('isAuthorCurrentUser: Error parsing JWT token: $e');
+        developer.log('Error parsing JWT token: $e');
       }
-    } else {
-      developer.log('isAuthorCurrentUser: No auth token available');
     }
     return false;
   }
@@ -1069,10 +1303,9 @@ class _FeedItemState extends State<FeedItem>
               ),
               child: Row(
                 children: [
-                  // Enhanced Avatar
+                  // Avatar
                   Hero(
-                    tag:
-                    'avatar_${widget.content.author.id}_${_isAuthorCurrentUser() ? Get.find<UserController>().profilePictureVersion.value : 0}',
+                    tag: 'avatar_${widget.content.author.id}_${_isAuthorCurrentUser() ? Get.find<UserController>().profilePictureVersion.value : 0}',
                     child: Container(
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
@@ -1105,17 +1338,11 @@ class _FeedItemState extends State<FeedItem>
                         Navigator.push(
                           context,
                           PageRouteBuilder(
-                            pageBuilder:
-                                (context, animation, secondaryAnimation) =>
-                                    SpecificUserProfilePage(
-                                      userId: widget.content.author.id,
-                                    ),
-                            transitionsBuilder: (
-                              context,
-                              animation,
-                              secondaryAnimation,
-                              child,
-                            ) {
+                            pageBuilder: (context, animation, secondaryAnimation) =>
+                                SpecificUserProfilePage(
+                                  userId: widget.content.author.id,
+                                ),
+                            transitionsBuilder: (context, animation, secondaryAnimation, child) {
                               return SlideTransition(
                                 position: animation.drive(
                                   Tween(
@@ -1160,10 +1387,8 @@ class _FeedItemState extends State<FeedItem>
                                 AnimatedContainer(
                                   duration: const Duration(milliseconds: 200),
                                   child: FollowButton(
-                                    targetUserEmail:
-                                        widget.content.author.email,
-                                    initialFollowStatus:
-                                        widget.content.isFollowed,
+                                    targetUserEmail: widget.content.author.email,
+                                    initialFollowStatus: widget.content.isFollowed,
                                     onFollowSuccess: () {
                                       widget.onFollowToggled(true);
                                     },
@@ -1184,9 +1409,7 @@ class _FeedItemState extends State<FeedItem>
                                   vertical: 2.0,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: _getTypeColor(
-                                    widget.content.type,
-                                  ).withAlpha(50),
+                                  color: _getTypeColor(widget.content.type).withAlpha(50),
                                   borderRadius: BorderRadius.circular(12.0),
                                 ),
                                 child: Text(
@@ -1216,7 +1439,7 @@ class _FeedItemState extends State<FeedItem>
                     ),
                   ),
 
-                  // Modern Menu Button
+                  // Menu Button
                   Material(
                     color: Colors.transparent,
                     child: InkWell(
@@ -1281,10 +1504,8 @@ class _FeedItemState extends State<FeedItem>
                                   fontWeight: FontWeight.w500,
                                   letterSpacing: 0.1,
                                 ),
-                                maxLines:
-                                    _isExpanded ? null : _maxLinesCollapsed,
-                                overflow:
-                                    _isExpanded ? null : TextOverflow.ellipsis,
+                                maxLines: _isExpanded ? null : _maxLinesCollapsed,
+                                overflow: _isExpanded ? null : TextOverflow.ellipsis,
                               ),
                             ),
                             if (needsExpandCollapse)
@@ -1336,7 +1557,6 @@ class _FeedItemState extends State<FeedItem>
 
             // Action Buttons Section
             Container(
-              // padding: const EdgeInsets.all(.0),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -1345,19 +1565,15 @@ class _FeedItemState extends State<FeedItem>
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Column(
-                          children: [
-                            LikeButton(
-                              contentId: widget.content.id,
-                              initialLikeStatus: widget.content.isLiked,
-                              likeService: likeService,
-                              onLikeToggled: (isLiked) {
-                                widget.onLikeToggled(isLiked);
-                                SoundPlayer player = SoundPlayer();
-                                player.playlikeSound();
-                              },
-                            ),
-                          ],
+                        LikeButton(
+                          contentId: widget.content.id,
+                          initialLikeStatus: widget.content.isLiked,
+                          likeService: likeService,
+                          onLikeToggled: (isLiked) {
+                            widget.onLikeToggled(isLiked);
+                            SoundPlayer player = SoundPlayer();
+                            player.playlikeSound();
+                          },
                         ),
                         const SizedBox(width: 8.0),
                         Text(
@@ -1375,37 +1591,31 @@ class _FeedItemState extends State<FeedItem>
 
                   // Comment Button
                   _buildActionButton(
-                    child: Column(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              child: Icon(
-                                _showComments
-                                    ? Icons.chat_bubble
-                                    : Icons.chat_bubble_outline,
-                                color:
-                                    _showComments
-                                        ? Colors.blue.shade600
-                                        : Colors.grey.shade600,
-                                size: 20.0,
-                              ),
-                            ),
-                            const SizedBox(width: 8.0),
-                            Text(
-                              '${widget.content.comments}',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                color:
-                                    _showComments
-                                        ? Colors.blue.shade600
-                                        : Colors.grey.shade700,
-                                fontSize: 14.0,
-                              ),
-                            ),
-                          ],
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          child: Icon(
+                            _showComments
+                                ? Icons.chat_bubble
+                                : Icons.chat_bubble_outline,
+                            color: _showComments
+                                ? Colors.blue.shade600
+                                : Colors.grey.shade600,
+                            size: 20.0,
+                          ),
+                        ),
+                        const SizedBox(width: 8.0),
+                        Text(
+                          '${widget.content.comments}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: _showComments
+                                ? Colors.blue.shade600
+                                : Colors.grey.shade700,
+                            fontSize: 14.0,
+                          ),
                         ),
                       ],
                     ),
@@ -1435,27 +1645,26 @@ class _FeedItemState extends State<FeedItem>
             AnimatedSize(
               duration: const Duration(milliseconds: 300),
               curve: Curves.easeInOut,
-              child:
-                  _showComments
-                      ? Container(
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade50,
-                          borderRadius: const BorderRadius.only(
-                            bottomLeft: Radius.circular(20.0),
-                            bottomRight: Radius.circular(20.0),
-                          ),
+              child: _showComments
+                  ? Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: const BorderRadius.only(
+                          bottomLeft: Radius.circular(20.0),
+                          bottomRight: Radius.circular(20.0),
                         ),
-                        padding: const EdgeInsets.all(16.0),
-                        child: CommentSection(
-                          contentId: widget.content.id,
-                          onCommentAdded: () {
-                            setState(() {
-                              widget.content.comments++;
-                            });
-                          },
-                        ),
-                      )
-                      : const SizedBox.shrink(),
+                      ),
+                      padding: const EdgeInsets.all(16.0),
+                      child: CommentSection(
+                        contentId: widget.content.id,
+                        onCommentAdded: () {
+                          setState(() {
+                            widget.content.comments++;
+                          });
+                        },
+                      ),
+                    )
+                  : const SizedBox.shrink(),
             ),
           ],
         ),
@@ -1480,7 +1689,6 @@ class _FeedItemState extends State<FeedItem>
     );
   }
 
-  // Helper method for content type colors
   Color _getTypeColor(String type) {
     switch (type.toLowerCase()) {
       case 'post':
@@ -1496,1136 +1704,54 @@ class _FeedItemState extends State<FeedItem>
     }
   }
 
-  void _showShareOptions(BuildContext context) {
-    final TextEditingController shareTextController = TextEditingController();
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder:
-          (context) => Container(
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Handle bar
-                  Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[300],
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  const Text(
-                    'Share Post',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 20),
-                  // Add comment field for sharing within app
-                  TextField(
-                    controller: shareTextController,
-                    decoration: const InputDecoration(
-                      hintText: 'Add a comment (optional)',
-                      border: OutlineInputBorder(),
-                    ),
-                    maxLines: 2,
-                  ),
-                  const SizedBox(height: 20),
-                  // Share options
-                  _buildShareOption(
-                    icon: Icons.link,
-                    title: 'Copy Link',
-                    subtitle: 'Copy post link to clipboard',
-                    color: Colors.blue,
-                    onTap: () {
-                      Navigator.pop(context);
-                      _shareContent(shareTextController.text);
-                    },
-                  ),
-
-                  _buildShareOption(
-                    icon: Icons.share,
-                    title: 'Share via Apps',
-                    subtitle: 'Share using other apps',
-                    color: Colors.green,
-                    onTap: () {
-                      Navigator.pop(context);
-                      _shareViaApps();
-                    },
-                  ),
-
-                  _buildShareOption(
-                    icon: Icons.text_snippet,
-                    title: 'Share Text Only',
-                    subtitle: 'Share post content as text',
-                    color: Colors.orange,
-                    onTap: () {
-                      Navigator.pop(context);
-                      _shareTextOnly();
-                    },
-                  ),
-
-                  if (widget.content.files.isNotEmpty)
-                    _buildShareOption(
-                      icon: Icons.photo,
-                      title: 'Share with Media',
-                      subtitle: 'Include images/videos',
-                      color: Colors.purple,
-                      onTap: () {
-                        Navigator.pop(context);
-                        _shareWithMedia();
-                      },
-                    ),
-
-                  const SizedBox(height: 10),
-
-                  // Cancel button
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text(
-                      'Cancel',
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-    );
-  }
-
-  Future<void> _shareContent(String? shareText) async {
-    try {
-      final String? authToken = AppData().authToken;
-      if (authToken == null || authToken.isEmpty) {
-        Get.snackbar(
-          'Error',
-          'Authentication required to share content',
-          backgroundColor: Colors.red,
-          colorText: Colors.white,
-        );
-        return;
-      }
-
-      // Show loading indicator
-      Get.dialog(
-        const Center(child: CircularProgressIndicator()),
-        barrierDismissible: false,
-      );
-
-      final response = await http.post(
-        Uri.parse('http://182.93.94.210:3065/api/v1/new-content'),
-        headers: {
-          'Content-Type': 'application/json',
-          'authorization': 'Bearer $authToken',
-        },
-        body: jsonEncode({
-          "type": "share",
-          "originalContentId": widget.content.id,
-          "shareText": shareText,
-        }),
-      );
-
-      // Hide loading indicator
-      Get.back();
-
-      if (response.statusCode == 200) {
-        Get.snackbar(
-          'Success',
-          'Post shared successfully',
-          backgroundColor: Colors.green,
-          colorText: Colors.white,
-        );
-      } else {
-        final data = json.decode(response.body);
-        print('Error$data');
-        // Get.snackbar(
-        //   'Error',
-        //   data['message'] ?? 'Failed to share post',
-        //   backgroundColor: Colors.red,
-        //   colorText: Colors.white,
-        // );
-      }
-    } catch (e) {
-      Get.back();
-      print('Error${e.toString()}');
-      // Get.snackbar(
-      //   'Error',
-      //   e.toString(),
-      //   backgroundColor: Colors.red,
-      //   colorText: Colors.white,
-      // );
-    }
-  }
-
-  Widget _buildShareOption({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: color.withOpacity(0.1),
-        child: Icon(icon, color: color),
-      ),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
-      subtitle: Text(
-        subtitle,
-        style: TextStyle(color: Colors.grey[600], fontSize: 12),
-      ),
-      onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
-    );
-  }
-
-  // Share implementation methods:
-
-  void _copyPostLink() {
-    // Generate a shareable link for the post
-    final postLink = _generatePostLink();
-
-    Clipboard.setData(ClipboardData(text: postLink));
-    Get.snackbar(
-      'Success',
-      'Post link copied to clipboard!',
-      backgroundColor: Colors.green,
-      colorText: Colors.white,
-    );
-
-    // ScaffoldMessenger.of(context).showSnackBar(
-    //   const SnackBar(
-    //     content: Row(
-    //       children: [
-    //         Icon(Icons.check_circle, color: Colors.white),
-    //         SizedBox(width: 8),
-    //         Text('Post link copied to clipboard!'),
-    //       ],
-    //     ),
-    //     backgroundColor: Colors.green,
-    //     duration: Duration(seconds: 2),
-    //   ),
-    // );
-  }
-
-  void _shareViaApps() async {
-    try {
-      final shareText = _buildShareText();
-
-      if (widget.content.files.isNotEmpty && widget.content.hasImages) {
-        // If there are images, try to share with the first image
-        final firstImageUrl = widget.content.mediaUrls.firstWhere(
-          (url) => FileTypeHelper.isImage(url),
-          orElse: () => '',
-        );
-
-        if (firstImageUrl.isNotEmpty) {
-          // For sharing with image, you might need to download it first
-          await Share.share(
-            shareText,
-            subject: 'Check out this post by ${widget.content.author.name}',
-          );
-        } else {
-          await Share.share(
-            shareText,
-            subject: 'Check out this post by ${widget.content.author.name}',
-          );
-        }
-      } else {
-        await Share.share(
-          shareText,
-          subject: 'Check out this post by ${widget.content.author.name}',
-        );
-      }
-    } catch (e) {
-      _showShareError('Failed to share post');
-    }
-  }
-
-  void _shareTextOnly() async {
-    try {
-      final textContent =
-          widget.content.status.isNotEmpty
-              ? widget.content.status
-              : 'Check out this ${widget.content.type.toLowerCase()} by ${widget.content.author.name}';
-
-      await Share.share(textContent, subject: 'Shared from App');
-    } catch (e) {
-      _showShareError('Failed to share text');
-    }
-  }
-
-  void _shareWithMedia() async {
-    try {
-      if (widget.content.files.isEmpty) {
-        _shareTextOnly();
-        return;
-      }
-
-      // Show loading dialog
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder:
-            (context) => const AlertDialog(
-              content: Row(
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(width: 16),
-                  Text('Preparing media...'),
-                ],
-              ),
-            ),
-      );
-
-      try {
-        // For now, share text with media URLs
-        // In a full implementation, you'd download and share actual files
-        final shareText = _buildShareTextWithMedia();
-
-        Navigator.pop(context); // Close loading dialog
-
-        await Share.share(
-          shareText,
-          subject:
-              'Check out this post with media by ${widget.content.author.name}',
-        );
-      } catch (e) {
-        Navigator.pop(context); // Close loading dialog
-        throw e;
-      }
-    } catch (e) {
-      _showShareError('Failed to share media');
-    }
-  }
-
-  // Helper methods:
-
-  String _generatePostLink() {
-    // Generate a deep link or web link to the post
-    // This would typically be your app's URL scheme or web URL
-    return 'https://innovator.com/post/${widget.content.id}';
-  }
-
-  String _buildShareText() {
-    final StringBuffer shareText = StringBuffer();
-
-    shareText.writeln('📱 Shared from ${widget.content.author.name}');
-    shareText.writeln();
-
-    if (widget.content.status.isNotEmpty) {
-      shareText.writeln(widget.content.status);
-      shareText.writeln();
-    }
-
-    shareText.writeln('📅 ${_formatTimeAgo(widget.content.createdAt)}');
-    shareText.writeln(
-      '❤️ ${widget.content.likes} likes • 💬 ${widget.content.comments} comments',
-    );
-    shareText.writeln();
-    shareText.writeln('View full post: ${_generatePostLink()}');
-
-    return shareText.toString();
-  }
-
-  String _buildShareTextWithMedia() {
-    final StringBuffer shareText = StringBuffer();
-
-    shareText.writeln('📱 Shared from ${widget.content.author.name}');
-    shareText.writeln();
-
-    if (widget.content.status.isNotEmpty) {
-      shareText.writeln(widget.content.status);
-      shareText.writeln();
-    }
-
-    // Add media info
-    if (widget.content.hasImages) {
-      shareText.writeln(
-        '📸 Contains ${widget.content.files.where((f) => FileTypeHelper.isImage(f)).length} image(s)',
-      );
-    }
-    if (widget.content.hasVideos) {
-      shareText.writeln(
-        '🎥 Contains ${widget.content.files.where((f) => FileTypeHelper.isVideo(f)).length} video(s)',
-      );
-    }
-    if (widget.content.hasPdfs) {
-      shareText.writeln('📄 Contains PDF document(s)');
-    }
-    if (widget.content.hasWordDocs) {
-      shareText.writeln('📝 Contains Word document(s)');
-    }
-
-    shareText.writeln();
-    shareText.writeln('📅 ${_formatTimeAgo(widget.content.createdAt)}');
-    shareText.writeln(
-      '❤️ ${widget.content.likes} likes • 💬 ${widget.content.comments} comments',
-    );
-    shareText.writeln();
-    shareText.writeln('View full post with media: ${_generatePostLink()}');
-
-    return shareText.toString();
-  }
-
-  void _showShareError(String message) {
-    Get.back;
-    // Get.snackbar(
-    //   'Error',
-    //   message,
-    //   backgroundColor: Colors.red,
-    //   colorText: Colors.white,
-    //   duration: const Duration(seconds: 3),
-    // );
-    print('Error$message');
-  }
-
-  void _showQuickspecificSuggestions(BuildContext context) {
-    showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return AnimatedPadding(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOutCubic,
-          padding: MediaQuery.of(context).viewInsets,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(24),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.08),
-                  blurRadius: 20,
-                  offset: const Offset(0, -4),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  margin: const EdgeInsets.symmetric(vertical: 12),
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.copy, color: Colors.blue),
-                  title: const Text('Copy content'),
-                  onTap: () {
-                    Navigator.pop(context, 'copy');
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.flag, color: Colors.orange),
-                  title: const Text('Report'),
-                  onTap: () {
-                    Navigator.pop(context, 'report');
-                  },
-                ),
-                const SizedBox(height: 8),
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text(
-                    'Cancel',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
-            ),
-          ),
-        );
-      },
-    ).then((value) {
-      if (value == null) return;
-      switch (value) {
-        case 'copy':
-          _copyContentToClipboard();
-          break;
-        case 'report':
-          _showReportLinkButton(context);
-          break;
-      }
-    });
-  }
-
-  void _showQuickSuggestions(BuildContext context) {
-    final RenderBox button = context.findRenderObject() as RenderBox;
-    final RenderBox overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox;
-
-    final RelativeRect position = RelativeRect.fromRect(
-      Rect.fromPoints(
-        button.localToGlobal(
-          button.size.topRight(Offset(-40, 0)),
-          ancestor: overlay,
-        ),
-        button.localToGlobal(
-          button.size.topRight(Offset.zero),
-          ancestor: overlay,
-        ),
-      ),
-      Offset.zero & overlay.size,
-    );
-
-    showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return AnimatedPadding(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOutCubic,
-          padding: MediaQuery.of(context).viewInsets,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(24),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.08),
-                  blurRadius: 20,
-                  offset: const Offset(0, -4),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  margin: const EdgeInsets.symmetric(vertical: 12),
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.edit, color: Color(0xFFF48706)),
-                  title: const Text('Edit content'),
-                  onTap: () {
-                    Navigator.pop(context, 'edit');
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.delete, color: Colors.red),
-                  title: const Text('Delete post'),
-                  onTap: () {
-                    Navigator.pop(context, 'delete');
-                  },
-                ),
-                if (widget.content.files.isNotEmpty)
-                  ListTile(
-                    leading: const Icon(
-                      Icons.attach_file,
-                      color: Colors.purple,
-                    ),
-                    title: const Text('Delete files'),
-                    onTap: () {
-                      Navigator.pop(context, 'delete_files');
-                    },
-                  ),
-                ListTile(
-                  leading: const Icon(Icons.copy, color: Colors.blue),
-                  title: const Text('Copy content'),
-                  onTap: () {
-                    Navigator.pop(context, 'copy');
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.flag, color: Colors.orange),
-                  title: const Text('Report'),
-                  onTap: () {
-                    Navigator.pop(context, 'report');
-                  },
-                ),
-                const SizedBox(height: 8),
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text(
-                    'Cancel',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
-            ),
-          ),
-        );
-      },
-    ).then((value) {
-      if (value == null) return;
-      switch (value) {
-        case 'edit':
-          _showEditContentDialog(context);
-          break;
-        case 'delete':
-          _showDeleteConfirmation(context);
-          break;
-        case 'delete_files':
-          _showDeleteFilesConfirmation(context);
-          break;
-        case 'copy':
-          _copyContentToClipboard();
-          break;
-        case 'report':
-          _showReportLinkButton(context);
-          break;
-      }
-    });
-  }
-
-  void _showEditContentDialog(BuildContext context) {
-    final TextEditingController controller = TextEditingController(
-      text: widget.content.status,
-    );
-
-    showGeneralDialog(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
-      barrierColor: Colors.black.withOpacity(0.4),
-      transitionDuration: const Duration(milliseconds: 300),
-      pageBuilder: (context, animation, secondaryAnimation) {
-        return Center(
-          child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 24),
-            child: Material(
-              color: Colors.transparent,
-              child: AlertDialog(
-                backgroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                title: const Text(
-                  'Edit Content',
-                  style: TextStyle(
-                    color: Color(0xFFF48706),
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                content: TextField(
-                  controller: controller,
-                  decoration: const InputDecoration(
-                    labelText: 'Status',
-                    border: OutlineInputBorder(),
-                  ),
-                  maxLines: 5,
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Cancel'),
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      _updateContentStatus(controller.text);
-                      Navigator.of(context).pop();
-                    },
-                    child: const Text(
-                      'Update',
-                      style: TextStyle(
-                        color: Color(0xFFF48706),
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-      transitionBuilder: (context, animation, secondaryAnimation, child) {
-        return ScaleTransition(
-          scale: CurvedAnimation(parent: animation, curve: Curves.easeOutBack),
-          child: child,
-        );
-      },
-    );
-  }
-
-  Future<void> _updateContentStatus(String newStatus) async {
-    try {
-      final response = await http.put(
-        Uri.parse(
-          'http://182.93.94.210:3065/api/v1/update-contents/${widget.content.id}',
-        ),
-        headers: {
-          'Content-Type': 'application/json',
-          'authorization': 'Bearer ${AppData().authToken}',
-        },
-        body: jsonEncode({'status': newStatus}),
-      );
-
-      if (response.statusCode == 200) {
-        setState(() {
-          widget.content.status = newStatus;
-        });
-        Get.snackbar(
-          'Success',
-          'Content Updated Successfully',
-          backgroundColor: Colors.green,
-          colorText: Colors.white,
-        );
-      } else {
-        Get.back();
-        log('Error Failed to update content: ${response.statusCode}');
-      }
-    } catch (e) {
-      print('Error${e.toString()}');
-    }
-  }
-
-  Future<bool?> _showDeleteConfirmation(BuildContext context) {
-    return showDialog<bool>(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Delete Post'),
-            content: const Text(
-              'Are you sure you want to delete this post? This action cannot be undone.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop(true);
-                  _deleteContent();
-                },
-                child: const Text(
-                  'Delete',
-                  style: TextStyle(color: Colors.red),
-                ),
-              ),
-            ],
-          ),
-    );
-  }
-
-  Future<void> _deleteContent() async {
-    try {
-      final response = await http.delete(
-        Uri.parse(
-          'http://182.93.94.210:3065/api/v1/delete-content/${widget.content.id}',
-        ),
-        headers: {'authorization': 'Bearer ${AppData().authToken}'},
-      );
-
-      if (response.statusCode == 200) {
-        Get.snackbar(
-          'Success',
-          'Post Deleted Successfully',
-          backgroundColor: Colors.green,
-          colorText: Colors.white,
-        );
-      } else {
-        log('Failed to Delete Post: ${response.statusCode}');
-      }
-    } catch (e) {
-      print('Error${e.toString()}');
-    }
-  }
-
-  Future<bool?> _showDeleteFilesConfirmation(BuildContext context) {
-    return showDialog<bool>(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Delete Files'),
-            content: const Text(
-              'Are you sure you want to delete all files attached to this post?',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop(true);
-                  _deleteFiles();
-                },
-                child: const Text(
-                  'Delete Files',
-                  style: TextStyle(color: Colors.red),
-                ),
-              ),
-            ],
-          ),
-    );
-  }
-
-  Future<void> _deleteFiles() async {
-    try {
-      final response = await http.post(
-        Uri.parse('http://182.93.94.210:3065/api/v1/delete-files'),
-        headers: {
-          'Content-Type': 'application/json',
-          'authorization': 'Bearer ${AppData().authToken}',
-        },
-        body: jsonEncode(widget.content.files),
-      );
-
-      if (response.statusCode == 200) {
-        setState(() {
-          (widget.content as dynamic).files = <String>[];
-        });
-        Get.snackbar(
-          'Success',
-          'Files Delted Successfully',
-          backgroundColor: Colors.green,
-          colorText: Colors.white,
-        );
-      } else {
-        Get.snackbar(
-          'Error',
-          'Failed to Delete Files: ${response.statusCode}',
-          backgroundColor: Colors.red,
-          colorText: Colors.white,
-        );
-      }
-    } catch (e) {
-      Get.snackbar(
-        'Error',
-        e.toString(),
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
-    }
-  }
-
-  void _copyContentToClipboard() {
-    Clipboard.setData(ClipboardData(text: widget.content.status));
-    Get.snackbar(
-      'Copied',
-      'Content copied to clipboard',
-      backgroundColor: Colors.green,
-      colorText: Colors.white,
-    );
-    // ScaffoldMessenger.of(context).showSnackBar(
-    //   Get.SnackBar(content: Text('')),
-    // );
-  }
-
-  void _showReportLinkButton(BuildContext context) {
-    final TextEditingController reasonController = TextEditingController();
-    final TextEditingController descriptionController = TextEditingController();
-
-    showGeneralDialog(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
-      barrierColor: Colors.black.withAlpha(40),
-      transitionDuration: const Duration(milliseconds: 300),
-      pageBuilder: (context, animation, secondaryAnimation) {
-        return Center(
-          child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 20),
-            child: Material(
-              color: Colors.transparent,
-              child: AlertDialog(
-                backgroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                title: const Text(
-                  'Report Content',
-                  style: TextStyle(
-                    color: Color(0xFFF48706),
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                content: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text(
-                        'Please tell us why you are reporting this content:',
-                        style: TextStyle(fontSize: 16.0),
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: reasonController,
-                        decoration: const InputDecoration(
-                          labelText: 'Reason',
-                          border: OutlineInputBorder(),
-                          hintText: 'Enter the reason for reporting',
-                        ),
-                        maxLines: 2,
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: descriptionController,
-                        decoration: const InputDecoration(
-                          labelText: 'Description (Optional)',
-                          border: OutlineInputBorder(),
-                          hintText: 'Provide additional details (optional)',
-                        ),
-                        maxLines: 3,
-                      ),
-                    ],
-                  ),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Cancel'),
-                  ),
-                  TextButton(
-                    onPressed: () async {
-                      final reason = reasonController.text.trim();
-                      final description = descriptionController.text.trim();
-
-                      if (reason.isEmpty) {
-                        Get.snackbar(
-                          'Error',
-                          'Please provide a reason for reporting.',
-                          backgroundColor: Colors.red,
-                          colorText: Colors.white,
-                        );
-                        return;
-                      }
-
-                      try {
-                        final response = await http.post(
-                          Uri.parse('http://182.93.94.210:3065/api/v1/report'),
-                          headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json',
-                            'authorization': 'Bearer ${AppData().authToken}',
-                          },
-                          body: jsonEncode({
-                            'reportedUserId': widget.content.author.id,
-                            'reason': reason,
-                            'description':
-                                description.isEmpty ? reason : description,
-                          }),
-                        );
-
-                        if (response.statusCode == 200) {
-                          final data = json.decode(response.body);
-                          Get.snackbar(
-                            'Success',
-                            data['message'] ??
-                                'Your report has been submitted successfully.',
-                            backgroundColor: Colors.green,
-                            colorText: Colors.white,
-                          );
-                          Navigator.of(context).pop();
-                        } else {
-                          final data = json.decode(response.body);
-                          Get.snackbar(
-                            'Error',
-                            data['message'] ??
-                                'Failed to Submit Report: ${response.statusCode}',
-                            backgroundColor: Colors.red,
-                            colorText: Colors.white,
-                          );
-                        }
-                      } catch (e) {
-                        Get.snackbar(
-                          'Error',
-                          e.toString(),
-                          backgroundColor: Colors.red,
-                          colorText: Colors.white,
-                        );
-                      }
-                    },
-                    child: const Text(
-                      'Submit',
-                      style: TextStyle(
-                        color: Color(0xFFF48706),
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-      transitionBuilder: (context, animation, secondaryAnimation, child) {
-        return ScaleTransition(
-          scale: CurvedAnimation(parent: animation, curve: Curves.easeOutBack),
-          child: child,
-        );
-      },
-    );
-  }
-
   Widget _buildAuthorAvatar() {
     final userController = Get.find<UserController>();
 
-    // Check if this is the current user's post
     if (_isAuthorCurrentUser()) {
       return Obx(() {
         final picturePath = userController.getFullProfilePicturePath();
         final version = userController.profilePictureVersion.value;
 
-        return GestureDetector(
-          onTap: () {
-            _showBigAvatarDialog(
-              context,
-              picturePath != null ? '$picturePath?v=$version' : null,
-              widget.content.author.name,
-            );
-          },
-          child: CircleAvatar(
-            key: ValueKey(
-              'feed_avatar_${widget.content.author.id}_$version',
-            ), // Force rebuild
-            backgroundImage:
-                picturePath != null
-                    ? NetworkImage(
-                      '$picturePath?v=$version',
-                    ) // Add version parameter
-                    : null,
-            child:
-                picturePath == null || picturePath.isEmpty
-                    ? Text(
-                      widget.content.author.name.isNotEmpty
-                          ? widget.content.author.name[0].toUpperCase()
-                          : '?',
-                    )
-                    : null,
-          ),
+        return CircleAvatar(
+          key: ValueKey('feed_avatar_${widget.content.author.id}_$version'),
+          backgroundImage: picturePath != null
+              ? NetworkImage('$picturePath?v=$version')
+              : null,
+          child: picturePath == null || picturePath.isEmpty
+              ? Text(
+                  widget.content.author.name.isNotEmpty
+                      ? widget.content.author.name[0].toUpperCase()
+                      : '?',
+                )
+              : null,
         );
-      }); // initilizing Get in the code
+      });
     }
 
-    // For other users' posts
     if (widget.content.author.picture.isEmpty) {
-      return GestureDetector(
-        onTap: () {
-          _showBigAvatarDialog(context, null, widget.content.author.name);
-        },
-        child: CircleAvatar(
-          child: Text(
-            widget.content.author.name.isNotEmpty
-                ? widget.content.author.name[0].toUpperCase()
-                : '?',
-          ),
+      return CircleAvatar(
+        child: Text(
+          widget.content.author.name.isNotEmpty
+              ? widget.content.author.name[0].toUpperCase()
+              : '?',
         ),
       );
     }
 
-    return GestureDetector(
-      onTap: () {
-        _showBigAvatarDialog(
-          context,
-          'http://182.93.94.210:3065${widget.content.author.picture}',
-          widget.content.author.name,
-        );
-      },
-      child: CachedNetworkImage(
-        imageUrl: 'http://182.93.94.210:3065${widget.content.author.picture}',
-        imageBuilder:
-            (context, imageProvider) =>
-                CircleAvatar(backgroundImage: imageProvider),
-        placeholder:
-            (context, url) => const CircleAvatar(
-              child: CircularProgressIndicator(strokeWidth: 2.0),
-            ),
-        errorWidget:
-            (context, url, error) => CircleAvatar(
-              child: Text(
-                widget.content.author.name.isNotEmpty
-                    ? widget.content.author.name[0].toUpperCase()
-                    : '?',
-              ),
-            ),
+    return CachedNetworkImage(
+      imageUrl: 'http://182.93.94.210:3066${widget.content.author.picture}',
+      imageBuilder: (context, imageProvider) =>
+          CircleAvatar(backgroundImage: imageProvider),
+      placeholder: (context, url) => const CircleAvatar(
+        child: CircularProgressIndicator(strokeWidth: 2.0),
       ),
-    );
-  }
-
-  // ...existing code...
-  void _showBigAvatarDialog(
-    BuildContext context,
-    String? imageUrl,
-    String name,
-  ) {
-    showDialog(
-      context: context,
-      barrierDismissible: true, // Allow tap outside to dismiss
-      builder:
-          (context) => GestureDetector(
-            onTap: () => Navigator.of(context).pop(), // Dismiss on tap outside
-            child: Material(
-              color: Colors.transparent,
-              child: Center(
-                child: GestureDetector(
-                  onTap: () => FocusScope.of(context).unfocus(),
-                  // Prevent dialog from closing when tapping the avatar itself
-                  child:
-                      imageUrl == null
-                          ? CircleAvatar(
-                            radius: 80,
-                            backgroundColor: Colors.blue.shade200,
-                            child: Text(
-                              name.isNotEmpty ? name[0].toUpperCase() : '?',
-                              style: const TextStyle(
-                                fontSize: 60,
-                                color: Colors.white,
-                              ),
-                            ),
-                          )
-                          : CachedNetworkImage(
-                            imageUrl: imageUrl,
-                            imageBuilder:
-                                (context, imageProvider) => CircleAvatar(
-                                  radius: 120,
-                                  backgroundImage: imageProvider,
-                                ),
-                            placeholder:
-                                (context, url) => const CircleAvatar(
-                                  radius: 120,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 3.0,
-                                  ),
-                                ),
-                            errorWidget:
-                                (context, url, error) => CircleAvatar(
-                                  radius: 120,
-                                  backgroundColor: Colors.blue.shade200,
-                                  child: Text(
-                                    name.isNotEmpty
-                                        ? name[0].toUpperCase()
-                                        : '?',
-                                    style: const TextStyle(
-                                      fontSize: 60,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
-                          ),
-                ),
-              ),
-            ),
-          ),
+      errorWidget: (context, url, error) => CircleAvatar(
+        child: Text(
+          widget.content.author.name.isNotEmpty
+              ? widget.content.author.name[0].toUpperCase()
+              : '?',
+        ),
+      ),
     );
   }
 
@@ -2651,9 +1777,9 @@ class _FeedItemState extends State<FeedItem>
       final imageUrls =
           widget.content.optimizedFiles
               .where((f) => f['type'] == 'image')
-    .map((file) => file['original'] ?? file['url'] ?? file['thumbnail'])
+              .map((file) => file['original'] ?? file['url'] ?? file['thumbnail'])
               .where((url) => url != null)
-    .map((url) => widget.content._formatUrl(url))
+              .map((url) => widget.content._formatUrl(url))
               .toList();
 
       if (imageUrls.isNotEmpty) {
@@ -2664,26 +1790,13 @@ class _FeedItemState extends State<FeedItem>
     final mediaUrls = widget.content.mediaUrls;
 
     if (mediaUrls.isEmpty) {
-      developer.log(
-        'No media URLs found for content ID: ${widget.content.id}',
-        name: 'MediaPreview',
-      );
       return const SizedBox.shrink();
     }
-
-    developer.log(
-      'Processing ${mediaUrls.length} media URLs for content ID: ${widget.content.id}',
-      name: 'MediaPreview',
-    );
 
     if (mediaUrls.length == 1) {
       final fileUrl = mediaUrls.first;
 
       if (FileTypeHelper.isImage(fileUrl)) {
-        developer.log(
-          'Loading single image: $fileUrl',
-          name: 'MediaPreview.Image',
-        );
         return LimitedBox(
           maxHeight: 450.0,
           child: GestureDetector(
@@ -2692,33 +1805,16 @@ class _FeedItemState extends State<FeedItem>
           ),
         );
       } else if (FileTypeHelper.isVideo(fileUrl)) {
-        developer.log(
-          'Loading single video: $fileUrl',
-          name: 'MediaPreview.Video',
-        );
-        // Portrait video detection and display
         return FutureBuilder<Size>(
           future: _getVideoSize(fileUrl),
           builder: (context, snapshot) {
             double maxHeight = 250.0;
-            double? aspectRatio;
             if (snapshot.hasData) {
               final size = snapshot.data!;
-              aspectRatio = size.width / size.height;
-              developer.log(
-                'Video size retrieved: width=${size.width}, height=${size.height}, aspectRatio=$aspectRatio',
-                name: 'MediaPreview.Video',
-              );
-              // Portrait if height > width (aspectRatio < 1)
+              final aspectRatio = size.width / size.height;
               if (aspectRatio < 1) {
-                maxHeight = 400.0; // Taller for portrait videos
+                maxHeight = 400.0;
               }
-            } else if (snapshot.hasError) {
-              developer.log(
-                'Error retrieving video size for $fileUrl: ${snapshot.error}',
-                name: 'MediaPreview.Video',
-                error: snapshot.error,
-              );
             }
             return Container(
               color: Colors.black,
@@ -2734,7 +1830,6 @@ class _FeedItemState extends State<FeedItem>
           },
         );
       } else if (FileTypeHelper.isPdf(fileUrl)) {
-        developer.log('Loading single PDF: $fileUrl', name: 'MediaPreview.PDF');
         return _buildDocumentPreview(
           fileUrl,
           'PDF Document',
@@ -2742,10 +1837,6 @@ class _FeedItemState extends State<FeedItem>
           Colors.red,
         );
       } else if (FileTypeHelper.isWordDoc(fileUrl)) {
-        developer.log(
-          'Loading single Word document: $fileUrl',
-          name: 'MediaPreview.WordDoc',
-        );
         return _buildDocumentPreview(
           fileUrl,
           'Word Document',
@@ -2755,10 +1846,6 @@ class _FeedItemState extends State<FeedItem>
       }
     }
 
-    developer.log(
-      'Building grid view for ${mediaUrls.length} media items',
-      name: 'MediaPreview.Grid',
-    );
     return LimitedBox(
       maxHeight: 300.0,
       child: LayoutBuilder(
@@ -2776,10 +1863,6 @@ class _FeedItemState extends State<FeedItem>
               final fileUrl = mediaUrls[index];
 
               if (index == 3 && mediaUrls.length > 4) {
-                developer.log(
-                  'Showing +${mediaUrls.length - 4} more items overlay',
-                  name: 'MediaPreview.Grid',
-                );
                 return GestureDetector(
                   onTap: () => _showMediaGallery(context, mediaUrls, index),
                   child: Container(
@@ -2799,28 +1882,16 @@ class _FeedItemState extends State<FeedItem>
               }
 
               if (FileTypeHelper.isImage(fileUrl)) {
-                developer.log(
-                  'Loading grid image at index $index: $fileUrl',
-                  name: 'MediaPreview.Image',
-                );
                 return GestureDetector(
                   onTap: () => _showMediaGallery(context, mediaUrls, index),
                   child: _OptimizedNetworkImage(url: fileUrl),
                 );
               } else if (FileTypeHelper.isVideo(fileUrl)) {
-                developer.log(
-                  'Loading grid video at index $index: $fileUrl',
-                  name: 'MediaPreview.Video',
-                );
                 return GestureDetector(
                   onTap: () => _showMediaGallery(context, mediaUrls, index),
                   child: AutoPlayVideoWidget(url: fileUrl),
                 );
               } else if (FileTypeHelper.isPdf(fileUrl)) {
-                developer.log(
-                  'Loading grid PDF at index $index: $fileUrl',
-                  name: 'MediaPreview.PDF',
-                );
                 return GestureDetector(
                   onTap: () => _showMediaGallery(context, mediaUrls, index),
                   child: Container(
@@ -2835,10 +1906,6 @@ class _FeedItemState extends State<FeedItem>
                   ),
                 );
               } else if (FileTypeHelper.isWordDoc(fileUrl)) {
-                developer.log(
-                  'Loading grid Word document at index $index: $fileUrl',
-                  name: 'MediaPreview.WordDoc',
-                );
                 return GestureDetector(
                   onTap: () => _showMediaGallery(context, mediaUrls, index),
                   child: Container(
@@ -2854,10 +1921,6 @@ class _FeedItemState extends State<FeedItem>
                 );
               }
 
-              developer.log(
-                'Loading unknown file type at index $index: $fileUrl',
-                name: 'MediaPreview.Unknown',
-              );
               return Container(
                 color: Colors.grey[200],
                 child: const Center(
@@ -2875,43 +1938,40 @@ class _FeedItemState extends State<FeedItem>
     );
   }
 
- Widget _buildVideoPreview(String url) {
-  // Try to get the original MP4 URL from optimizedFiles
-  final originalVideoUrl = widget.content.optimizedFiles
-      .where((file) => file['type'] == 'video')
-      .map((file) => file['original'] ?? file['hls'] ?? file['url'])
-      .firstWhere((url) => url != null, orElse: () => null);
+  Widget _buildVideoPreview(String url) {
+    final originalVideoUrl = widget.content.optimizedFiles
+        .where((file) => file['type'] == 'video')
+        .map((file) => file['original'] ?? file['hls'] ?? file['url'])
+        .firstWhere((url) => url != null, orElse: () => null);
 
-  final videoUrl = originalVideoUrl ?? url;
-  
-  return Container(
-    color: Colors.black,
-    child: AspectRatio(
-      aspectRatio: 16 / 9,
-      child: AutoPlayVideoWidget(
-        url: widget.content._formatUrl(videoUrl),
-        thumbnailUrl: widget.content.thumbnailUrl,
+    final videoUrl = originalVideoUrl ?? url;
+    
+    return Container(
+      color: Colors.black,
+      child: AspectRatio(
+        aspectRatio: 16 / 9,
+        child: AutoPlayVideoWidget(
+          url: widget.content._formatUrl(videoUrl),
+          thumbnailUrl: widget.content.thumbnailUrl,
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   Widget _buildSingleImage(String url) {
     return GestureDetector(
       onTap: () => _showMediaGallery(context, [url], 0),
       child: CachedNetworkImage(
-      filterQuality: FilterQuality.high,
+        filterQuality: FilterQuality.high,
         imageUrl: url,
         fit: BoxFit.cover,
-        memCacheWidth: (MediaQuery.of(context).size.width * 1.5).toInt(), // Reduce cache size for grid
-        placeholder:
-            (context, url) => Container(
-              color: Colors.grey[300],
-              child: Center(child: CircularProgressIndicator()),
-            ),
-        errorWidget:
-            (context, url, error) =>
-                Container(color: Colors.grey[300], child: Icon(Icons.error)),
+        memCacheWidth: (MediaQuery.of(context).size.width * 1.5).toInt(),
+        placeholder: (context, url) => Container(
+          color: Colors.grey[300],
+          child: Center(child: CircularProgressIndicator()),
+        ),
+        errorWidget: (context, url, error) =>
+            Container(color: Colors.grey[300], child: Icon(Icons.error)),
       ),
     );
   }
@@ -2947,7 +2007,6 @@ class _FeedItemState extends State<FeedItem>
     );
   }
 
-  // Helper to get video size (width/height) using VideoPlayerController
   Future<Size> _getVideoSize(String url) async {
     final controller = VideoPlayerController.networkUrl(Uri.parse(url));
     await controller.initialize();
@@ -2991,375 +2050,263 @@ class _FeedItemState extends State<FeedItem>
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder:
-            (context) => OptimizedMediaGalleryScreen(
-              mediaUrls: mediaUrls,
-              initialIndex: initialIndex,
-            ),
+        builder: (context) => OptimizedMediaGalleryScreen(
+          mediaUrls: mediaUrls,
+          initialIndex: initialIndex,
+        ),
       ),
     );
   }
-}
 
-class _OptimizedNetworkImage extends StatelessWidget {
-  final String url;
-  final double? height;
+  void _showShareOptions(BuildContext context) {
+    final TextEditingController shareTextController = TextEditingController();
 
-  const _OptimizedNetworkImage({required this.url, this.height});
-
-  @override
-  Widget build(BuildContext context) {
-    return CachedNetworkImage(
-      imageUrl: url,
-      fit: BoxFit.cover,
-      height: height,
-      width: double.infinity,
-      placeholder:
-          (context, url) => Container(
-            color: Colors.grey[300],
-            child: const Center(
-              child: SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(strokeWidth: 2.0),
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
-            ),
+              const SizedBox(height: 20),
+              const Text(
+                'Share Post',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 20),
+              TextField(
+                controller: shareTextController,
+                decoration: const InputDecoration(
+                  hintText: 'Add a comment (optional)',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 2,
+              ),
+              const SizedBox(height: 20),
+              _buildShareOption(
+                icon: Icons.link,
+                title: 'Copy Link',
+                subtitle: 'Copy post link to clipboard',
+                color: Colors.blue,
+                onTap: () {
+                  Navigator.pop(context);
+                  _shareContent(shareTextController.text);
+                },
+              ),
+              _buildShareOption(
+                icon: Icons.share,
+                title: 'Share via Apps',
+                subtitle: 'Share using other apps',
+                color: Colors.green,
+                onTap: () {
+                  Navigator.pop(context);
+                  _shareViaApps();
+                },
+              ),
+              const SizedBox(height: 10),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ),
+            ],
           ),
-      errorWidget:
-          (context, url, error) => Container(
-            color: Colors.grey[300],
-            child: const Center(child: Icon(Icons.error, color: Colors.white)),
-          ),
-      memCacheWidth: (MediaQuery.of(context).size.width * 2).toInt(),
-        memCacheHeight: (MediaQuery.of(context).size.height * 2).toInt(), // Added height cache
-
+        ),
+      ),
     );
   }
-}
 
-// Replace your existing FeedApiService class
-class FeedApiService {
-  static const String baseUrl = 'http://182.93.94.210:3065';
+  Widget _buildShareOption({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundColor: color.withOpacity(0.1),
+        child: Icon(icon, color: color),
+      ),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
+      subtitle: Text(
+        subtitle,
+        style: TextStyle(color: Colors.grey[600], fontSize: 12),
+      ),
+      onTap: onTap,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
+    );
+  }
 
-  static Future<ContentData> fetchContents({
-    String? videoCursor,
-    String? normalCursor,
-    required BuildContext context,
-  }) async {
+  Future<void> _shareContent(String? shareText) async {
     try {
       final String? authToken = AppData().authToken;
-      final Map<String, String> headers = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      };
-
-      if (authToken != null && authToken.isNotEmpty) {
-        headers['authorization'] = 'Bearer $authToken';
+      if (authToken == null || authToken.isEmpty) {
+        Get.snackbar(
+          'Error',
+          'Authentication required to share content',
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+        return;
       }
 
-      final params = <String, String>{
-        'loadEngagement': 'true',
-        'quality': 'auto',
-        'limit': '10', // Keep consistent limit
-      };
-      
-      // Only add cursors if they're not null or empty
-      if (videoCursor != null && videoCursor.isNotEmpty) {
-        params['videoCursor'] = videoCursor;
-      }
-      if (normalCursor != null && normalCursor.isNotEmpty) {
-        params['normalCursor'] = normalCursor;
-      }
+      Get.dialog(
+        const Center(child: CircularProgressIndicator()),
+        barrierDismissible: false,
+      );
 
-      final uri = Uri.parse('$baseUrl/api/v1/list-contents')
-          .replace(queryParameters: params);
+      final response = await http.post(
+        Uri.parse('http://182.93.94.210:3066/api/v1/new-content'),
+        headers: {
+          'Content-Type': 'application/json',
+          'authorization': 'Bearer $authToken',
+        },
+        body: jsonEncode({
+          "type": "share",
+          "shareText": shareText,
+        }),
+      );
 
-      debugPrint('API Request URL: $uri');
-      debugPrint('Request Headers: ${headers.keys.join(', ')}'); // Don't log auth token in release
-      debugPrint('Video Cursor: $videoCursor');
-      debugPrint('Normal Cursor: $normalCursor');
-
-      final response = await http
-          .get(uri, headers: headers)
-          .timeout(const Duration(seconds: 30));
-
-      debugPrint('API Response Status: ${response.statusCode}');
-      debugPrint('API Response Body Length: ${response.body.length}');
+      Get.back();
 
       if (response.statusCode == 200) {
-        final Map<String, dynamic> data;
-        
-        try {
-          data = json.decode(response.body);
-        } catch (e) {
-          debugPrint('JSON parsing error: $e');
-          debugPrint('Response body preview: ${response.body.substring(0, math.min(200, response.body.length))}');
-          throw Exception('Invalid JSON response from server');
-        }
-
-        final contentResponse = ContentResponse.fromJson(data);
-
-        debugPrint('Response Status: ${contentResponse.status}');
-        debugPrint('Video Contents Count: ${contentResponse.data.videoContents.length}');
-        debugPrint('Normal Contents Count: ${contentResponse.data.normalContents.length}');
-        debugPrint('Has More Videos: ${contentResponse.data.hasMoreVideos}');
-        debugPrint('Has More Normal: ${contentResponse.data.hasMoreNormal}');
-        debugPrint('Next Video Cursor: ${contentResponse.data.nextVideoCursor}');
-        debugPrint('Next Normal Cursor: ${contentResponse.data.nextNormalCursor}');
-
-        if (contentResponse.status == 200) {
-          final List<FeedContent> videoContents = [];
-          final List<FeedContent> normalContents = [];
-
-          // Process video contents with better error handling
-          for (var item in contentResponse.data.videoContents) {
-            try {
-              final isFollowing = await FollowService.checkFollowStatus(
-                item.author.email,
-              ).timeout(const Duration(seconds: 5));
-              videoContents.add(item.copyWith(isFollowed: isFollowing));
-            } catch (e) {
-              debugPrint(
-                'Error checking follow status for ${item.author.email}: $e',
-              );
-              // Don't fail the entire operation, just add without follow status
-              videoContents.add(item);
-            }
-          }
-
-          // Process normal contents with better error handling
-          for (var item in contentResponse.data.normalContents) {
-            try {
-              final isFollowing = await FollowService.checkFollowStatus(
-                item.author.email,
-              ).timeout(const Duration(seconds: 5));
-              normalContents.add(item.copyWith(isFollowed: isFollowing));
-            } catch (e) {
-              debugPrint(
-                'Error checking follow status for ${item.author.email}: $e',
-              );
-              // Don't fail the entire operation, just add without follow status
-              normalContents.add(item);
-            }
-          }
-
-          final result = ContentData(
-            videoContents: videoContents,
-            normalContents: normalContents,
-            hasMoreVideos: contentResponse.data.hasMoreVideos,
-            hasMoreNormal: contentResponse.data.hasMoreNormal,
-            nextVideoCursor: contentResponse.data.nextVideoCursor,
-            nextNormalCursor: contentResponse.data.nextNormalCursor,
-            optimizationInfo: contentResponse.data.optimizationInfo,
-          );
-
-          debugPrint('Final ContentData - Videos: ${result.videoContents.length}, Normal: ${result.normalContents.length}');
-          debugPrint('Final hasMore - Videos: ${result.hasMoreVideos}, Normal: ${result.hasMoreNormal}');
-          
-          return result;
-        } else {
-          throw Exception('Invalid response status: ${contentResponse.status}');
-        }
-      } else if (response.statusCode == 401) {
-        debugPrint('Authentication error - redirecting to login');
-        if (context.mounted) {
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(builder: (_) => LoginPage()),
-            (route) => false,
-          );
-        }
-        throw Exception('Authentication required');
-      } else {
-        debugPrint('API Error - Status: ${response.statusCode}');
-        debugPrint('Error Response Body: ${response.body}');
-        throw Exception('Failed to load data: ${response.statusCode}');
+        Get.snackbar(
+          'Success',
+          'Post shared successfully',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+        );
       }
-    } on SocketException catch (e) {
-      debugPrint('Network error: $e');
-      throw Exception('Network connection failed');
-    } on TimeoutException catch (e) {
-      debugPrint('Request timeout: $e');
-      throw Exception('Request timed out');
-    } on FormatException catch (e) {
-      debugPrint('JSON format error: $e');
-      throw Exception('Invalid server response format');
     } catch (e) {
-      debugPrint('FeedApiService Error: $e');
-      // Don't automatically redirect to login for network errors
-      if (e.toString().contains('Authentication required')) {
-        rethrow;
-      }
-      throw Exception('Failed to fetch content: $e');
+      Get.back();
+      debugPrint('Error sharing content: $e');
     }
   }
-}
 
-class ContentData {
-  final List<FeedContent> videoContents;
-  final List<FeedContent> normalContents;
-  final bool hasMoreVideos;
-  final bool hasMoreNormal;
-  final String? nextVideoCursor;
-  final String? nextNormalCursor;
-  final Map<String, dynamic> optimizationInfo;
-
-  ContentData({
-    required this.videoContents,
-    required this.normalContents,
-    required this.hasMoreVideos,
-    required this.hasMoreNormal,
-    this.nextVideoCursor,
-    this.nextNormalCursor,
-    required this.optimizationInfo,
-  });
-
-  factory ContentData.fromJson(Map<String, dynamic> json) {
+  void _shareViaApps() async {
     try {
-      return ContentData(
-        videoContents: (json['videoContents'] as List<dynamic>? ?? [])
-            .map((item) {
-              try {
-                return FeedContent.fromJson(item as Map<String, dynamic>);
-              } catch (e) {
-                debugPrint('Error parsing video content item: $e');
-                return null;
-              }
-            })
-            .where((item) => item != null)
-            .cast<FeedContent>()
-            .toList(),
-        normalContents: (json['normalContents'] as List<dynamic>? ?? [])
-            .map((item) {
-              try {
-                return FeedContent.fromJson(item as Map<String, dynamic>);
-              } catch (e) {
-                debugPrint('Error parsing normal content item: $e');
-                return null;
-              }
-            })
-            .where((item) => item != null)
-            .cast<FeedContent>()
-            .toList(),
-        hasMoreVideos: json['hasMoreVideos'] as bool? ?? true,
-        hasMoreNormal: json['hasMoreNormal'] as bool? ?? true,
-        nextVideoCursor: json['nextVideoCursor'] as String?,
-        nextNormalCursor: json['nextNormalCursor'] as String?,
-        optimizationInfo: json['optimizationInfo'] as Map<String, dynamic>? ?? {},
-      );
+      final shareText = 'Check out this post by ${widget.content.author.name}: ${widget.content.status}';
+      await Share.share(shareText);
     } catch (e) {
-      debugPrint('Error parsing ContentData: $e');
-      // Return empty data rather than crashing
-      return ContentData(
-        videoContents: [],
-        normalContents: [],
-        hasMoreVideos: true,
-        hasMoreNormal: true,
-        nextVideoCursor: null,
-        nextNormalCursor: null,
-        optimizationInfo: {},
-      );
+      debugPrint('Error sharing via apps: $e');
     }
   }
-}
 
-// class ContentData {
-//   final List<FeedContent> videoContents;
-//   final List<FeedContent> normalContents;
-//   final bool hasMoreVideos;
-//   final bool hasMoreNormal;
-//   final String? nextVideoCursor;
-//   final String? nextNormalCursor;
-//   final Map<String, dynamic> optimizationInfo;
+  void _showQuickSuggestions(BuildContext context) {
+    showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.edit, color: Color(0xFFF48706)),
+                title: const Text('Edit content'),
+                onTap: () => Navigator.pop(context, 'edit'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete, color: Colors.red),
+                title: const Text('Delete post'),
+                onTap: () => Navigator.pop(context, 'delete'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.copy, color: Colors.blue),
+                title: const Text('Copy content'),
+                onTap: () => Navigator.pop(context, 'copy'),
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
+    ).then((value) {
+      if (value == 'copy') {
+        Clipboard.setData(ClipboardData(text: widget.content.status));
+        Get.snackbar('Copied', 'Content copied to clipboard');
+      }
+    });
+  }
 
-//   ContentData({
-//     required this.videoContents,
-//     required this.normalContents,
-//     required this.hasMoreVideos,
-//     required this.hasMoreNormal,
-//     this.nextVideoCursor,
-//     this.nextNormalCursor,
-//     required this.optimizationInfo,
-//   });
-
-//   factory ContentData.fromJson(Map<String, dynamic> json) {
-//     return ContentData(
-//       videoContents: (json['videoContents'] as List<dynamic>? ?? [])
-//           .map((item) => FeedContent.fromJson(item as Map<String, dynamic>))
-//           .toList(),
-//       normalContents: (json['normalContents'] as List<dynamic>? ?? [])
-//           .map((item) => FeedContent.fromJson(item as Map<String, dynamic>))
-//           .toList(),
-//       hasMoreVideos: json['hasMoreVideos'] as bool? ?? false,
-//       hasMoreNormal: json['hasMoreNormal'] as bool? ?? false,
-//       nextVideoCursor: json['nextVideoCursor'] as String?,
-//       nextNormalCursor: json['nextNormalCursor'] as String?,
-//       optimizationInfo: json['optimizationInfo'] as Map<String, dynamic>? ?? {},
-//     );
-//   }
-// }
-
-// Add this extension to FeedContent if not already present
-extension FeedContentExtension on FeedContent {
-  FeedContent copyWith({
-    String? id,
-    String? status,
-    String? type,
-    List<String>? files,
-    List<dynamic>? optimizedFiles,
-    Author? author,
-    DateTime? createdAt,
-    DateTime? updatedAt,
-    int? views,
-    bool? isShared,
-    int? likes,
-    int? comments,
-    bool? isLiked,
-    bool? isFollowed,
-    bool? engagementLoaded,
-    String? loadPriority,
-  }) {
-    return FeedContent(
-      id: id ?? this.id,
-      status: status ?? this.status,
-      type: type ?? this.type,
-      files: files ?? this.files,
-      optimizedFiles: optimizedFiles ?? this.optimizedFiles,
-      author: author ?? this.author,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-      views: views ?? this.views,
-      isShared: isShared ?? this.isShared,
-      likes: likes ?? this.likes,
-      comments: comments ?? this.comments,
-      isLiked: isLiked ?? this.isLiked,
-      isFollowed: isFollowed ?? this.isFollowed,
-      engagementLoaded: engagementLoaded ?? this.engagementLoaded,
-      loadPriority: loadPriority ?? this.loadPriority,
-    );
+  void _showQuickspecificSuggestions(BuildContext context) {
+    showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.copy, color: Colors.blue),
+                title: const Text('Copy content'),
+                onTap: () => Navigator.pop(context, 'copy'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.flag, color: Colors.orange),
+                title: const Text('Report'),
+                onTap: () => Navigator.pop(context, 'report'),
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
+    ).then((value) {
+      if (value == 'copy') {
+        Clipboard.setData(ClipboardData(text: widget.content.status));
+        Get.snackbar('Copied', 'Content copied to clipboard');
+      }
+    });
   }
 }
 
-extension DateTimeExtension on DateTime {
-  String timeAgo() {
-    final difference = DateTime.now().difference(this);
-
-    if (difference.inDays > 365) {
-      return '${(difference.inDays / 365).floor()} year(s) ago';
-    } else if (difference.inDays > 30) {
-      return '${(difference.inDays / 30).floor()} month(s) ago';
-    } else if (difference.inDays > 0) {
-      return '${difference.inDays} day(s) ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours} hour(s) ago';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes} minute(s) ago';
-    } else {
-      return 'Just now';
-    }
-  }
-}
-
+// AutoPlayVideoWidget with enhanced performance
 class AutoPlayVideoWidget extends StatefulWidget {
   final String url;
   final double? height;
@@ -3392,10 +2339,8 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
   @override
   bool get wantKeepAlive => true;
 
-  // Helper method to safely call setState
   void _safeSetState(VoidCallback fn) {
     if (mounted && !_disposed) {
-      // Schedule setState for the next frame to avoid build-time conflicts
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && !_disposed) {
           setState(fn);
@@ -3404,7 +2349,6 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
     }
   }
 
-  // Public methods to control the video from outside
   void pauseVideo() {
     if (_controller != null && !_disposed && _initialized) {
       _controller!.pause();
@@ -3429,15 +2373,8 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
         _safeSetState(() {
           _isMuted = true;
         });
-        developer.log(
-          'Video muted successfully for ID: $videoId',
-          name: 'AutoPlayVideoWidget',
-        );
       }).catchError((error) {
-        developer.log(
-          'Error muting video for ID: $videoId: $error',
-          name: 'AutoPlayVideoWidget',
-        );
+        developer.log('Error muting video: $error');
       });
     }
   }
@@ -3449,20 +2386,6 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
         _isMuted = false;
       });
     }
-  }
-
-  void pauseAndMute() {
-    pauseVideo();
-    muteVideo();
-  }
-
-  void resumeWithPreviousState(bool wasMuted) {
-    if (wasMuted) {
-      muteVideo();
-    } else {
-      unmuteVideo();
-    }
-    playVideo();
   }
 
   bool get isMuted => _isMuted;
@@ -3501,11 +2424,9 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
       ..initialize().then((_) {
         _initTimer?.cancel();
         if (!_disposed) {
-          // Use safe setState for initialization
           _safeSetState(() {
             _initialized = true;
           });
-          // Play after state is set
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && !_disposed) {
               _controller!.play();
@@ -3525,7 +2446,6 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
 
     final visibleFraction = info.visibleFraction;
 
-    // Always use post frame callback for visibility changes
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _disposed) return;
 
@@ -3545,13 +2465,11 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
   }
 
   void _muteOtherVideos() {
-    // Schedule for next frame to avoid build conflicts
     WidgetsBinding.instance.addPostFrameCallback((_) {
       for (final entry in _activeVideos.entries) {
         if (entry.key != videoId && entry.value.mounted && !entry.value._disposed) {
           entry.value._controller?.pause();
           entry.value._controller?.setVolume(0.0);
-          // Use safe setState for other videos
           entry.value._safeSetState(() {
             entry.value._isMuted = true;
             entry.value._isPlaying = false;
@@ -3561,7 +2479,6 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
     });
   }
 
-  // Fixed static methods to use safe setState
   static void pauseAllAutoPlayVideos() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       for (final entry in _activeVideos.entries) {
@@ -3636,7 +2553,6 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
     super.dispose();
   }
 
-  // Fixed toggle methods - can use direct setState since they're user-triggered
   void _togglePlayPause() {
     if (_controller == null || _disposed || !_initialized) return;
 
@@ -3777,7 +2693,40 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
   }
 }
 
-// This is Used For Status For adding Link
+// OptimizedNetworkImage widget
+class _OptimizedNetworkImage extends StatelessWidget {
+  final String url;
+  final double? height;
+
+  const _OptimizedNetworkImage({required this.url, this.height});
+
+  @override
+  Widget build(BuildContext context) {
+    return CachedNetworkImage(
+      imageUrl: url,
+      fit: BoxFit.cover,
+      height: height,
+      width: double.infinity,
+      placeholder: (context, url) => Container(
+        color: Colors.grey[300],
+        child: const Center(
+          child: SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(strokeWidth: 2.0),
+          ),
+        ),
+      ),
+      errorWidget: (context, url, error) => Container(
+        color: Colors.grey[300],
+        child: const Center(child: Icon(Icons.error, color: Colors.white)),
+      ),
+      memCacheWidth: (MediaQuery.of(context).size.width * 2).toInt(),
+      memCacheHeight: (MediaQuery.of(context).size.height * 2).toInt(),
+    );
+  }
+}
+
 class _LinkifyText extends StatelessWidget {
   final String text;
   final TextStyle? style;
@@ -3815,8 +2764,7 @@ class _LinkifyText extends StatelessWidget {
       spans.add(
         TextSpan(
           text: url,
-          style:
-              style?.copyWith(
+          style: style?.copyWith(
                 color: Colors.blue,
                 decoration: TextDecoration.underline,
               ) ??
@@ -3824,18 +2772,17 @@ class _LinkifyText extends StatelessWidget {
                 color: Colors.blue,
                 decoration: TextDecoration.underline,
               ),
-          recognizer:
-              TapGestureRecognizer()
-                ..onTap = () async {
-                  final uri = Uri.parse(url);
-                  if (await canLaunchUrl(uri)) {
-                    await launchUrl(uri, mode: LaunchMode.externalApplication);
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Could not launch $url')),
-                    );
-                  }
-                },
+          recognizer: TapGestureRecognizer()
+            ..onTap = () async {
+              final uri = Uri.parse(url);
+              if (await canLaunchUrl(uri)) {
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Could not launch $url')),
+                );
+              }
+            },
         ),
       );
       lastMatchEnd = match.end;
@@ -3851,4 +2798,23 @@ class _LinkifyText extends StatelessWidget {
     );
   }
 }
-//using 
+
+extension DateTimeExtension on DateTime {
+  String timeAgo() {
+    final difference = DateTime.now().difference(this);
+
+    if (difference.inDays > 365) {
+      return '${(difference.inDays / 365).floor()} year(s) ago';
+    } else if (difference.inDays > 30) {
+      return '${(difference.inDays / 30).floor()} month(s) ago';
+    } else if (difference.inDays > 0) {
+      return '${difference.inDays} day(s) ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours} hour(s) ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes} minute(s) ago';
+    } else {
+      return 'Just now';
+    }
+  }
+}

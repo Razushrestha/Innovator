@@ -37,7 +37,7 @@ class UserController extends GetxController {
   
   String? getFullProfilePicturePath() {
     return profilePicture.value != null 
-        ? 'http://182.93.94.210:3065${profilePicture.value}'
+        ? 'http://182.93.94.210:3066${profilePicture.value}'
         : null;
   }
 } 

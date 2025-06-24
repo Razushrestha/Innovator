@@ -55,7 +55,7 @@
 //             radius: 16,
 //             backgroundImage: content.author.avatar.isNotEmpty
 //                 ? CachedNetworkImageProvider(
-//                     'http://182.93.94.210:3065${content.author.avatar}')
+//                     'http://182.93.94.210:3066${content.author.avatar}')
 //                 : const AssetImage('assets/default_avatar.png') as ImageProvider,
 //           ),
 //           const SizedBox(width: 8),
@@ -92,7 +92,7 @@
 
 //   Widget _buildMedia(BuildContext context) {
 //     final mediaUrl = content.medias.isNotEmpty
-//         ? 'http://182.93.94.210:3065${content.medias.first}'
+//         ? 'http://182.93.94.210:3066${content.medias.first}'
 //         : null;
 //     return mediaUrl != null
 //         ? AspectRatio(
