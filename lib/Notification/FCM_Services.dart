@@ -518,14 +518,14 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.only(top: 4),
-        child: Row(
+        child: Column(
           children: [
             Text(
               DateFormat('MMM d, yyyy • HH:mm').format(DateTime.parse(notification.createdAt)),
               style: const TextStyle(fontSize: 8, color: Colors.grey),
             ),
              if (notification.sender?.email != null) ...[
-                          const Text(' • ', style: TextStyle(color: Colors.grey)),
+                          // const Text(' • ', style: TextStyle(color: Colors.grey)),
                           Text(
             notification.sender!.email!,
             style: const TextStyle(fontSize: 12, color: Colors.grey),
@@ -552,193 +552,170 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
         : const SizedBox(width: 8);
   }
 
-  void _navigateToNotificationDetails(NotificationModel notification) {
-  // Handle navigation based on notification type
-  switch (notification.type.toLowerCase()) {
+  void _navigateToNotificationDetails(NotificationModel notification) async {
+  try {
+    final token = AppData().authToken;
+    if (token == null) throw Exception('No authentication token found');
+
+    // Call the click API endpoint
+    final response = await http.post(
+      Uri.parse('http://182.93.94.210:3066/api/v1/notifications/${notification.id}/click'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      // Check if response is JSON or JWT token
+      try {
+        final jsonData = jsonDecode(response.body);
+        
+        // If it's a proper JSON response with redirect data
+        if (jsonData['data'] != null && jsonData['data']['redirect'] != null) {
+          final redirectData = jsonData['data']['redirect'];
+          _handleRedirect(redirectData, notification);
+        } else {
+          // Fallback to notification type-based navigation
+          _handleNotificationByType(notification);
+        }
+      } catch (e) {
+        // If response is a JWT token or not valid JSON, handle by notification type
+        _handleNotificationByType(notification);
+      }
+    } else {
+      throw Exception('Failed to handle notification click: ${response.statusCode}');
+    }
+  } catch (e) {
+    _showErrorSnackbar('Error handling notification: $e');
+    // Fallback to type-based navigation
+    _handleNotificationByType(notification);
+  }
+}
+
+void _handleRedirect(Map<String, dynamic> redirectData, NotificationModel notification) {
+  switch (redirectData['type']) {
+    case 'content':
+    case 'post':
+    case 'feed':
+      _navigateToSpecificFeedPost(redirectData['itemId'] ?? redirectData['contentId']);
+      break;
     case 'message':
-      if (notification.sender != null) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ChatScreen(
-              currentUserId: AppData().currentUserId ?? '',
-              currentUserName: AppData().currentUserName ?? '',
-              currentUserPicture: AppData().currentUserProfilePicture ?? '',
-              currentUserEmail: AppData().currentUserEmail ?? '',
-              receiverId: notification.sender!.id,
-              receiverName: notification.sender!.name ?? 'Unknown',
-              receiverPicture: notification.sender!.picture ?? '',
-              receiverEmail: notification.sender!.email,
-            ),
-          ),
-        );
-      }
+    case 'chat':
+      _navigateToChat(notification);
       break;
-
-    case 'like':
-      // Extract post ID and sender ID from notification
-      final postId = notification.data?['postId'];
-      final senderId = notification.sender?.id;
-      
-      if (postId != null && senderId != null) {
-        // Navigate to the user's profile and scroll to the specific post
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => SpecificUserProfilePage(
-              userId: senderId,
-              // Pass the postId to scroll to it when the profile loads
-              scrollToPostId: postId,
-            ),
-          ),
-        );
-      } else if (senderId != null) {
-        // Fallback to sender's profile if postId is not available
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => SpecificUserProfilePage(
-              userId: senderId,
-            ),
-          ),
-        );
-      }
+    case 'profile':
+      _navigateToProfile(redirectData['userId'] ?? redirectData['profileId']);
       break;
-
-    case 'comment':
-      // Navigate to the specific commented post with comment section open
-      final postId = notification.data?['postId'];
-      final senderId = notification.sender?.id;
-      
-      if (postId != null && senderId != null) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => SpecificUserProfilePage(
-              userId: senderId,
-              scrollToPostId: postId,
-              openComments: true, // Flag to open comments
-            ),
-          ),
-        );
-      } else if (senderId != null) {
-        // Fallback to sender's profile
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => SpecificUserProfilePage(
-              userId: senderId,
-            ),
-          ),
-        );
-      }
-      break;
-
-    case 'mention':
-      // Navigate to the post or comment where user was mentioned
-      final postId = notification.data?['postId'];
-      final commentId = notification.data?['commentId'];
-      final senderId = notification.sender?.id;
-      
-      if (commentId != null && postId != null && senderId != null) {
-        // Navigate to comment screen with the specific comment highlighted
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => SpecificUserProfilePage(
-              userId: senderId,
-              scrollToPostId: postId,
-              highlightCommentId: commentId,
-            ),
-          ),
-        );
-      } else if (postId != null && senderId != null) {
-        // Navigate to post detail if only postId is available
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => SpecificUserProfilePage(
-              userId: senderId,
-              scrollToPostId: postId,
-            ),
-          ),
-        );
-      } else if (senderId != null) {
-        // Fallback to sender's profile
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => SpecificUserProfilePage(
-              userId: senderId,
-            ),
-          ),
-        );
-      }
-      break;
-
-    case 'share':
-      // Navigate to the shared post
-      final postId = notification.data?['postId'];
-      final senderId = notification.sender?.id;
-      
-      if (postId != null && senderId != null) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => SpecificUserProfilePage(
-              userId: senderId,
-              scrollToPostId: postId,
-            ),
-          ),
-        );
-      } else if (senderId != null) {
-        // Fallback to sender's profile
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => SpecificUserProfilePage(
-              userId: senderId,
-            ),
-          ),
-        );
-      }
-      break;
-
-    case 'friend_request':
-      // Navigate to friend request screen or profile
-      if (notification.sender != null) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => SpecificUserProfilePage(
-              userId: notification.sender!.id,
-            ),
-          ),
-        );
-      }
-      break;
-
     default:
-      // Fallback to generic notification details screen
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => NotificationDetailScreen(
-            notification: RemoteMessage(
-              data: {
-                'type': notification.type,
-                'content': notification.content,
-                'sender': notification.sender?.name ?? 'Unknown',
-                'createdAt': notification.createdAt,
-                ...?notification.data,
-              },
-            ),
-          ),
-        ),
-      );
+      _handleNotificationByType(notification);
+  }
+}
+
+void _handleNotificationByType(NotificationModel notification) {
+  switch (notification.type.toLowerCase()) {
+    case 'like':
+    case 'comment':
+    case 'share':
+    case 'mention':
+      // These are feed-related notifications, try to extract content ID
+      String? contentId = _extractContentIdFromNotification(notification);
+      if (contentId != null) {
+        _navigateToSpecificFeedPost(contentId, action: notification.type.toLowerCase());
+      } else {
+        // Navigate to general feed/home
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => Homepage()),
+          (route) => false,
+        );
+      }
       break;
+    
+    case 'message':
+      _navigateToChat(notification);
+      break;
+    
+    case 'friend_request':
+    case 'follow':
+      if (notification.sender != null) {
+        _navigateToProfile(notification.sender!.id);
+      }
+      break;
+    
+    default:
+      // Navigate to home/feed for unknown types
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => Homepage()),
+        (route) => false,
+      );
   }
 }
+
+String? _extractContentIdFromNotification(NotificationModel notification) {
+  // Try to extract content ID from notification data
+  if (notification.data != null) {
+    return notification.data!['contentId'] ?? 
+           notification.data!['postId'] ?? 
+           notification.data!['itemId'];
+  }
+  return null;
+}
+
+void _navigateToSpecificFeedPost(String contentId, {String? action}) {
+  // First try your existing PostDetailScreen if it exists
+  try {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SpecificPostScreen(
+          contentId: contentId,
+        ),
+      ),
+    );
+  } catch (e) {
+    // If PostDetailScreen doesn't exist or has issues, use our custom screen
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SpecificPostScreen(
+          contentId: contentId,
+          highlightAction: action,
+        ),
+      ),
+    );
+  }
+}
+
+void _navigateToChat(NotificationModel notification) {
+  if (notification.sender != null) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ChatScreen(
+          currentUserId: AppData().currentUserId ?? '',
+          currentUserName: AppData().currentUserName ?? '',
+          currentUserPicture: AppData().currentUserProfilePicture ?? '',
+          currentUserEmail: AppData().currentUserEmail ?? '',
+          receiverId: notification.sender!.id,
+          receiverName: notification.sender!.name ?? 'Unknown',
+          receiverPicture: notification.sender!.picture ?? '',
+          receiverEmail: notification.sender!.email,
+        ),
+      ),
+    );
+  }
+}
+
+void _navigateToProfile(String userId) {
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => SpecificUserProfilePage(
+        userId: userId,
+      ),
+    ),
+  );
+}
+
 
   IconData _getNotificationIcon(String type) {
     switch (type.toLowerCase()) {
@@ -775,190 +752,6 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
   }
 }
 
-class NotificationDetailScreen extends StatelessWidget {
-  final RemoteMessage notification;
-
-  const NotificationDetailScreen({super.key, required this.notification});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Notification Details',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.deepOrange,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildNotificationHeader(),
-            const SizedBox(height: 24),
-            _buildNotificationContent(),
-            if (notification.data.isNotEmpty) ...[
-              const SizedBox(height: 24),
-              _buildAdditionalData(),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNotificationHeader() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 56,
-          height: 56,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: _getNotificationColor(notification.data['type'] ?? ''),
-          ),
-          child: Icon(
-            _getNotificationIcon(notification.data['type'] ?? ''),
-            color: Colors.white,
-            size: 28,
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                notification.data['type']?.toString().toUpperCase() ?? 'NOTIFICATION',
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: Colors.deepOrange,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.2,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'From: ${notification.data['sender'] ?? 'Unknown'}',
-                style: const TextStyle(fontSize: 16, color: Colors.grey),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                DateFormat('MMMM d, yyyy • HH:mm').format(
-                  DateTime.parse(notification.data['createdAt'] ?? DateTime.now().toString()),
-                ),
-                style: const TextStyle(fontSize: 14, color: Colors.grey),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildNotificationContent() {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Text(
-          notification.data['content'] ?? 'No content available',
-          style: const TextStyle(fontSize: 16),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAdditionalData() {
-    final additionalData = notification.data.entries
-        .where((entry) => !['type', 'content', 'sender', 'createdAt'].contains(entry.key))
-        .toList();
-
-    if (additionalData.isEmpty) return const SizedBox();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Additional Information',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 8),
-        Card(
-          elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: additionalData
-                  .map((entry) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${entry.key}: ',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Expanded(
-                              child: Text(
-                                entry.value.toString(),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ))
-                  .toList(),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  IconData _getNotificationIcon(String type) {
-    switch (type.toLowerCase()) {
-      case 'message':
-        return Icons.message;
-      case 'comment':
-        return Icons.comment;
-      case 'like':
-        return Icons.favorite;
-      case 'friend_request':
-        return Icons.person_add;
-      case 'mention':
-        return Icons.alternate_email;
-      default:
-        return Icons.notifications;
-    }
-  }
-
-  Color _getNotificationColor(String type) {
-    switch (type.toLowerCase()) {
-      case 'message':
-        return Colors.blue;
-      case 'comment':
-        return Colors.green;
-      case 'like':
-        return Colors.red;
-      case 'friend_request':
-        return Colors.purple;
-      case 'mention':
-        return Colors.orange;
-      default:
-        return Colors.deepOrange;
-    }
-  }
-}
 
 class NotificationModel {
   final String id;

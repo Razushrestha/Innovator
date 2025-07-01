@@ -92,7 +92,7 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     try {
-      final url = Uri.parse('http://182.93.94.210:3064/api/v1/login');
+      final url = Uri.parse('http://182.93.94.210:3066/api/v1/login');
       final body = jsonEncode({
         'email': emailController.text.trim(),
         'password': passwordController.text.trim(),
@@ -273,7 +273,7 @@ class _LoginPageState extends State<LoginPage> {
     try {
       developer.log('Trying API login with Firebase token for existing user');
 
-      final url = Uri.parse('http://182.93.94.210:3064/api/v1/login');
+      final url = Uri.parse('http://182.93.94.210:3066/api/v1/login');
       final body = jsonEncode({
         'email': user.email,
         'firebaseToken': idToken ?? '',
@@ -305,7 +305,7 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<bool> _attemptGoogleLogin(User user, String? idToken) async {
     try {
-      final url = Uri.parse('http://182.93.94.210:3064/api/v1/login');
+      final url = Uri.parse('http://182.93.94.210:3066/api/v1/login');
 
       // Try multiple request formats to see which one works
       List<Map<String, dynamic>> requestFormats = [
@@ -342,7 +342,7 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<bool> _attemptGoogleRegister(User user, String? idToken) async {
     try {
-      final url = Uri.parse('http://182.93.94.210:3064/api/v1/register-user');
+      final url = Uri.parse('http://182.93.94.210:3066/api/v1/register-user');
 
       // Prepare registration data
       Map<String, dynamic> body = {

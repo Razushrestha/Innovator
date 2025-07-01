@@ -33,7 +33,7 @@ import 'package:innovator/screens/Follow/follow_Button.dart';
 import 'package:innovator/screens/Follow/follow-Service.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
-// Models
+// Updated Models for new API structure
 class Author {
   final String id;
   final String name;
@@ -57,87 +57,151 @@ class Author {
   }
 }
 
-class OptimizedFile {
-  final String url;
-  final String type;
-  final String format;
-  final List<String> qualities;
-  final String thumbnail;
-  final String original;
+// Updated StreamingUrls class to match new API
+class StreamingUrls {
   final String hls;
-  final String fileSize;
+  final String original;
+  final String thumbnail;
 
-  OptimizedFile({
-    required this.url,
-    required this.type,
-    required this.format,
-    required this.qualities,
-    required this.thumbnail,
-    required this.original,
+  StreamingUrls({
     required this.hls,
-    required this.fileSize,
+    required this.original,
+    required this.thumbnail,
   });
 
-  factory OptimizedFile.fromJson(Map<String, dynamic> json) {
-    return OptimizedFile(
-      url: json['url'] ?? '',
-      type: json['type'] ?? '',
-      format: json['format'] ?? '',
-      qualities: List<String>.from(json['qualities'] ?? []),
-      thumbnail: json['thumbnail'] ?? '',
-      original: json['original'] ?? '',
+  factory StreamingUrls.fromJson(Map<String, dynamic> json) {
+    return StreamingUrls(
       hls: json['hls'] ?? '',
-      fileSize: json['fileSize'] ?? '',
+      original: json['original'] ?? '',
+      thumbnail: json['thumbnail'] ?? '',
     );
   }
 }
 
+// Updated PlaybackSettings class
+class PlaybackSettings {
+  final bool autoplay;
+  final bool muted;
+  final bool loop;
+  final String preload;
+  final bool controls;
+  final bool playsInline;
+
+  PlaybackSettings({
+    required this.autoplay,
+    required this.muted,
+    required this.loop,
+    required this.preload,
+    required this.controls,
+    required this.playsInline,
+  });
+
+  factory PlaybackSettings.fromJson(Map<String, dynamic> json) {
+    return PlaybackSettings(
+      autoplay: json['autoplay'] ?? true,
+      muted: json['muted'] ?? true,
+      loop: json['loop'] ?? true,
+      preload: json['preload'] ?? 'auto',
+      controls: json['controls'] ?? true,
+      playsInline: json['playsInline'] ?? true,
+    );
+  }
+}
+
+// Updated FeedContent class for new API structure
 class FeedContent {
   final String id;
   final String status;
   final String type;
-  final List<String> files;
-  final List<OptimizedFile> optimizedFiles;
   final Author author;
   final DateTime createdAt;
-  final DateTime updatedAt;
+  final int views;
+  final bool isShared;
+  final String videoUrl;
+  final List<String> allFiles;
+  final StreamingUrls streamingUrls;
+  final PlaybackSettings playbackSettings;
+  final double engagementRate;
+  final bool canShare;
+  final bool canDownload;
+  final String contentType;
+  final String feedPosition;
+  final String loadPriority;
+  final bool hasMore;
+  
   int likes;
   int comments;
+  int shares;
   bool isLiked;
-  bool isFollowed;
+  bool isCommented;
+  bool isFollowing;
 
-  late final List<String> _mediaUrls;
-  late final bool _hasVideos;
+  final List<String> _mediaUrls;
+  final bool _hasVideos;
 
   FeedContent({
     required this.id,
     required this.status,
     required this.type,
-    required this.files,
-    required this.optimizedFiles,
     required this.author,
     required this.createdAt,
-    required this.updatedAt,
+    required this.views,
+    required this.isShared,
+    required this.videoUrl,
+    required this.allFiles,
+    required this.streamingUrls,
+    required this.playbackSettings,
+    required this.engagementRate,
+    required this.canShare,
+    required this.canDownload,
+    required this.contentType,
+    required this.feedPosition,
+    required this.loadPriority,
+    required this.hasMore,
     this.likes = 0,
     this.comments = 0,
+    this.shares = 0,
     this.isLiked = false,
-    this.isFollowed = false,
-  }) {
-    _mediaUrls = optimizedFiles.isNotEmpty
-        ? optimizedFiles.map((file) {
-            if (file.original.isNotEmpty) return 'http://182.93.94.210:3066${file.original}';
-            if (file.hls.isNotEmpty) return 'http://182.93.94.210:3066${file.hls}';
-            if (file.url.isNotEmpty) return 'http://182.93.94.210:3066${file.url}';
-            return '';
-          }).where((url) => url.isNotEmpty).toList()
-        : files.map((file) => 'http://182.93.94.210:3066$file').toList();
+    this.isCommented = false,
+    this.isFollowing = false,
+  }) : _mediaUrls = _buildMediaUrls(streamingUrls, videoUrl, allFiles),
+       _hasVideos = _checkHasVideos(contentType, videoUrl, allFiles);
 
-    _hasVideos = optimizedFiles.any((file) => file.type == 'video') ||
-        files.any((file) =>
-            file.toLowerCase().endsWith('.mp4') ||
-            file.toLowerCase().endsWith('.mov') ||
-            file.toLowerCase().endsWith('.avi') ||
-            file.toLowerCase().endsWith('.m3u8'));
+  // Static method to build media URLs
+  static List<String> _buildMediaUrls(StreamingUrls streamingUrls, String videoUrl, List<String> allFiles) {
+    final List<String> mediaUrls = [];
+    
+    // Add HLS URL if available
+    if (streamingUrls.hls.isNotEmpty) {
+      mediaUrls.add('http://182.93.94.210:3066${streamingUrls.hls}');
+    }
+    
+    // Add original video URL if available
+    if (streamingUrls.original.isNotEmpty) {
+      mediaUrls.add('http://182.93.94.210:3066${streamingUrls.original}');
+    }
+    
+    // Add main video URL if available
+    if (videoUrl.isNotEmpty) {
+      mediaUrls.add('http://182.93.94.210:3066$videoUrl');
+    }
+    
+    // Add other files
+    mediaUrls.addAll(allFiles.map((file) => 'http://182.93.94.210:3066$file'));
+    
+    // Remove duplicates
+    return mediaUrls.toSet().toList();
+  }
+
+  // Static method to check if content has videos
+  static bool _checkHasVideos(String contentType, String videoUrl, List<String> allFiles) {
+    return contentType == 'video' || 
+           videoUrl.isNotEmpty || 
+           allFiles.any((file) =>
+               file.toLowerCase().endsWith('.mp4') ||
+               file.toLowerCase().endsWith('.mov') ||
+               file.toLowerCase().endsWith('.avi') ||
+               file.toLowerCase().endsWith('.m3u8'));
   }
 
   factory FeedContent.fromJson(Map<String, dynamic> json) {
@@ -145,20 +209,29 @@ class FeedContent {
       id: json['_id'] ?? '',
       status: json['status'] ?? '',
       type: json['type'] ?? '',
-      files: List<String>.from(json['files'] ?? []),
-      optimizedFiles: List<OptimizedFile>.from(
-          (json['optimizedFiles'] ?? []).map((x) => OptimizedFile.fromJson(x))),
       author: Author.fromJson(json['author'] ?? {}),
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'])
           : DateTime.now(),
-      updatedAt: json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'])
-          : DateTime.now(),
+      views: json['views'] ?? 0,
+      isShared: json['isShared'] ?? false,
+      videoUrl: json['videoUrl'] ?? '',
+      allFiles: List<String>.from(json['allFiles'] ?? []),
+      streamingUrls: StreamingUrls.fromJson(json['streamingUrls'] ?? {}),
+      playbackSettings: PlaybackSettings.fromJson(json['playbackSettings'] ?? {}),
+      engagementRate: (json['engagementRate'] ?? 0.0).toDouble(),
+      canShare: json['canShare'] ?? true,
+      canDownload: json['canDownload'] ?? false,
+      contentType: json['contentType'] ?? '',
+      feedPosition: json['feedPosition'] ?? 'normal',
+      loadPriority: json['loadPriority'] ?? 'normal',
+      hasMore: json['hasMore'] ?? false,
       likes: json['likes'] ?? 0,
       comments: json['comments'] ?? 0,
+      shares: json['shares'] ?? 0,
       isLiked: json['liked'] ?? false,
-      isFollowed: json['followed'] ?? false,
+      isCommented: json['commented'] ?? false,
+      isFollowing: json['following'] ?? json['isFollowing'] ?? false,
     );
   }
 
@@ -166,14 +239,40 @@ class FeedContent {
   List<String> get mediaUrls => _mediaUrls;
 
   String? get thumbnailUrl {
-    if (optimizedFiles.isNotEmpty && optimizedFiles.first.thumbnail.isNotEmpty) {
-      return 'http://182.93.94.210:3066${optimizedFiles.first.thumbnail}';
+    if (streamingUrls.thumbnail.isNotEmpty) {
+      return 'http://182.93.94.210:3066${streamingUrls.thumbnail}';
     }
     return null;
   }
 }
 
-// Main Video Feed Page (Reels Style)
+// API Response wrapper for new structure
+class VideoApiResponse {
+  final int status;
+  final FeedContent? data;
+  final String? error;
+  final String message;
+
+  VideoApiResponse({
+    required this.status,
+    this.data,
+    this.error,
+    required this.message,
+  });
+
+  factory VideoApiResponse.fromJson(Map<String, dynamic> json) {
+    return VideoApiResponse(
+      status: json['status'] ?? 0,
+      data: json['data'] != null ? FeedContent.fromJson(json['data']) : null,
+      error: json['error'],
+      message: json['message'] ?? '',
+    );
+  }
+
+  bool get isSuccess => status == 200 && data != null;
+}
+
+// Main Video Feed Page (Updated for new API)
 class VideoFeedPage extends StatefulWidget {
   const VideoFeedPage({Key? key}) : super(key: key);
 
@@ -195,6 +294,9 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   bool _isRefreshing = false;
   final GlobalKey<RefreshIndicatorState> _refreshIndicatorKey = GlobalKey<RefreshIndicatorState>();
+  
+  // Track loaded video IDs to avoid duplicates
+  final Set<String> _loadedVideoIds = {};
 
   @override
   void initState() {
@@ -204,27 +306,51 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
   }
 
   Future<void> _initializeAppData() async {
-    await AppData().initialize();
-    if (AppData().isAuthenticated) {
-      await _loadVideoContent();
-    } else {
+    try {
+      await AppData().initialize();
+      
+      if (AppData().isAuthenticated) {
+        await _loadVideoContent();
+      } else {
+        setState(() {
+          _hasError = true;
+          _errorMessage = 'Please log in to view videos';
+        });
+      }
+    } catch (e) {
       setState(() {
         _hasError = true;
-        _errorMessage = 'Please log in to view videos';
+        _errorMessage = 'Initialization error: ${e.toString()}';
       });
     }
   }
 
   Future<void> _checkConnectivity() async {
     try {
-      final result = await InternetAddress.lookup('google.com');
+      // First try a simple HTTP request to your API server
+      final testResponse = await http.get(
+        Uri.parse('http://182.93.94.210:3066/api/v1/health'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      ).timeout(Duration(seconds: 10));
+      
       setState(() {
-        _isOnline = result.isNotEmpty && result[0].rawAddress.isNotEmpty;
+        _isOnline = testResponse.statusCode == 200 || testResponse.statusCode == 404; // 404 is OK if health endpoint doesn't exist
       });
-    } on SocketException catch (_) {
-      setState(() {
-        _isOnline = false;
-      });
+    } catch (e) {
+      // Fallback to Google DNS check
+      try {
+        final result = await InternetAddress.lookup('8.8.8.8');
+        setState(() {
+          _isOnline = result.isNotEmpty && result[0].rawAddress.isNotEmpty;
+        });
+      } on SocketException catch (e) {
+        setState(() {
+          _isOnline = false;
+        });
+      }
     }
   }
 
@@ -237,46 +363,50 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
     });
 
     try {
-      if (!_isOnline) {
-        setState(() {
-          _hasError = true;
-          _errorMessage = 'No internet connection';
-        });
-        return;
-      }
-
+      // Make API request to get single video reel
       final response = await _makeApiRequest();
+      
       if (response.statusCode == 200) {
-        final Map<String, dynamic> data = json.decode(response.body);
-        final List<dynamic> videoList = data['data']['videoContents'] ?? [];
-        final List<FeedContent> newVideos = [];
+        final Map<String, dynamic> responseData = json.decode(response.body);
+        final apiResponse = VideoApiResponse.fromJson(responseData);
+        
+        if (apiResponse.isSuccess && apiResponse.data != null) {
+          final content = apiResponse.data!;
+          
+          // Check if we already have this video to avoid duplicates
+          if (!_loadedVideoIds.contains(content.id) && content.hasVideos) {
+            final isFollowing = await FollowService.checkFollowStatus(
+              content.author.email,
+            );
+            
+            // Update the existing content with follow status instead of creating a new one
+            content.isFollowing = isFollowing;
 
-        for (var item in videoList) {
-          final content = FeedContent.fromJson(item);
-          final isFollowing = await FollowService.checkFollowStatus(
-            content.author.email,
-          );
-          newVideos.add(FeedContent(
-            id: content.id,
-            status: content.status,
-            type: content.type,
-            files: content.files,
-            optimizedFiles: content.optimizedFiles,
-            author: content.author,
-            createdAt: content.createdAt,
-            updatedAt: content.updatedAt,
-            likes: content.likes,
-            comments: content.comments,
-            isLiked: content.isLiked,
-            isFollowed: isFollowing,
-          ));
+            setState(() {
+              _videoContents.add(content);
+              _loadedVideoIds.add(content.id);
+              _hasMoreVideos = content.hasMore;
+              _isOnline = true; // We successfully got data, so we're online
+            });
+          } else {
+            // If duplicate or no videos, try to load next one
+            if (_hasMoreVideos && content.hasMore) {
+              // Add small delay to prevent rapid successive calls
+              await Future.delayed(Duration(milliseconds: 500));
+              _loadVideoContent();
+            } else {
+              // No more videos available
+              setState(() {
+                _hasMoreVideos = false;
+              });
+            }
+          }
+        } else {
+          setState(() {
+            _hasError = true;
+            _errorMessage = apiResponse.error ?? 'Failed to load video content';
+          });
         }
-
-        setState(() {
-          _videoContents.addAll(newVideos);
-          _hasMoreVideos = data['data']['hasMoreVideos'] ?? false;
-          _nextVideoCursor = data['data']['nextVideoCursor'];
-        });
       } else if (response.statusCode == 401) {
         setState(() {
           _hasError = true;
@@ -287,16 +417,23 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
             context,
             MaterialPageRoute(builder: (_) => LoginPage()),
             (route) => false);
+      } else if (response.statusCode == 404) {
+        // No more content available
+        setState(() {
+          _hasMoreVideos = false;
+        });
       } else {
         setState(() {
           _hasError = true;
           _errorMessage = 'Failed to load videos: ${response.statusCode}';
+          _isOnline = false; // Mark as offline if we get HTTP errors
         });
       }
     } catch (e) {
       setState(() {
         _hasError = true;
-        _errorMessage = 'No Internet Connection';
+        _errorMessage = 'Connection Error: ${e.toString()}';
+        _isOnline = false;
       });
     } finally {
       setState(() {
@@ -306,48 +443,55 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
   }
 
   Future<http.Response> _makeApiRequest() async {
-    final url = Uri.parse('http://182.93.94.210:3066/api/v1/list-contents?loadEngagement=true&quality=auto');
+    // Updated to use the new video-reel endpoint
+    final url = Uri.parse('http://182.93.94.210:3066/api/v1/video-reel');
     
-    return await http.get(
-      url,
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': 'Bearer ${AppData().authToken}',
-      },
-    ).timeout(Duration(seconds: 30));
+    try {
+      final response = await http.get(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': 'Bearer ${AppData().authToken}',
+        },
+      ).timeout(Duration(seconds: 30));
+      
+      return response;
+    } catch (e) {
+      rethrow;
+    }
   }
 
   Future<void> _refresh() async {
-  if (_isRefreshing) return;
-  
-  setState(() {
-    _isRefreshing = true;
-    _videoContents.clear();
-    _nextVideoCursor = null;
-    _hasError = false;
-    _hasMoreVideos = true;
-    _currentPage = 0;
-  });
-  
-  try {
-    await _loadVideoContent();
-    // Reset page controller to first video
-    if (_videoContents.isNotEmpty && _pageController.hasClients) {
-      _pageController.animateToPage(
-        0,
-        duration: Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
-    }
-  } finally {
-    if (mounted) {
-      setState(() {
-        _isRefreshing = false;
-      });
+    if (_isRefreshing) return;
+    
+    setState(() {
+      _isRefreshing = true;
+      _videoContents.clear();
+      _loadedVideoIds.clear();
+      _nextVideoCursor = null;
+      _hasError = false;
+      _hasMoreVideos = true;
+      _currentPage = 0;
+    });
+    
+    try {
+      await _loadVideoContent();
+      if (_videoContents.isNotEmpty && _pageController.hasClients) {
+        _pageController.animateToPage(
+          0,
+          duration: Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRefreshing = false;
+        });
+      }
     }
   }
-}
 
   @override
   void dispose() {
@@ -357,52 +501,127 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
   }
 
   Widget _buildReelsView() {
-  return RefreshIndicator(
-    key: _refreshIndicatorKey,
-    onRefresh: _refresh,
-    color: Colors.deepOrange,
-    backgroundColor: Colors.white,
-    strokeWidth: 3.0,
-    displacement: 40.0,
-    child: PageView.builder(
-      controller: _pageController,
-      scrollDirection: Axis.vertical,
-      itemCount: _videoContents.length + (_hasMoreVideos ? 1 : 0),
-      onPageChanged: (index) {
-        setState(() {
-          _currentPage = index;
-        });
-        // Load more videos when we're near the end
-        if (index >= _videoContents.length - 3 && _hasMoreVideos && !_isLoading) {
-          _loadVideoContent();
-        }
-      },
-      itemBuilder: (context, index) {
-        if (index == _videoContents.length) {
-          return _isLoading
-              ? Center(child: CircularProgressIndicator())
-              : SizedBox.shrink();
-        }
-        
-        return ReelsVideoItem(
-          content: _videoContents[index],
-          onFollowToggled: (isFollowed) {
-            setState(() {
-              _videoContents[index].isFollowed = isFollowed;
-            });
-          },
-          onLikeToggled: (isLiked) {
-            setState(() {
-              _videoContents[index].isLiked = isLiked;
-              _videoContents[index].likes += isLiked ? 1 : -1;
-            });
-          },
-          isCurrent: index == _currentPage,
-        );
-      },
-    ),
-  );
-}
+    return RefreshIndicator(
+      key: _refreshIndicatorKey,
+      onRefresh: _refresh,
+      color: Colors.deepOrange,
+      backgroundColor: Colors.white,
+      strokeWidth: 3.0,
+      displacement: 40.0,
+      child: PageView.builder(
+        controller: _pageController,
+        scrollDirection: Axis.vertical,
+        // Prevent scrolling when no more videos and not loading
+        physics: (!_hasMoreVideos && !_isLoading && _videoContents.isNotEmpty) 
+            ? NeverScrollableScrollPhysics() 
+            : AlwaysScrollableScrollPhysics(),
+        itemCount: _videoContents.length + (_hasMoreVideos ? 1 : 0),
+        onPageChanged: (index) {
+          setState(() {
+            _currentPage = index;
+          });
+          // Load more videos when approaching the end
+          if (index >= _videoContents.length - 2 && _hasMoreVideos && !_isLoading) {
+            _loadVideoContent();
+          }
+        },
+        itemBuilder: (context, index) {
+          if (index == _videoContents.length) {
+            // Show loading or "no more videos" message
+            if (_isLoading) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(color: Colors.deepOrange),
+                    SizedBox(height: 16),
+                    Text(
+                      'Loading more videos...',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ],
+                ),
+              );
+            } else if (!_hasMoreVideos) {
+              // No more videos available - this should not be reached due to physics but keep as fallback
+              return Container(
+                color: Colors.black,
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Lottie.asset(
+                        'animation/No-Content.json', 
+                        height: 150,
+                        repeat: false,
+                      ),
+                      SizedBox(height: 20),
+                      Text(
+                        'You\'ve reached the end!',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        'Pull down to refresh for new content',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 14,
+                        ),
+                      ),
+                      SizedBox(height: 20),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.deepOrange,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        ),
+                        onPressed: _refresh,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.refresh, color: Colors.white, size: 20),
+                            SizedBox(width: 8),
+                            Text(
+                              'Refresh for more',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+            return SizedBox.shrink();
+          }
+          
+          return ReelsVideoItem(
+            content: _videoContents[index],
+            onFollowToggled: (isFollowed) {
+              setState(() {
+                _videoContents[index].isFollowing = isFollowed;
+              });
+            },
+            onLikeToggled: (isLiked) {
+              setState(() {
+                _videoContents[index].isLiked = isLiked;
+                _videoContents[index].likes += isLiked ? 1 : -1;
+              });
+            },
+            isCurrent: index == _currentPage,
+            isLastVideo: !_hasMoreVideos && index == _videoContents.length - 1,
+          );
+        },
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -421,15 +640,18 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                         : 'animation/No_Internet.json',
                     height: 200,
                   ),
-                  Text(
-                    _errorMessage,
-                    style: TextStyle(
-                      color: _errorMessage.contains('expired')
-                          ? Colors.orange
-                          : Colors.red,
-                      fontSize: 16,
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                    child: Text(
+                      _errorMessage,
+                      style: TextStyle(
+                        color: _errorMessage.contains('expired')
+                            ? Colors.orange
+                            : Colors.red,
+                        fontSize: 16,
+                      ),
+                      textAlign: TextAlign.center,
                     ),
-                    textAlign: TextAlign.center,
                   ),
                   SizedBox(height: 16),
                   ElevatedButton(
@@ -440,7 +662,10 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                       ),
                     ),
                     onPressed: _hasError && _errorMessage.contains('log in')
-                        ? () => Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => LoginPage()), (route) => false)
+                        ? () => Navigator.pushAndRemoveUntil(
+                            context,
+                            MaterialPageRoute(builder: (_) => LoginPage()),
+                            (route) => false)
                         : _refresh,
                     child: Text(
                       _hasError && _errorMessage.contains('log in')
@@ -458,26 +683,41 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Lottie.asset('animation/No-Content.json', height: 200),
-                  Text('No video content available'),
+                  Text(
+                    'No video content available',
+                    style: TextStyle(color: Colors.white, fontSize: 16),
+                  ),
                   SizedBox(height: 16),
                   ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.deepOrange,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                    ),
                     onPressed: _refresh,
-                    child: Text('Refresh'),
+                    child: Text(
+                      'Refresh',
+                      style: TextStyle(color: Colors.white),
+                    ),
                   ),
                 ],
               ),
             )
           else if (_isRefreshing && _videoContents.isEmpty)
-  Center(
-    child: Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        CircularProgressIndicator(color: Colors.deepOrange),
-        SizedBox(height: 16),
-        Text('Loading fresh content...', style: TextStyle(color: Colors.white)),
-      ],
-    ),
-  )
+            Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(color: Colors.deepOrange),
+                  SizedBox(height: 16),
+                  Text(
+                    'Loading fresh content...',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ],
+              ),
+            )
           else
             _buildReelsView(),
           
@@ -564,12 +804,13 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
   }
 }
 
-// Reels Video Item Widget
+// Updated Reels Video Item Widget
 class ReelsVideoItem extends StatefulWidget {
   final FeedContent content;
   final Function(bool)? onFollowToggled;
   final Function(bool) onLikeToggled;
   final bool isCurrent;
+  final bool isLastVideo;
 
   const ReelsVideoItem({
     Key? key,
@@ -577,6 +818,7 @@ class ReelsVideoItem extends StatefulWidget {
     this.onFollowToggled,
     required this.onLikeToggled,
     required this.isCurrent,
+    this.isLastVideo = false,
   }) : super(key: key);
 
   @override
@@ -595,16 +837,7 @@ class _ReelsVideoItemState extends State<ReelsVideoItem> {
   void initState() {
     super.initState();
     _isLiked = widget.content.isLiked;
-    _isFollowing = widget.content.isFollowed;
-  }
-
-  Color _getTypeColor(String type) {
-    switch (type.toLowerCase()) {
-      case 'video':
-        return Colors.red.shade600;
-      default:
-        return Colors.grey.shade600;
-    }
+    _isFollowing = widget.content.isFollowing;
   }
 
   bool _isAuthorCurrentUser() {
@@ -666,11 +899,23 @@ class _ReelsVideoItemState extends State<ReelsVideoItem> {
             ],
           ),
           SizedBox(height: 20),
-          // Share Button
-          IconButton(
-            icon: Icon(Icons.share, color: Colors.white, size: 32),
-            onPressed: () => _showShareOptions(context),
-          ),
+          // Share Button (only show if canShare is true)
+          if (widget.content.canShare)
+            Column(
+              children: [
+                IconButton(
+                  icon: Icon(Icons.share, color: Colors.white, size: 32),
+                  onPressed: () => _showShareOptions(context),
+                ),
+                Text(
+                  '${widget.content.shares}',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
           SizedBox(height: 20),
           // More Options
           IconButton(
@@ -683,105 +928,135 @@ class _ReelsVideoItemState extends State<ReelsVideoItem> {
   }
 
   Widget _buildUserInfo() {
-  return Positioned(
-    left: 16,
-    bottom: 80,
-    right: 100,
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Author Info
-        Row(
-          children: [
-            CircleAvatar(
-              radius: 16,
-              backgroundImage: widget.content.author.picture.isNotEmpty
-                  ? CachedNetworkImageProvider(
-                      'http://182.93.94.210:3066${widget.content.author.picture}')
-                  : null,
-              child: widget.content.author.picture.isEmpty
-                  ? Text(widget.content.author.name.isNotEmpty
-                      ? widget.content.author.name[0].toUpperCase()
-                      : '?')
-                  : null,
-            ),
-            SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                widget.content.author.name,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-                overflow: TextOverflow.ellipsis,
+    return Positioned(
+      left: 16,
+      bottom: 80,
+      right: 100,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Author Info
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 16,
+                backgroundImage: widget.content.author.picture.isNotEmpty
+                    ? CachedNetworkImageProvider(widget.content.author.picture)
+                    : null,
+                child: widget.content.author.picture.isEmpty
+                    ? Text(widget.content.author.name.isNotEmpty
+                        ? widget.content.author.name[0].toUpperCase()
+                        : '?')
+                    : null,
               ),
-            ),
-            if (!_isAuthorCurrentUser()) ...[
               SizedBox(width: 8),
-              FollowButton(
-                targetUserEmail: widget.content.author.email,
-                initialFollowStatus: _isFollowing,
-                onFollowSuccess: () {
-                  setState(() {
-                    _isFollowing = true;
-                  });
-                  widget.onFollowToggled?.call(true);
-                },
-                onUnfollowSuccess: () {
-                  setState(() {
-                    _isFollowing = false;
-                  });
-                  widget.onFollowToggled?.call(false);
-                },
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.content.author.name,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    // Show views count and engagement rate
+                    Text(
+                      '${widget.content.views} views • ${widget.content.engagementRate.toStringAsFixed(1)}% engagement',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
               ),
+              if (!_isAuthorCurrentUser()) ...[
+                SizedBox(width: 8),
+                FollowButton(
+                  targetUserEmail: widget.content.author.email,
+                  initialFollowStatus: _isFollowing,
+                  onFollowSuccess: () {
+                    setState(() {
+                      _isFollowing = true;
+                    });
+                    widget.onFollowToggled?.call(true);
+                  },
+                  onUnfollowSuccess: () {
+                    setState(() {
+                      _isFollowing = false;
+                    });
+                    widget.onFollowToggled?.call(false);
+                  },
+                ),
+              ],
             ],
-          ],
-        ),
-        SizedBox(height: 8),
-        // Expandable Status Text
-        if (widget.content.status.isNotEmpty)
-          ExpandableStatusText(
-            text: widget.content.status,
-            maxLines: 2,
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-              height: 1.3,
-            ),
           ),
-      ],
-    ),
-  );
-}
-
- Widget _buildCommentsSection() {
-  return Positioned(
-    bottom: 0,
-    left: 0,
-    right: 0,
-    child: AnimatedContainer(
-      duration: Duration(milliseconds: 300),
-      height: _showComments ? MediaQuery.of(context).size.height * 0.5 : 0, // Dynamic height
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: _showComments
-          ? SingleChildScrollView(
-              child: CommentSection(
-                contentId: widget.content.id,
-                onCommentAdded: () {
-                  setState(() {
-                    widget.content.comments++;
-                  });
-                },
+          SizedBox(height: 8),
+          // Feed Position and Load Priority Info (Debug info, remove in production)
+          if (widget.content.feedPosition != 'normal' || widget.content.loadPriority != 'normal')
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              margin: EdgeInsets.only(bottom: 8),
+              decoration: BoxDecoration(
+                color: Colors.black45,
+                borderRadius: BorderRadius.circular(12),
               ),
-            )
-          : SizedBox.shrink(),
-    ),
-  );
-}
+              child: Text(
+                '${widget.content.feedPosition} • ${widget.content.loadPriority}',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 10,
+                ),
+              ),
+            ),
+          // Expandable Status Text
+          if (widget.content.status.isNotEmpty)
+            ExpandableStatusText(
+              text: widget.content.status,
+              maxLines: 2,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                height: 1.3,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCommentsSection() {
+    return Positioned(
+      bottom: 0,
+      left: 0,
+      right: 0,
+      child: AnimatedContainer(
+        duration: Duration(milliseconds: 300),
+        height: _showComments ? MediaQuery.of(context).size.height * 0.5 : 0,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: _showComments
+            ? SingleChildScrollView(
+                child: CommentSection(
+                  contentId: widget.content.id,
+                  onCommentAdded: () {
+                    setState(() {
+                      widget.content.comments++;
+                    });
+                  },
+                ),
+              )
+            : SizedBox.shrink(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -815,6 +1090,7 @@ class _ReelsVideoItemState extends State<ReelsVideoItem> {
                       width: MediaQuery.of(context).size.width,
                       thumbnailUrl: widget.content.thumbnailUrl,
                       autoPlay: widget.isCurrent,
+                      playbackSettings: widget.content.playbackSettings,
                     )
                   : Center(child: Text('No video available', style: TextStyle(color: Colors.white))),
             ),
@@ -842,6 +1118,57 @@ class _ReelsVideoItemState extends State<ReelsVideoItem> {
           _buildUserInfo(),
           _buildSideActionBar(),
           _buildCommentsSection(),
+          
+          // Show "End of Videos" overlay on last video when no more videos
+          if (widget.isLastVideo)
+            Positioned(
+              top: MediaQuery.of(context).size.height * 0.3,
+              left: 0,
+              right: 0,
+              child: Container(
+                padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                child: Column(
+                  children: [
+                    Container(
+                      padding: EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.8),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.deepOrange, width: 2),
+                      ),
+                      child: Column(
+                        children: [
+                          Icon(
+                            Icons.check_circle,
+                            color: Colors.deepOrange,
+                            size: 40,
+                          ),
+                          SizedBox(height: 12),
+                          Text(
+                            'You\'ve reached the end!',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            'Pull down to refresh for new content',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 14,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -874,6 +1201,15 @@ class _ReelsVideoItemState extends State<ReelsVideoItem> {
               _copyLink();
             },
           ),
+          if (widget.content.canDownload)
+            ListTile(
+              leading: Icon(Icons.download, color: Colors.green),
+              title: Text('Download'),
+              onTap: () {
+                Navigator.pop(context);
+                _downloadContent();
+              },
+            ),
           ListTile(
             leading: Icon(Icons.flag, color: Colors.orange),
             title: Text('Report'),
@@ -905,11 +1241,24 @@ class _ReelsVideoItemState extends State<ReelsVideoItem> {
 
   void _copyLink() {
     Clipboard.setData(ClipboardData(
-      text: 'http://182.93.94.210:3066/content/${widget.content.id}',
+      text: 'http://182.93.94.210:3066/api/v1/video-reel/${widget.content.id}',
     ));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Link copied to clipboard')),
     );
+  }
+
+  void _downloadContent() {
+    if (widget.content.canDownload) {
+      // Implement download functionality
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Download started...')),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Download not allowed for this content')),
+      );
+    }
   }
 
   Future<void> _deleteContent() async {
@@ -948,6 +1297,13 @@ class _ReelsVideoItemState extends State<ReelsVideoItem> {
   }
 
   void _showShareOptions(BuildContext context) {
+    if (!widget.content.canShare) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Sharing is not allowed for this content')),
+      );
+      return;
+    }
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white,
@@ -994,6 +1350,7 @@ class _ReelsVideoItemState extends State<ReelsVideoItem> {
         (url) => url.toLowerCase().endsWith('.mp4') ||
             url.toLowerCase().endsWith('.mov') ||
             url.toLowerCase().endsWith('.avi'),
+        orElse: () => widget.content.mediaUrls.isNotEmpty ? widget.content.mediaUrls.first : '',
       );
 
       await Share.share(
@@ -1008,8 +1365,7 @@ class _ReelsVideoItemState extends State<ReelsVideoItem> {
   }
 }
 
-// Auto Play Video Widget (Updated for Reels)
-// Auto Play Video Widget (Fixed for proper autoplay on scroll)
+// Updated Auto Play Video Widget (Enhanced for new API with playback settings)
 class AutoPlayVideoWidget extends StatefulWidget {
   final String url;
   final List<String> fallbackUrls;
@@ -1017,6 +1373,7 @@ class AutoPlayVideoWidget extends StatefulWidget {
   final double? width;
   final String? thumbnailUrl;
   final bool autoPlay;
+  final PlaybackSettings? playbackSettings;
 
   const AutoPlayVideoWidget({
     required this.url,
@@ -1025,6 +1382,7 @@ class AutoPlayVideoWidget extends StatefulWidget {
     this.width,
     this.thumbnailUrl,
     this.autoPlay = true,
+    this.playbackSettings,
     Key? key,
   }) : super(key: key);
 
@@ -1033,16 +1391,22 @@ class AutoPlayVideoWidget extends StatefulWidget {
 }
 
 class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
-    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
+    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver, TickerProviderStateMixin {
   VideoPlayerController? _controller;
   bool _initialized = false;
   bool _isMuted = false;
   bool _disposed = false;
   Timer? _initTimer;
   bool _isPlaying = true;
-  bool _wasPlayingBeforePause = true; // Track if video was playing before manual pause
+  bool _wasPlayingBeforePause = true;
   final String videoId = UniqueKey().toString();
   int _currentUrlIndex = 0;
+  
+  // Animation controllers for sound indicators
+  late AnimationController _soundWaveController;
+  late AnimationController _volumeBarController;
+  late Animation<double> _soundWaveAnimation;
+  late Animation<double> _volumeBarAnimation;
 
   @override
   bool get wantKeepAlive => _initialized;
@@ -1051,6 +1415,36 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    
+    // Initialize animation controllers
+    _soundWaveController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    
+    _volumeBarController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    
+    _soundWaveAnimation = Tween<double>(
+      begin: 0.5,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _soundWaveController,
+      curve: Curves.easeInOut,
+    ));
+    
+    _volumeBarAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _volumeBarController,
+      curve: Curves.easeOut,
+    ));
+    
+    // Use playback settings from API - start unmuted for better user experience
+    _isMuted = widget.playbackSettings?.muted ?? false;
     _initializeVideoPlayer();
   }
 
@@ -1058,15 +1452,12 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
   void didUpdateWidget(covariant AutoPlayVideoWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     
-    // Handle autoplay changes based on visibility
     if (widget.autoPlay != oldWidget.autoPlay) {
       if (widget.autoPlay && _initialized && !_disposed) {
-        // Video should start playing
         if (_wasPlayingBeforePause) {
           _resumeVideo();
         }
       } else if (!widget.autoPlay && _initialized && !_disposed) {
-        // Video should pause
         _pauseVideo();
       }
     }
@@ -1102,20 +1493,20 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
             Uri.parse(currentUrl),
             formatHint: VideoFormat.hls,
             videoPlayerOptions: VideoPlayerOptions(
-              mixWithOthers: true,
+              mixWithOthers: widget.playbackSettings?.playsInline ?? true,
               allowBackgroundPlayback: false,
             ),
           )
-        : VideoPlayerController.networkUrl(Uri.parse(
-            currentUrl),
+        : VideoPlayerController.networkUrl(
+            Uri.parse(currentUrl),
             videoPlayerOptions: VideoPlayerOptions(
-              mixWithOthers: true,
+              mixWithOthers: widget.playbackSettings?.playsInline ?? true,
               allowBackgroundPlayback: false,
             ),
           );
 
     _controller!
-      ..setLooping(true)
+      ..setLooping(widget.playbackSettings?.loop ?? true)
       ..setVolume(_isMuted ? 0.0 : 1.0)
       ..initialize().then((_) {
         _initTimer?.cancel();
@@ -1123,10 +1514,20 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
           setState(() {
             _initialized = true;
           });
-          // Auto-play only if the widget is marked for autoplay
-          if (mounted && widget.autoPlay && _wasPlayingBeforePause) {
+          // Start sound animations if unmuted and playing
+          if (!_isMuted && _isPlaying) {
+            _startSoundAnimations();
+          }
+          // Auto-play based on API settings and widget autoPlay
+          if (mounted && 
+              widget.autoPlay && 
+              _wasPlayingBeforePause && 
+              (widget.playbackSettings?.autoplay ?? true)) {
             _controller!.play();
             _isPlaying = true;
+            if (!_isMuted) {
+              _startSoundAnimations();
+            }
           }
         }
       }).catchError((error) {
@@ -1135,6 +1536,19 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
           _tryNextUrl();
         }
       });
+  }
+
+  void _startSoundAnimations() {
+    if (!_isMuted && _isPlaying) {
+      _soundWaveController.repeat(reverse: true);
+      _volumeBarController.forward();
+    }
+  }
+
+  void _stopSoundAnimations() {
+    _soundWaveController.stop();
+    _soundWaveController.reset();
+    _volumeBarController.reverse();
   }
 
   void _tryNextUrl() {
@@ -1161,6 +1575,7 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
   void _pauseVideo() {
     if (_controller != null && _initialized && !_disposed) {
       _controller!.pause();
+      _stopSoundAnimations();
       setState(() {
         _isPlaying = false;
       });
@@ -1170,6 +1585,9 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
   void _resumeVideo() {
     if (_controller != null && _initialized && !_disposed) {
       _controller!.play();
+      if (!_isMuted) {
+        _startSoundAnimations();
+      }
       setState(() {
         _isPlaying = true;
       });
@@ -1185,15 +1603,20 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
       case AppLifecycleState.paused:
       case AppLifecycleState.inactive:
         _controller!.pause();
+        _stopSoundAnimations();
         break;
       case AppLifecycleState.resumed:
         if (_initialized && mounted && _isPlaying && widget.autoPlay) {
           _controller!.play();
+          if (!_isMuted) {
+            _startSoundAnimations();
+          }
         }
         break;
       case AppLifecycleState.detached:
       case AppLifecycleState.hidden:
         _controller!.pause();
+        _stopSoundAnimations();
         break;
     }
   }
@@ -1202,6 +1625,8 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
   void dispose() {
     _disposed = true;
     _initTimer?.cancel();
+    _soundWaveController.dispose();
+    _volumeBarController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _controller?.dispose();
     _controller = null;
@@ -1213,11 +1638,15 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
 
     setState(() {
       _isPlaying = !_isPlaying;
-      _wasPlayingBeforePause = _isPlaying; // Update the tracking variable
+      _wasPlayingBeforePause = _isPlaying;
       if (_isPlaying) {
         _controller!.play();
+        if (!_isMuted) {
+          _startSoundAnimations();
+        }
       } else {
         _controller!.pause();
+        _stopSoundAnimations();
       }
     });
   }
@@ -1228,7 +1657,64 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
     setState(() {
       _isMuted = !_isMuted;
       _controller!.setVolume(_isMuted ? 0.0 : 1.0);
+      
+      if (_isMuted) {
+        _stopSoundAnimations();
+      } else if (_isPlaying) {
+        _startSoundAnimations();
+      }
     });
+  }
+
+  Widget _buildSoundWaveIndicator() {
+    return AnimatedBuilder(
+      animation: _soundWaveAnimation,
+      builder: (context, child) {
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: List.generate(3, (index) {
+            double delay = index * 0.2;
+            double animationValue = (_soundWaveAnimation.value + delay) % 1.0;
+            return Container(
+              margin: EdgeInsets.symmetric(horizontal: 1),
+              width: 3,
+              height: 12 + (8 * animationValue),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.8),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            );
+          }),
+        );
+      },
+    );
+  }
+
+  Widget _buildVolumeBarIndicator() {
+    return AnimatedBuilder(
+      animation: _volumeBarAnimation,
+      builder: (context, child) {
+        return Container(
+          width: 4,
+          height: 20,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.3),
+            borderRadius: BorderRadius.circular(2),
+          ),
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: Container(
+              width: 4,
+              height: 20 * _volumeBarAnimation.value,
+              decoration: BoxDecoration(
+                color: Colors.green,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -1248,8 +1734,14 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
                     fit: BoxFit.cover,
                     width: double.infinity,
                     height: double.infinity,
-                    placeholder: (context, url) => Center(
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                    placeholder: (context, url) => Container(
+                      color: Colors.grey.shade800,
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.deepOrange,
+                        ),
+                      ),
                     ),
                     errorWidget: (context, url, error) {
                       return Container(
@@ -1276,7 +1768,10 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
                     ),
                   ),
                 Center(
-                  child: CircularProgressIndicator(strokeWidth: 2),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.deepOrange,
+                  ),
                 ),
               ],
             )
@@ -1296,50 +1791,93 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
                   ),
                 ),
                 if (!_isPlaying)
-                  Icon(
-                    Icons.play_arrow,
-                    size: 50,
-                    color: Colors.white.withOpacity(0.7),
-                  ),
-                Positioned(
-                  bottom: 20,
-                  right: 20,
-                  child: IconButton(
-                    icon: Icon(
-                      _isMuted ? Icons.volume_off : Icons.volume_up,
-                      color: Colors.white,
-                      size: 28,
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.3),
+                      shape: BoxShape.circle,
                     ),
-                    onPressed: _toggleMute,
+                    child: Icon(
+                      Icons.play_arrow,
+                      size: 50,
+                      color: Colors.white.withOpacity(0.9),
+                    ),
                   ),
-                ),
+                // Sound wave indicator when unmuted and playing
+                if (!_isMuted && _isPlaying && _initialized)
+                  Positioned(
+                    top: 20,
+                    left: 20,
+                    child: Container(
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.6),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.green.withOpacity(0.5), width: 1),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.volume_up,
+                            color: Colors.green,
+                            size: 16,
+                          ),
+                          SizedBox(width: 6),
+                          _buildSoundWaveIndicator(),
+                          SizedBox(width: 6),
+                          Text(
+                            'SOUND ON',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                // Show controls if enabled in playback settings
+                if (widget.playbackSettings?.controls ?? true)
+                  Positioned(
+                    bottom: 20,
+                    right: 20,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.5),
+                        shape: BoxShape.circle,
+                        border: _isMuted 
+                          ? null 
+                          : Border.all(color: Colors.green.withOpacity(0.7), width: 2),
+                      ),
+                      child: Stack(
+                        children: [
+                          IconButton(
+                            icon: Icon(
+                              _isMuted ? Icons.volume_off : Icons.volume_up,
+                              color: _isMuted ? Colors.white : Colors.green,
+                              size: 28,
+                            ),
+                            onPressed: _toggleMute,
+                          ),
+                          // Volume bar indicator
+                          if (!_isMuted && _isPlaying)
+                            Positioned(
+                              right: 2,
+                              top: 6,
+                              child: _buildVolumeBarIndicator(),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
               ],
             ),
     );
   }
 }
 
-// Helper Extension for Time Formatting
-extension DateTimeExtension on DateTime {
-  String timeAgo() {
-    final difference = DateTime.now().difference(this);
-    if (difference.inDays > 365) {
-      return '${(difference.inDays / 365).floor()} year(s) ago';
-    } else if (difference.inDays > 30) {
-      return '${(difference.inDays / 30).floor()} month(s) ago';
-    } else if (difference.inDays > 0) {
-      return '${difference.inDays} day(s) ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours} hour(s) ago';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes} minute(s) ago';
-    } else {
-      return 'Just now';
-    }
-  }
-}
-
-
+// Expandable Status Text Widget
 class ExpandableStatusText extends StatefulWidget {
   final String text;
   final int maxLines;
@@ -1378,7 +1916,7 @@ class _ExpandableStatusTextState extends State<ExpandableStatusText> {
       textDirection: TextDirection.ltr,
     );
 
-    textPainter.layout(maxWidth: MediaQuery.of(context).size.width - 120); // Account for padding and side buttons
+    textPainter.layout(maxWidth: MediaQuery.of(context).size.width - 120);
 
     if (textPainter.didExceedMaxLines) {
       setState(() {
@@ -1418,6 +1956,6 @@ class _ExpandableStatusTextState extends State<ExpandableStatusText> {
             ),
           ),
       ],
-    );
+    ); /// Initlizing the App the And o ro98z ro br  ibir n bdicrf j ihhsdf j   hro  iu zh  ejnichve 
   }
 }

@@ -13,13 +13,14 @@ class MQTTService {
 
   MqttServerClient? _client;
   final String _host = '182.93.94.210';
-  final int _port = 1883;
+  final int _port = 1885;
   final String _identifier = DateTime.now().millisecondsSinceEpoch.toString();
   final Queue<Map<String, dynamic>> _messageQueue = Queue();
   String? _currentUserId;
   String? _token;
   final Map<String, Function(String)> _topicCallbacks = {};
   Timer? _reconnectTimer;
+  Timer? _presenceHeartbeatTimer;
   bool _isConnecting = false;
   int _reconnectAttempts = 0;
   final int _maxReconnectAttempts = 5;
@@ -28,11 +29,9 @@ class MQTTService {
 
   Stream<Map<String, dynamic>> get messageStream => _messageStreamController.stream;
 
-
-bool isConnected() {
-  return _client?.connectionStatus?.state == MqttConnectionState.connected;
-}
-
+  bool isConnected() {
+    return _client?.connectionStatus?.state == MqttConnectionState.connected;
+  }
 
   Future<void> connect(String token, String userId) async {
     if (_client?.connectionStatus?.state == MqttConnectionState.connected) {
@@ -83,6 +82,7 @@ bool isConnected() {
       _reconnectAttempts = 0;
       _subscribeToPersonalTopics();
       _processMessageQueue();
+      _startPresenceHeartbeat();
       _reconnectTimer?.cancel();
     } catch (e) {
       developer.log('MQTTService: Connection Exception: $e');
@@ -126,13 +126,19 @@ bool isConnected() {
 
     final topics = [
       'user/$_currentUserId/messages',
+      'user/$_currentUserId/presence',
+      'user/$_currentUserId/notifications',
+      'presence/+', // Subscribe to all presence updates
+      'presence/broadcast', // Subscribe to presence broadcasts
+      'presence/request', // Subscribe to presence requests
     ];
 
+    // Clear existing subscriptions
     for (var topic in _topicCallbacks.keys.toList()) {
-    _client!.unsubscribe(topic);
-    developer.log('MQTTService: Unsubscribed from topic: $topic');
-  }
-  _topicCallbacks.clear();
+      _client!.unsubscribe(topic);
+      developer.log('MQTTService: Unsubscribed from topic: $topic');
+    }
+    _topicCallbacks.clear();
 
     for (var topic in topics) {
       developer.log('MQTTService: Subscribing to topic: $topic');
@@ -144,32 +150,123 @@ bool isConnected() {
       final payload = MqttPublishPayload.bytesToStringAsString(message.payload.message);
       final topic = c[0].topic;
       developer.log('MQTTService: Received message on topic: $topic, payload: $payload');
+      
+      // Handle presence-related topics
+      if (topic.startsWith('presence/') || topic.contains('/presence')) {
+        _handlePresenceMessage(topic, payload);
+      }
+      
       _topicCallbacks[topic]?.call(payload);
 
       try {
         final data = jsonDecode(payload);
-        if (data is Map<String, dynamic> && data['type'] == 'new_message' && data['message'] != null) {
-          if (_client?.connectionStatus?.state == MqttConnectionState.connected) {
+        if (data is Map<String, dynamic>) {
+          if (data['type'] == 'new_message' && data['message'] != null) {
+            if (_client?.connectionStatus?.state == MqttConnectionState.connected) {
+              _messageStreamController.add(data);
+              developer.log('MQTTService: Added new_message to stream: $data');
+            } else {
+              _messageQueue.add(data);
+              developer.log('MQTTService: Queued new_message for topic: $topic');
+            }
+          } else if (data['type'] == 'presence_update') {
             _messageStreamController.add(data);
-            developer.log('MQTTService: Added new_message to stream: $data');
+            developer.log('MQTTService: Added presence_update to stream: $data');
           } else {
-            _messageQueue.add(data);
-            developer.log('MQTTService: Queued new_message for topic: $topic');
+            developer.log('MQTTService: Processed other message type: ${data['type']}');
           }
           _topicCallbacks[topic]?.call(payload);
-        } else {
-          developer.log('MQTTService: Ignored message: not a valid new_message format');
         }
       } catch (e) {
         developer.log('MQTTService: Error processing message: $e');
       }
     });
 
-    publish('user/$_currentUserId/presence', {
-      'userId': _currentUserId,
-      'status': 'online',
-      'timestamp': DateTime.now().toIso8601String(),
+    // Publish initial online status
+    _publishPresenceStatus('online');
+  }
+
+  void _handlePresenceMessage(String topic, String payload) {
+    try {
+      final data = jsonDecode(payload);
+      
+      if (topic == 'presence/request') {
+        // Handle presence requests
+        final targetUserId = data['targetUserId']?.toString();
+        final requesterId = data['requesterId']?.toString();
+        
+        if (targetUserId == _currentUserId && requesterId != null) {
+          // Someone is requesting our presence status
+          _respondToPresenceRequest(requesterId);
+        }
+      } else if (topic.startsWith('presence/') || topic.contains('/presence')) {
+        // Handle presence updates
+        final userId = data['userId']?.toString();
+        final status = data['status']?.toString();
+        
+        if (userId != null && userId != _currentUserId) {
+          // Forward presence update to message stream
+          _messageStreamController.add({
+            'type': 'presence_update',
+            'userId': userId,
+            'status': status,
+            'timestamp': data['timestamp'],
+          });
+        }
+      }
+    } catch (e) {
+      developer.log('MQTTService: Error handling presence message: $e');
+    }
+  }
+
+  void _respondToPresenceRequest(String requesterId) {
+    try {
+      final response = {
+        'userId': _currentUserId,
+        'status': 'online',
+        'timestamp': DateTime.now().toIso8601String(),
+        'requestedBy': requesterId,
+      };
+      
+      publish('user/$requesterId/presence', response);
+      developer.log('MQTTService: Responded to presence request from $requesterId');
+    } catch (e) {
+      developer.log('MQTTService: Error responding to presence request: $e');
+    }
+  }
+
+  void _publishPresenceStatus(String status) {
+    if (_currentUserId == null) return;
+    
+    try {
+      final presenceData = {
+        'userId': _currentUserId,
+        'status': status,
+        'timestamp': DateTime.now().toIso8601String(),
+      };
+      
+      // Publish to user's presence topic
+      publish('user/$_currentUserId/presence', presenceData);
+      
+      // Publish to global presence broadcast
+      publish('presence/broadcast', presenceData);
+      
+      developer.log('MQTTService: Published presence status: $status for user: $_currentUserId');
+    } catch (e) {
+      developer.log('MQTTService: Error publishing presence status: $e');
+    }
+  }
+
+  void _startPresenceHeartbeat() {
+    _presenceHeartbeatTimer?.cancel();
+    _presenceHeartbeatTimer = Timer.periodic(const Duration(minutes: 2), (timer) {
+      if (isConnected()) {
+        _publishPresenceStatus('online');
+      } else {
+        timer.cancel();
+      }
     });
+    developer.log('MQTTService: Started presence heartbeat');
   }
 
   String getChatTopic(String user1Id, String user2Id) {
@@ -228,12 +325,36 @@ bool isConnected() {
     }
   }
 
+  // Request online status of a specific user
+  void requestUserOnlineStatus(String userId) {
+    try {
+      publish('presence/request', {
+        'requesterId': _currentUserId,
+        'targetUserId': userId,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+      developer.log('MQTTService: Requested online status for user: $userId');
+    } catch (e) {
+      developer.log('MQTTService: Error requesting online status: $e');
+    }
+  }
+
+  // Batch request online status for multiple users
+  void requestMultipleUsersOnlineStatus(List<String> userIds) {
+    for (final userId in userIds) {
+      if (userId != _currentUserId) {
+        requestUserOnlineStatus(userId);
+      }
+    }
+  }
+
   void _onConnected() {
     developer.log('MQTTService: Connected to MQTT broker');
     _reconnectAttempts = 0;
     _reconnectTimer?.cancel();
     _subscribeToPersonalTopics();
     _processMessageQueue();
+    _startPresenceHeartbeat();
   }
 
   void _onAutoReconnected() {
@@ -241,10 +362,12 @@ bool isConnected() {
     _reconnectAttempts = 0;
     _subscribeToPersonalTopics();
     _processMessageQueue();
+    _startPresenceHeartbeat();
   }
 
   void _onDisconnected() {
     developer.log('MQTTService: Disconnected from MQTT broker');
+    _presenceHeartbeatTimer?.cancel();
     _scheduleReconnect();
   }
 
@@ -254,12 +377,10 @@ bool isConnected() {
 
   void disconnect() {
     if (_currentUserId != null) {
-      publish('user/$_currentUserId/presence', {
-        'userId': _currentUserId,
-        'status': 'offline',
-        'timestamp': DateTime.now().toIso8601String(),
-      });
+      _publishPresenceStatus('offline');
     }
+    
+    _presenceHeartbeatTimer?.cancel();
     _reconnectTimer?.cancel();
     _client?.disconnect();
     _client = null;

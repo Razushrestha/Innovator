@@ -17,6 +17,7 @@ import 'package:innovator/screens/F&Q/F&Qscreen.dart';
 import 'package:innovator/screens/Privacy_Policy/privacy_screen.dart';
 import 'package:innovator/screens/Profile/profile_page.dart';
 import 'package:innovator/screens/Report/Report_screen.dart';
+import 'package:innovator/screens/Settings/settings.dart';
 import 'package:innovator/screens/chatrrom/Screen/chat_listscreen.dart';
 import 'package:innovator/utils/Drawer/drawer_cache_manager.dart';
 import 'package:lottie/lottie.dart';
@@ -496,6 +497,19 @@ class _CustomDrawerState extends State<CustomDrawer>
                                   delay: 500,
                                 ),
                                 _buildAnimatedMenuItem(
+                                  icon: Icons.settings,
+                                  title: 'Settings',
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => const SettingsScreen(),
+                                      ),
+                                    );
+                                  },
+                                  delay: 500,
+                                ),
+                                _buildAnimatedMenuItem(
                                   icon: Icons.help_rounded,
                                   title: 'FAQ',
                                   onTap: () {
@@ -512,6 +526,7 @@ class _CustomDrawerState extends State<CustomDrawer>
                                   height:
                                       MediaQuery.of(context).size.height * 0.05,
                                 ),
+
                                 _buildGradientDivider(),
                                 _buildAnimatedMenuItem(
                                   icon: Icons.logout_rounded,

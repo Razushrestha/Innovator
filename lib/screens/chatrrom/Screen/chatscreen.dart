@@ -35,9 +35,8 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-    Timer? _debounceTimer;
-      bool _isProcessingSend = false; // Add this flag
-
+  Timer? _debounceTimer;
+  bool _isProcessingSend = false;
 
   @override
   Widget build(BuildContext context) {
@@ -92,35 +91,73 @@ class _ChatScreenState extends State<ChatScreen> {
                 constraints: const BoxConstraints(),
               ),
               const SizedBox(width: 2),
-              CircleAvatar(
-                radius: 14,
-                backgroundColor: Colors.grey[200],
-                child:
-                    Utils.isValidImageUrl(profilePicture)
+              Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 14,
+                    backgroundColor: Colors.grey[200],
+                    child: Utils.isValidImageUrl(profilePicture)
                         ? ClipOval(
-                          child: Image.network(
-                            Utils.getImageUrl(profilePicture),
-                            fit: BoxFit.cover,
-                            width: 28,
-                            height: 28,
-                            errorBuilder:
-                                (context, error, stackTrace) => Text(
-                                  displayName[0].toUpperCase(),
-                                  style: const TextStyle(fontSize: 14),
-                                ),
-                          ),
-                        )
+                            child: Image.network(
+                              Utils.getImageUrl(profilePicture),
+                              fit: BoxFit.cover,
+                              width: 28,
+                              height: 28,
+                              errorBuilder: (context, error, stackTrace) => Text(
+                                displayName[0].toUpperCase(),
+                                style: const TextStyle(fontSize: 14),
+                              ),
+                            ),
+                          )
                         : Text(
-                          displayName[0].toUpperCase(),
-                          style: const TextStyle(fontSize: 14),
-                        ),
+                            displayName[0].toUpperCase(),
+                            style: const TextStyle(fontSize: 14),
+                          ),
+                  ),
+                  // Online status indicator
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    child: Obx(() => controller.isReceiverOnline.value
+                        ? Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: Colors.green,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: Colors.white,
+                                width: 1.5,
+                              ),
+                            ),
+                          )
+                        : const SizedBox.shrink()),
+                  ),
+                ],
               ),
             ],
           ),
           leadingWidth: 80,
-          title: Text(
-            displayName,
-            style: const TextStyle(color: Colors.white, fontSize: 18),
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                displayName,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Obx(() => Text(
+                    controller.getLastSeenText(),
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  )),
+            ],
           ),
           actions: [
             IconButton(
@@ -202,104 +239,104 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-Widget _buildMessageBubble(
-  BuildContext context,
-  ChatMessage message,
-  ChatController controller,
-) {
-  final isMe = message.senderId == widget.currentUserId;
-  final messageTime = DateFormat('HH:mm').format(message.timestamp.toLocal());
+  Widget _buildMessageBubble(
+    BuildContext context,
+    ChatMessage message,
+    ChatController controller,
+  ) {
+    final isMe = message.senderId == widget.currentUserId;
+    final messageTime = DateFormat('HH:mm').format(message.timestamp.toLocal());
 
-  return GestureDetector(
-    key: ValueKey(message.id), // Add unique key
-    onLongPress: () => _showDeleteOptions(context, message, controller),
-    child: Container(
-      margin: EdgeInsets.only(
-        left: isMe ? 64 : 8,
-        right: isMe ? 8 : 64,
-        top: 2,
-        bottom: 2,
-      ),
-      child: Align(
-        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-        child: Container(
-          constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width * 0.8,
-          ),
-          decoration: BoxDecoration(
-            color: isMe 
-                ? const Color(0xFFDCF8C6) // WhatsApp sent green
-                : Colors.white, // WhatsApp received white
-            borderRadius: BorderRadius.only(
-              topLeft: const Radius.circular(7.5),
-              topRight: const Radius.circular(7.5),
-              bottomLeft: Radius.circular(isMe ? 7.5 : 2),
-              bottomRight: Radius.circular(isMe ? 2 : 7.5),
+    return GestureDetector(
+      key: ValueKey(message.id), // Add unique key
+      onLongPress: () => _showDeleteOptions(context, message, controller),
+      child: Container(
+        margin: EdgeInsets.only(
+          left: isMe ? 64 : 8,
+          right: isMe ? 8 : 64,
+          top: 2,
+          bottom: 2,
+        ),
+        child: Align(
+          alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+          child: Container(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.8,
             ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withAlpha(30),
-                offset: const Offset(0, 1),
-                blurRadius: 0.5,
+            decoration: BoxDecoration(
+              color: isMe
+                  ? const Color(0xFFDCF8C6) // WhatsApp sent green
+                  : Colors.white, // WhatsApp received white
+              borderRadius: BorderRadius.only(
+                topLeft: const Radius.circular(7.5),
+                topRight: const Radius.circular(7.5),
+                bottomLeft: Radius.circular(isMe ? 7.5 : 2),
+                bottomRight: Radius.circular(isMe ? 2 : 7.5),
               ),
-            ],
-          ),
-          child: Stack(
-            children: [
-              // Message text
-              Container(
-                padding: EdgeInsets.fromLTRB(
-                  7,
-                  6,
-                  7 + (messageTime.length * 4.2) + (isMe ? 20 : 0),
-                  17,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withAlpha(30),
+                  offset: const Offset(0, 1),
+                  blurRadius: 0.5,
                 ),
-                child: Text(
-                  message.content,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w400,
-                    color: Color(0xFF303030),
-                    height: 1.19,
-                    letterSpacing: -0.078,
+              ],
+            ),
+            child: Stack(
+              children: [
+                // Message text
+                Container(
+                  padding: EdgeInsets.fromLTRB(
+                    7,
+                    6,
+                    7 + (messageTime.length * 4.2) + (isMe ? 20 : 0),
+                    17,
+                  ),
+                  child: Text(
+                    message.content,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w400,
+                      color: Color(0xFF303030),
+                      height: 1.19,
+                      letterSpacing: -0.078,
+                    ),
                   ),
                 ),
-              ),
-              
-              // Time and status
-              Positioned(
-                bottom: 4,
-                right: 7,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      messageTime,
-                      style: TextStyle(
-                        fontSize: 9,
-                        color: Colors.black.withOpacity(0.45),
+
+                // Time and status
+                Positioned(
+                  bottom: 4,
+                  right: 7,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        messageTime,
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: Colors.black.withOpacity(0.45),
+                        ),
                       ),
-                    ),
-                    if (isMe) ...[
-                      const SizedBox(width: 3),
-                      Icon(
-                        message.read ? Icons.done_all : Icons.done,
-                        size: 16,
-                        color: message.read 
-                            ? const Color(0xFF4FC3F7)
-                            : const Color(0xFF92A3A3),
-                      ),
+                      if (isMe) ...[
+                        const SizedBox(width: 3),
+                        Icon(
+                          message.read ? Icons.done_all : Icons.done,
+                          size: 16,
+                          color: message.read
+                              ? const Color(0xFF4FC3F7)
+                              : const Color(0xFF92A3A3),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   Widget _buildInputField(ChatController controller) {
     return Container(
@@ -348,23 +385,21 @@ Widget _buildMessageBubble(
                   shape: BoxShape.circle,
                 ),
                 child: IconButton(
-                  icon:
-                      controller.isSendingMessage.value
-                          ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Colors.white,
-                              ),
+                  icon: controller.isSendingMessage.value
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
                             ),
-                          )
-                          : const Icon(Icons.send, color: Colors.white),
-                  onPressed:
-                      controller.isSendingMessage.value
-                          ? null
-                          : () => _debounceSend(controller),
+                          ),
+                        )
+                      : const Icon(Icons.send, color: Colors.white),
+                  onPressed: controller.isSendingMessage.value
+                      ? null
+                      : () => _debounceSend(controller),
                 ),
               ),
             ),
@@ -374,7 +409,7 @@ Widget _buildMessageBubble(
     );
   }
 
-void _debounceSend(ChatController controller) {
+  void _debounceSend(ChatController controller) {
     // Prevent multiple rapid calls
     if (_isProcessingSend) {
       log('ChatScreen: Send already in progress, ignoring');
@@ -394,7 +429,7 @@ void _debounceSend(ChatController controller) {
     _debounceTimer = Timer(const Duration(milliseconds: 300), () {
       if (!_isProcessingSend && controller.messageController.text.trim().isNotEmpty) {
         _isProcessingSend = true;
-        
+
         controller.sendMessage().then((_) {
           _isProcessingSend = false;
         }).catchError((error) {
@@ -404,7 +439,6 @@ void _debounceSend(ChatController controller) {
       }
     });
   }
-  
 
   void _handleDeleteConversation(
     BuildContext context,
@@ -446,52 +480,50 @@ void _debounceSend(ChatController controller) {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder:
-          (context) => Container(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Delete Message',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 16),
-                ListTile(
-                  leading: const Icon(
-                    Icons.delete_outline,
-                    color: Colors.orange,
-                  ),
-                  title: const Text('Delete for me'),
-                  subtitle: const Text('Message will be deleted only for you'),
-                  onTap: () => _handleDeleteForMe(context, message, controller),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.delete_forever, color: Colors.red),
-                  title: const Text('Delete for everyone'),
-                  subtitle: const Text(
-                    'Message will be deleted for both of you',
-                  ),
-                  onTap:
-                      () => _handleDeleteForEveryone(
-                        context,
-                        message,
-                        controller,
-                      ),
-                ),
-                const SizedBox(height: 8),
-              ],
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
-          ),
+            const SizedBox(height: 16),
+            const Text(
+              'Delete Message',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              leading: const Icon(
+                Icons.delete_outline,
+                color: Colors.orange,
+              ),
+              title: const Text('Delete for me'),
+              subtitle: const Text('Message will be deleted only for you'),
+              onTap: () => _handleDeleteForMe(context, message, controller),
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_forever, color: Colors.red),
+              title: const Text('Delete for everyone'),
+              subtitle: const Text(
+                'Message will be deleted for both of you',
+              ),
+              onTap: () => _handleDeleteForEveryone(
+                context,
+                message,
+                controller,
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
     );
   }
 
@@ -550,22 +582,21 @@ void _debounceSend(ChatController controller) {
   ) async {
     return await showDialog<bool>(
           context: context,
-          builder:
-              (context) => AlertDialog(
-                title: Text(title),
-                content: Text(content),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context, false),
-                    child: const Text('Cancel'),
-                  ),
-                  TextButton(
-                    onPressed: () => Navigator.pop(context, true),
-                    style: TextButton.styleFrom(foregroundColor: Colors.red),
-                    child: const Text('Delete'),
-                  ),
-                ],
+          builder: (context) => AlertDialog(
+            title: Text(title),
+            content: Text(content),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
               ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
         ) ??
         false;
   }
@@ -588,57 +619,10 @@ void _debounceSend(ChatController controller) {
       Get.delete<ChatController>(tag: controllerTag, force: true);
     });
   }
+
   @override
   void dispose() {
     _debounceTimer?.cancel();
     super.dispose();
   }
 }
-
-
-// // Custom painter for WhatsApp message tails
-// class MessageTailPainter extends CustomPainter {
-//   final Color color;
-//   final bool isMe;
-
-//   MessageTailPainter({required this.color, required this.isMe});
-
-//   @override
-//   void paint(Canvas canvas, Size size) {
-//     final paint = Paint()
-//       ..color = color
-//       ..style = PaintingStyle.fill;
-
-//     final path = Path();
-    
-//     if (isMe) {
-//       // Tail for sent messages (right side)
-//       path.moveTo(0, 0);
-//       path.lineTo(0, 10);
-//       path.quadraticBezierTo(0, 15, 6, 15);
-//       path.quadraticBezierTo(12, 15, 12, 8);
-//       path.quadraticBezierTo(12, 0, 6, 0);
-//       path.close();
-//     } else {
-//       // Tail for received messages (left side)
-//       path.moveTo(12, 0);
-//       path.lineTo(12, 10);
-//       path.quadraticBezierTo(12, 15, 6, 15);
-//       path.quadraticBezierTo(0, 15, 0, 8);
-//       path.quadraticBezierTo(0, 0, 6, 0);
-//       path.close();
-//     }
-
-//     canvas.drawPath(path, paint);
-    
-//     // Add shadow to tail
-//     final shadowPaint = Paint()
-//       ..color = Colors.black.withOpacity(0.13)
-//       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 0.5);
-    
-//     canvas.drawPath(path, shadowPaint);
-//   }
-
-//   @override
-//   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-// }

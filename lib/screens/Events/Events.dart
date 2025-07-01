@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:innovator/App_data/App_data.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -36,7 +37,6 @@ class _EventsHomePageState extends State<EventsHomePage>
       loadEvents();
     });
   }
-
 
   @override
   void dispose() {
@@ -84,6 +84,7 @@ class _EventsHomePageState extends State<EventsHomePage>
       fetchMeetupEvents(),
       fetchTechConferences(),
       fetchGitHubEvents(),
+      fetchBackendEvents(),
     ]);
 
     for (var eventList in results) {
@@ -228,6 +229,56 @@ bool _hasNewEvents(List<TechEvent> newEvents, List<TechEvent> cachedEvents) {
       !cachedEventKeys.containsAll(newEventKeys);
 }
 
+  // Fetch from backend API
+  Future<List<TechEvent>> fetchBackendEvents() async {
+    try {
+      final List<TechEvent> backendEvents = [];
+      final authToken = AppData().authToken;
+      
+      final response = await http.get(
+        Uri.parse('http://182.93.94.210:3066/api/v1/events'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $authToken',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final eventsList = data['data']['events'] ?? [];
+
+        for (var eventData in eventsList) {
+          try {
+            backendEvents.add(TechEvent(
+              id: eventData['_id'] ?? '',
+              title: eventData['title'] ?? '',
+              description: eventData['description'] ?? '',
+              location: eventData['location']['venue'] != null && eventData['location']['city'] != null
+                  ? '${eventData['location']['venue']}, ${eventData['location']['city']}'
+                  : eventData['location']['city'] ?? 'Unknown Location',
+              country: _extractCountryFromLocation(eventData['location']['city'] ?? ''),
+              date: DateTime.tryParse(eventData['startDate'] ?? '') ?? 
+                    DateTime.now().add(Duration(days: 30)),
+              url: eventData['url'] ?? 'http://182.93.94.210:3066', // Default URL if not provided
+              category: _categorizeEvent(eventData['category'] ?? ''),
+              price: eventData['price']['isFree'] ? 'Free' : 
+                    '\$${eventData['price']['amount']} ${eventData['price']['currency']}',
+              organizer: eventData['eventMaker']['name'] ?? 'Unknown Organizer',
+              isBackendEvent: true, // Added to identify backend events
+            ));
+          } catch (e) {
+            print('Error parsing backend event: $e');
+          }
+        }
+      }
+
+      return backendEvents;
+    } catch (e) {
+      print('Error fetching backend events: $e');
+      return [];
+    }
+  }
+
   // Fetch from dev.events using web scraping
   Future<List<TechEvent>> fetchDevEventsData() async {
     try {
@@ -337,7 +388,7 @@ bool _hasNewEvents(List<TechEvent> newEvents, List<TechEvent> cachedEvents) {
       for (String query in queries) {
         try {
           final response = await http.get(
-            Uri.parse('https://www.meetup.com/gql'),
+            Uri.parse('http://www.meetup.com/gql'),
             headers: {
               'User-Agent': 'Mozilla/5.0 (compatible; TechEventsApp/1.0)',
               'Accept': 'application/json',
@@ -559,7 +610,7 @@ bool _hasNewEvents(List<TechEvent> newEvents, List<TechEvent> cachedEvents) {
       'nepal': 'Nepal', 'np': 'Nepal',
       'uk': 'UK', 'united kingdom': 'UK', 'britain': 'UK',
       'germany': 'Germany', 'de': 'Germany',
-      'singapore': 'Singapore', 'sg': 'Singapore',
+      'singirs': 'Singapore', 'sg': 'Singapore',
       'japan': 'Japan', 'jp': 'Japan',
       'australia': 'Australia', 'au': 'Australia',
       'canada': 'Canada', 'ca': 'Canada',
@@ -625,12 +676,14 @@ bool _hasNewEvents(List<TechEvent> newEvents, List<TechEvent> cachedEvents) {
       return 'Security';
     } else if (textLower.contains('devops') || textLower.contains('cloud') || textLower.contains('aws') || textLower.contains('docker')) {
       return 'DevOps & Cloud';
-    } else if (textLower.contains('python') || textLower.contains('java') || textLower.contains('golang')) {
+    } else if (textLower.contains('python') || textLower.contains('java') || textLower.contains('golang')) { 
       return 'Programming Languages';
     } else if (textLower.contains('data') || textLower.contains('analytics') || textLower.contains('big data')) {
       return 'Data Science';
     } else if (textLower.contains('open source') || textLower.contains('github')) {
       return 'Open Source';
+    } else if (textLower.contains('conference')) {
+      return 'Technology';
     } else {
       return 'General Tech';
     }
@@ -783,8 +836,6 @@ bool _hasNewEvents(List<TechEvent> newEvents, List<TechEvent> cachedEvents) {
             SizedBox(height: 16),
             Text('Loading Tech events from around the world...'),
             SizedBox(height: 8),
-            // Text('Fetching from dev.events, GDG, Meetup, and more', 
-            //      style: TextStyle(color: Colors.grey[600])),
           ],
         ),
       );
@@ -827,7 +878,20 @@ bool _hasNewEvents(List<TechEvent> newEvents, List<TechEvent> cachedEvents) {
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
-        onTap: () => launchURL(event.url),
+        onTap: () {
+          if (event.isBackendEvent) {
+            // Navigate to detailed page for backend events
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => EventDetailPage(eventId: event.id),
+              ),
+            );
+          } else {
+            // Launch URL for non-backend events
+            launchURL(event.url);
+          }
+        },
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: EdgeInsets.all(16),
@@ -1022,6 +1086,8 @@ bool _hasNewEvents(List<TechEvent> newEvents, List<TechEvent> cachedEvents) {
         return Colors.indigo;
       case 'cloud computing':
         return Colors.lightBlue;
+      case 'technology':
+        return Colors.blueGrey;
       default:
         return Colors.grey;
     }
@@ -1046,6 +1112,8 @@ bool _hasNewEvents(List<TechEvent> newEvents, List<TechEvent> cachedEvents) {
         return Icons.attach_money;
       case 'cloud computing':
         return Icons.cloud;
+      case 'technology':
+        return Icons.computer;
       default:
         return Icons.event;
     }
@@ -1064,6 +1132,7 @@ class TechEvent {
   final String price;
   final String organizer;
   bool isFavorite;
+  final bool isBackendEvent; // Added to identify backend events
 
   TechEvent({
     required this.id,
@@ -1077,6 +1146,7 @@ class TechEvent {
     required this.price,
     required this.organizer,
     this.isFavorite = false,
+    this.isBackendEvent = false,
   });
 
   factory TechEvent.fromJson(Map<String, dynamic> json) {
@@ -1091,6 +1161,275 @@ class TechEvent {
       category: json['category'] ?? 'General',
       price: json['price'] ?? 'N/A',
       organizer: json['organizer'] ?? '',
+      isFavorite: json['isFavorite'] ?? false,
+      isBackendEvent: json['isBackendEvent'] ?? false,
     );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'title': title,
+    'description': description,
+    'location': location,
+    'country': country,
+    'date': date.toIso8601String(),
+    'url': url,
+    'category': category,
+    'price': price,
+    'organizer': organizer,
+    'isFavorite': isFavorite,
+    'isBackendEvent': isBackendEvent,
+  };
+}
+
+class EventDetailPage extends StatefulWidget {
+  final String eventId;
+
+  const EventDetailPage({Key? key, required this.eventId}) : super(key: key);
+
+  @override
+  _EventDetailPageState createState() => _EventDetailPageState();
+}
+
+class _EventDetailPageState extends State<EventDetailPage> {
+  Map<String, dynamic>? eventDetails;
+  bool isLoading = true;
+  bool isError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    fetchEventDetails();
+  }
+
+  Future<void> fetchEventDetails() async {
+    try {
+      final authToken = AppData().authToken;
+      final response = await http.get(
+        Uri.parse('http://182.93.94.210:3066/api/v1/events/${widget.eventId}'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $authToken',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        setState(() {
+          eventDetails = data['data'];
+          isLoading = false;
+        });
+      } else {
+        setState(() {
+          isError = true;
+          isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        isError = true;
+        isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error loading event details: $e')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Event Details', style: TextStyle(color: Colors.white)),
+        backgroundColor: Color.fromRGBO(244, 135, 6, 1),
+      ),
+      body: isLoading
+          ? Center(child: CircularProgressIndicator())
+          : isError
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.error, size: 64, color: Colors.red),
+                      SizedBox(height: 16),
+                      Text('Error loading event details'),
+                      SizedBox(height: 8),
+                      ElevatedButton(
+                        onPressed: fetchEventDetails,
+                        child: Text('Retry'),
+                      ),
+                    ],
+                  ),
+                )
+              : SingleChildScrollView(
+                  padding: EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        eventDetails?['title'] ?? 'Unknown Event',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.indigo[900],
+                        ),
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        'By ${eventDetails?['eventMaker']['name'] ?? 'Unknown Organizer'}',
+                        style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 16,
+                        ),
+                      ),
+                      SizedBox(height: 16),
+                      _buildDetailRow(
+                        Icons.description,
+                        'Description',
+                        eventDetails?['description'] ?? 'No description available',
+                      ),
+                      SizedBox(height: 12),
+                      _buildDetailRow(
+                        Icons.location_on,
+                        'Location',
+                        eventDetails?['location']['isOnline'] == true
+                            ? 'Online'
+                            : '${eventDetails?['location']['venue'] ?? ''}, ${eventDetails?['location']['city'] ?? ''}',
+                      ),
+                      SizedBox(height: 12),
+                      _buildDetailRow(
+                        Icons.calendar_today,
+                        'Date & Time',
+                        '${_formatDate(eventDetails?['startDate'])} to ${_formatDate(eventDetails?['endDate'])}',
+                      ),
+                      SizedBox(height: 12),
+                      _buildDetailRow(
+                        Icons.category,
+                        'Category',
+                        _categorizeEvent(eventDetails?['category'] ?? ''),
+                      ),
+                      SizedBox(height: 12),
+                      _buildDetailRow(
+                        Icons.monetization_on,
+                        'Price',
+                        eventDetails?['price']['isFree'] == true
+                            ? 'Free'
+                            : '\$${eventDetails?['price']['amount']} ${eventDetails?['price']['currency']}',
+                      ),
+                      SizedBox(height: 12),
+                      _buildDetailRow(
+                        Icons.people,
+                        'Attendees',
+                        '${eventDetails?['currentAttendees'] ?? 0}/${eventDetails?['maxAttendees'] ?? 'Unlimited'}',
+                      ),
+                      SizedBox(height: 12),
+                      _buildDetailRow(
+                        Icons.email,
+                        'Contact',
+                        eventDetails?['contactInfo']['email'] ?? 'No contact info',
+                      ),
+                      SizedBox(height: 12),
+                      if (eventDetails?['requirements']?.isNotEmpty ?? false)
+                        _buildRequirementsSection(),
+                      SizedBox(height: 16),
+                      if (eventDetails?['registrationRequired'] == true)
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Color.fromRGBO(244, 135, 6, 1),
+                            foregroundColor: Colors.white,
+                            minimumSize: Size(double.infinity, 48),
+                          ),
+                          onPressed: () {
+                            // TODO: Implement registration logic
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Registration feature coming soon!')),
+                            );
+                          },
+                          child: Text('Register Now'),
+                        ),
+                    ],
+                  ),
+                ),
+    );
+  }
+
+  Widget _buildDetailRow(IconData icon, String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 20, color: Colors.grey[600]),
+        SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[800],
+                ),
+              ),
+              SizedBox(height: 4),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRequirementsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Requirements',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey[800],
+          ),
+        ),
+        SizedBox(height: 8),
+        ...eventDetails!['requirements'].map<Widget>((req) => Padding(
+              padding: EdgeInsets.only(left: 28, bottom: 4),
+              child: Row(
+                children: [
+                  Icon(Icons.check_circle, size: 16, color: Colors.grey[600]),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      req,
+                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                    ),
+                  ),
+                ],
+              ),
+            )).toList(),
+      ],
+    );
+  }
+
+  String _formatDate(String? dateStr) {
+    if (dateStr == null) return 'Unknown';
+    final date = DateTime.tryParse(dateStr);
+    if (date == null) return 'Unknown';
+    return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+  }
+
+  String _categorizeEvent(String text) {
+    final textLower = text.toLowerCase();
+    if (textLower.contains('conference')) {
+      return 'Technology';
+    }
+    return 'General Tech';
   }
 }

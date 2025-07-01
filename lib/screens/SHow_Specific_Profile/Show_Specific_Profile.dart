@@ -17,16 +17,20 @@ import 'package:innovator/widget/FloatingMenuwidget.dart';
 
 class SpecificUserProfilePage extends StatefulWidget {
   final String userId;
-    final String? scrollToPostId;  // ID of the post to scroll to
-  final bool? openComments;      // Whether to open comments
+  final String? scrollToPostId;
+  final bool? openComments;
   final String? highlightCommentId;
 
-  const SpecificUserProfilePage({Key? key, required this.userId, this.scrollToPostId, this.openComments, this.highlightCommentId})
-    : super(key: key);
+  const SpecificUserProfilePage({
+    Key? key, 
+    required this.userId, 
+    this.scrollToPostId, 
+    this.openComments, 
+    this.highlightCommentId
+  }) : super(key: key);
 
   @override
-  _SpecificUserProfilePageState createState() =>
-      _SpecificUserProfilePageState();
+  _SpecificUserProfilePageState createState() => _SpecificUserProfilePageState();
 }
 
 late Size mq;
@@ -51,6 +55,27 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
   String _errorMessage = '';
   bool _hasMoreData = true;
   static const _loadTriggerThreshold = 500.0;
+
+  // Privacy check methods
+  bool _isPrivateAccount(Map<String, dynamic> profileData) {
+    return profileData['isPrivate'] == true || profileData['privateAccount'] == true;
+  }
+
+  bool _isFollowing(Map<String, dynamic> profileData) {
+    return profileData['followed'] == true || profileData['isFollowing'] == true;
+  }
+
+  bool _isCurrentUser(Map<String, dynamic> profileData) {
+    return widget.userId == _appData.currentUserId || 
+           profileData['email'] == _appData.currentUserEmail;
+  }
+
+  bool _canViewPrivateContent(Map<String, dynamic> profileData) {
+    return _isCurrentUser(profileData) || 
+           _isFollowing(profileData) || 
+           !_isPrivateAccount(profileData);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -80,12 +105,544 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
     });
   }
 
-   void _scrollToPost(String postId) {
+  // ... (keep existing methods like _scrollToPost, _openCommentsForPost, dispose, etc.)
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDarkMode = theme.brightness == Brightness.dark;
+    mq = MediaQuery.of(context).size;
+    
+    return Scaffold(
+      key: _scaffoldKey,
+      backgroundColor: isDarkMode ? const Color(0xFF0A0A0A) : const Color(0xFFF8F9FA),
+      extendBodyBehindAppBar: true,
+      appBar: _buildAppBar(isDarkMode),
+      body: Stack(
+        children: [
+          RefreshIndicator(
+            onRefresh: () async {
+              await _refreshProfile();
+              await _refreshFeed();
+            },
+            color: Theme.of(context).primaryColor,
+            child: FutureBuilder<Map<String, dynamic>>(
+              future: _profileFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting && !_isRefreshing) {
+                  return _buildLoadingView();
+                } else if (snapshot.hasError) {
+                  return _buildErrorView(snapshot.error.toString());
+                } else if (!snapshot.hasData) {
+                  return const Center(child: Text('No profile data available'));
+                }
+
+                final profileData = snapshot.data!;
+                final canViewPrivateContent = _canViewPrivateContent(profileData);
+
+                return AnimatedBuilder(
+                  animation: _fadeAnimation,
+                  builder: (context, child) {
+                    return FadeTransition(
+                      opacity: _fadeAnimation,
+                      child: SlideTransition(
+                        position: _slideAnimation,
+                        child: CustomScrollView(
+                          controller: _scrollController,
+                          physics: const BouncingScrollPhysics(),
+                          slivers: [
+                            SliverToBoxAdapter(
+                              child: _buildProfileHeader(profileData, context),
+                            ),
+                            
+                            // Show limited info for private accounts
+                            if (canViewPrivateContent) ...[
+                              SliverToBoxAdapter(
+                                child: _buildProfileInfo(profileData, context),
+                              ),
+                              SliverToBoxAdapter(
+                                child: _buildActionButtons(profileData, context),
+                              ),
+                              SliverToBoxAdapter(
+                                child: _buildPersonalInfo(profileData, context),
+                              ),
+                              SliverToBoxAdapter(
+                                child: _buildProfessionalInfo(profileData, context),
+                              ),
+                              const SliverToBoxAdapter(
+                                child: SizedBox(height: 30),
+                              ),
+                              SliverToBoxAdapter(
+                                child: UserImageGallery(
+                                  userEmail: profileData['email'] ?? widget.userId,
+                                ),
+                              ),
+                              SliverList(
+                                delegate: SliverChildBuilderDelegate(
+                                  (context, index) {
+                                    if (index == _contents.length) {
+                                      return _buildLoadingIndicator();
+                                    }
+                                    return _buildContentItem(index);
+                                  },
+                                  childCount: _contents.length + (_hasMoreData ? 1 : 0),
+                                ),
+                              ),
+                            ] else ...[
+                              // Private account view for non-followers
+                              SliverToBoxAdapter(
+                                child: _buildPrivateAccountView(profileData, context),
+                              ),
+                            ],
+                            
+                            if (_hasError && canViewPrivateContent)
+                              SliverFillRemaining(child: _buildFeedErrorView()),
+                            if (_contents.isEmpty && !_isLoading && !_hasError && canViewPrivateContent)
+                              SliverFillRemaining(child: _buildEmptyFeedView()),
+                            const SliverToBoxAdapter(
+                              child: SizedBox(height: 100),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+          FloatingMenuWidget(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPrivateAccountView(Map<String, dynamic> profileData, BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).primaryColor;
+
+    return Container(
+      margin: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(30),
+      decoration: BoxDecoration(
+        color: isDarkMode ? const Color(0xFF1A1A1A) : Colors.white,
+        borderRadius: BorderRadius.circular(25),
+        boxShadow: [
+          BoxShadow(
+            color: isDarkMode 
+                ? Colors.black.withOpacity(0.3) 
+                : Colors.grey.withOpacity(0.1),
+            blurRadius: 20,
+            spreadRadius: 5,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // Private account icon
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: primaryColor.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.lock_outline,
+              size: 60,
+              color: primaryColor,
+            ),
+          ),
+          
+          const SizedBox(height: 24),
+          
+          // Title
+          Text(
+            'This Account is Private',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: isDarkMode ? Colors.white : Colors.black87,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          
+          const SizedBox(height: 12),
+          
+          // Description
+          Text(
+            'Follow ${profileData['name'] ?? 'this user'} to see their photos, videos and activity.',
+            style: TextStyle(
+              fontSize: 16,
+              color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+              height: 1.5,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          
+          const SizedBox(height: 30),
+          
+          // Follow button
+          Container(
+            width: double.infinity,
+            height: 55,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: primaryColor.withOpacity(0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: FollowButton(
+              targetUserEmail: profileData['email'],
+              initialFollowStatus: profileData['followed'] ?? false,
+              onFollowSuccess: () => _refreshProfile(),
+              onUnfollowSuccess: () => _refreshProfile(),
+            ),
+          ),
+          
+          const SizedBox(height: 20),
+          
+          // Limited stats for private accounts
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: isDarkMode 
+                  ? Colors.grey[800]?.withOpacity(0.3) 
+                  : Colors.grey[100],
+              borderRadius: BorderRadius.circular(15),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildPrivateStatItem(
+                  '${profileData['followers']?.toString() ?? '0'}',
+                  'Followers',
+                  Icons.people_outline,
+                ),
+                Container(
+                  width: 1,
+                  height: 40,
+                  color: isDarkMode ? Colors.grey[600] : Colors.grey[400],
+                ),
+                _buildPrivateStatItem(
+                  '${profileData['followings']?.toString() ?? '0'}',
+                  'Following',
+                  Icons.person_add_outlined,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPrivateStatItem(String count, String label, IconData icon) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    
+    return Column(
+      children: [
+        Icon(
+          icon,
+          size: 24,
+          color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          count,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: isDarkMode ? Colors.white : Colors.black87,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProfileHeader(Map<String, dynamic> profileData, BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).primaryColor;
+    final headerHeight = MediaQuery.of(context).size.height * 0.55;
+    final isCurrentUser = _isCurrentUser(profileData);
+    final canViewPrivateContent = _canViewPrivateContent(profileData);
+
+    return Container(
+      height: headerHeight,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDarkMode
+              ? [
+                  const Color(0xFF1A1A1A),
+                  const Color(0xFF2D2D2D),
+                  primaryColor.withAlpha(300),
+                ]
+              : [
+                  primaryColor.withAlpha(800),
+                  primaryColor.withAlpha(600),
+                  const Color(0xFFFFFFFF),
+                ],
+        ),
+      ),
+      child: Stack(
+        children: [
+          // Animated background elements
+          ...List.generate(6, (index) => _buildFloatingElement(index)),
+
+          // Main content
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Profile picture with verification badge
+                  Stack(
+                    children: [
+                      Hero(
+                        tag: 'profile_picture_${profileData['_id']}',
+                        child: Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: LinearGradient(
+                              colors: [
+                                primaryColor,
+                                primaryColor.withAlpha(70),
+                              ],
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: primaryColor.withAlpha(30),
+                                blurRadius: 20,
+                                spreadRadius: 5,
+                                offset: const Offset(0, 8),
+                              ),
+                            ],
+                          ),
+                          padding: const EdgeInsets.all(4),
+                          child: isCurrentUser
+                              ? Obx(
+                                  () => CircleAvatar(
+                                    radius: 70,
+                                    backgroundColor: Colors.white,
+                                    key: ValueKey(
+                                      'profile_${_userController.profilePictureVersion.value}',
+                                    ),
+                                    backgroundImage: _userController.profilePicture.value != null &&
+                                            _userController.profilePicture.value!.isNotEmpty
+                                        ? CachedNetworkImageProvider(
+                                            '${_userController.getFullProfilePicturePath()}?v=${_userController.profilePictureVersion.value}',
+                                          )
+                                        : null,
+                                    child: _userController.profilePicture.value == null ||
+                                            _userController.profilePicture.value!.isEmpty
+                                        ? Text(
+                                            profileData['name']?[0]?.toUpperCase() ?? '?',
+                                            style: TextStyle(
+                                              fontSize: 45,
+                                              fontWeight: FontWeight.bold,
+                                              color: primaryColor,
+                                            ),
+                                          )
+                                        : null,
+                                  ),
+                                )
+                              : CircleAvatar(
+                                  radius: 70,
+                                  backgroundColor: Colors.white,
+                                  backgroundImage: profileData['picture'] != null &&
+                                          profileData['picture'].isNotEmpty
+                                      ? CachedNetworkImageProvider(
+                                          'http://182.93.94.210:3066${profileData['picture']}',
+                                        )
+                                      : null,
+                                  child: profileData['picture'] == null ||
+                                          profileData['picture'].isEmpty
+                                      ? Text(
+                                          profileData['name']?[0]?.toUpperCase() ?? '?',
+                                          style: TextStyle(
+                                            fontSize: 45,
+                                            fontWeight: FontWeight.bold,
+                                            color: primaryColor,
+                                          ),
+                                        )
+                                      : null,
+                                ),
+                        ),
+                      ),
+                      if (profileData['isVerified'] == true)
+                        Positioned(
+                          bottom: 1,
+                          right: 5,
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: const BoxDecoration(
+                              color: Colors.blue,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.verified,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                      // Private account indicator
+                      if (_isPrivateAccount(profileData) && !canViewPrivateContent)
+                        Positioned(
+                          bottom: 1,
+                          left: 5,
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: const BoxDecoration(
+                              color: Colors.grey,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.lock,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+
+                  // Name with greeting
+                  Column(
+                    children: [
+                      Text(
+                        _getGreeting(),
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: isDarkMode ? Colors.grey[400] : Colors.white70,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        profileData['name'] ?? 'No name',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                          color: isDarkMode ? Colors.white : Colors.white,
+                          shadows: [
+                            Shadow(
+                              color: Colors.black.withOpacity(0.3),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Level and Status Row - show for everyone
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [_buildLevelBadge(profileData['level'])],
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // Bio preview - only show if not private or if user can view
+                  if ((profileData['bio'] != null && profileData['bio'].isNotEmpty) && 
+                      canViewPrivateContent)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.2),
+                        ),
+                      ),
+                      child: Text(
+                        profileData['bio'],
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: isDarkMode ? Colors.white : Colors.white,
+                          fontStyle: FontStyle.italic,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Keep all your existing helper methods like:
+  // _buildFloatingElement, _buildLevelBadge, _buildProfileInfo, 
+  // _buildActionButtons, _buildPersonalInfo, _buildProfessionalInfo,
+  // _buildStatCard, _buildSecondaryButton, _buildInfoRow, etc.
+
+  String _getGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) {
+      return 'Good Morning';
+    } else if (hour < 17) {
+      return 'Good Afternoon';
+    } else {
+      return 'Good Evening';
+    }
+  }
+
+  // ... (include all your existing helper methods)
+  
+  Future<Map<String, dynamic>> _fetchUserProfile() async {
+    try {
+      final response = await http.get(
+        Uri.parse('http://182.93.94.210:3066/api/v1/stalk-profile/${widget.userId}'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'authorization': 'Bearer ${_appData.authToken}',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body)['data'];
+      } else {
+        throw Exception('Failed to load profile: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error fetching profile: $e');
+    }
+  }
+
+  void _scrollToPost(String postId) {
     final index = _contents.indexWhere((content) => content.id == postId);
     if (index != -1 && _scrollController.hasClients) {
-      // Calculate the position to scroll to
       final position = _scrollController.position;
-      final itemExtent = 500.0; // Approximate height of each feed item
+      final itemExtent = 500.0;
       final targetOffset = index * itemExtent;
       
       _scrollController.animateTo(
@@ -94,7 +651,6 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
         curve: Curves.easeInOut,
       );
 
-      // If we need to open comments, do it after scrolling
       if (widget.openComments == true) {
         Future.delayed(Duration(milliseconds: 600), () {
           _openCommentsForPost(postId, widget.highlightCommentId);
@@ -104,10 +660,8 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
   }
 
   void _openCommentsForPost(String postId, String? highlightCommentId) {
-    // Find the post in the contents
     final post = _contents.firstWhere(
       (content) => content.id == postId,
-     // orElse: () => content.id == postId,
     );
     
     if (post != null) {
@@ -116,13 +670,11 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
         MaterialPageRoute(
           builder: (context) => CommentScreen(
             postId: postId,
-            // Pass any other required parameters
           ),
         ),
       );
     }
   }
-
 
   @override
   void dispose() {
@@ -169,10 +721,9 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
         return;
       }
 
-      final url =
-          _lastId == null
-              ? 'http://182.93.94.210:3066/api/v1/getUserContent/${widget.userId}?page=0'
-              : 'http://182.93.94.210:3066/api/v1/getUserContent/${widget.userId}?page=${(_contents.length / 10).ceil()}';
+      final url = _lastId == null
+          ? 'http://182.93.94.210:3066/api/v1/getUserContent/${widget.userId}?page=0'
+          : 'http://182.93.94.210:3066/api/v1/getUserContent/${widget.userId}?page=${(_contents.length / 10).ceil()}';
 
       final response = await http
           .get(
@@ -225,7 +776,6 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
   }
 
   Future<void> _handleUnauthorizedError() async {
-    // Implement token refresh logic similar to Inner_HomePage
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (_) => LoginPage()),
@@ -243,30 +793,6 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
     await _loadMoreContent();
   }
 
-  Future<Map<String, dynamic>> _fetchUserProfile() async {
-    try {
-      final response = await http.get(
-        Uri.parse(
-          'http://182.93.94.210:3066/api/v1/stalk-profile/${widget.userId}',
-        ),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'authorization': 'Bearer ${_appData.authToken}',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        return json.decode(response.body)['data'];
-      } else {
-        Image.asset('animation/NoGallery.gif');
-        throw Exception('Failed to load profile: ${response.statusCode}');
-      }
-    } catch (e) {
-      throw Exception('Error fetching profile: $e');
-    }
-  }
-
   Future<void> _refreshProfile() async {
     setState(() {
       _isRefreshing = true;
@@ -282,121 +808,6 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
         });
       }
     }
-  }
-
-  String _getGreeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) {
-      return 'Good Morning';
-    } else if (hour < 17) {
-      return 'Good Afternoon';
-    } else {
-      return 'Good Evening';
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDarkMode = theme.brightness == Brightness.dark;
-    mq = MediaQuery.of(context).size;
-    return Scaffold(
-      key: _scaffoldKey,
-      backgroundColor:
-          isDarkMode ? const Color(0xFF0A0A0A) : const Color(0xFFF8F9FA),
-      extendBodyBehindAppBar: true,
-      appBar: _buildAppBar(isDarkMode),
-      body: Stack(
-        children: [
-          RefreshIndicator(
-            onRefresh: () async {
-              await _refreshProfile();
-              await _refreshFeed();
-            },
-            color: Theme.of(context).primaryColor,
-            child: FutureBuilder<Map<String, dynamic>>(
-              future: _profileFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting &&
-                    !_isRefreshing) {
-                  return _buildLoadingView();
-                } else if (snapshot.hasError) {
-                  return _buildErrorView(snapshot.error.toString());
-                } else if (!snapshot.hasData) {
-                  return const Center(child: Text('No profile data available'));
-                }
-
-                final profileData = snapshot.data!;
-                return AnimatedBuilder(
-                  animation: _fadeAnimation,
-                  builder: (context, child) {
-                    return FadeTransition(
-                      opacity: _fadeAnimation,
-                      child: SlideTransition(
-                        position: _slideAnimation,
-                        child: CustomScrollView(
-                          controller: _scrollController,
-                          physics: const BouncingScrollPhysics(),
-                          slivers: [
-                            SliverToBoxAdapter(
-                              child: _buildProfileHeader(profileData, context),
-                            ),
-                            SliverToBoxAdapter(
-                              child: _buildProfileInfo(profileData, context),
-                            ),
-                            SliverToBoxAdapter(
-                              child: _buildActionButtons(profileData, context),
-                            ),
-                            SliverToBoxAdapter(
-                              child: _buildPersonalInfo(profileData, context),
-                            ),
-                            SliverToBoxAdapter(
-                              child: _buildProfessionalInfo(
-                                profileData,
-                                context,
-                              ),
-                            ),
-                            const SliverToBoxAdapter(
-                              child: SizedBox(height: 30),
-                            ),
-                            SliverToBoxAdapter(
-                              child: UserImageGallery(
-                                userEmail:
-                                    profileData['email'] ?? widget.userId,
-                              ),
-                            ),
-                            SliverList(
-                              delegate: SliverChildBuilderDelegate(
-                                (context, index) {
-                                  if (index == _contents.length) {
-                                    return _buildLoadingIndicator();
-                                  }
-                                  return _buildContentItem(index);
-                                },
-                                childCount:
-                                    _contents.length + (_hasMoreData ? 1 : 0),
-                              ),
-                            ),
-                            if (_hasError)
-                              SliverFillRemaining(child: _buildFeedErrorView()),
-                            if (_contents.isEmpty && !_isLoading && !_hasError)
-                              SliverFillRemaining(child: _buildEmptyFeedView()),
-                            const SliverToBoxAdapter(
-                              child: SizedBox(height: 100),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-          FloatingMenuWidget(),
-        ],
-      ),
-    );
   }
 
   Widget _buildContentItem(int index) {
@@ -423,9 +834,9 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
   Widget _buildLoadingIndicator() {
     return _isLoading
         ? const Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Center(child: CircularProgressIndicator()),
-        )
+            padding: EdgeInsets.all(16.0),
+            child: Center(child: CircularProgressIndicator()),
+          )
         : const SizedBox.shrink();
   }
 
@@ -477,10 +888,9 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
         icon: Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color:
-                isDarkMode
-                    ? Colors.black.withOpacity(0.5)
-                    : Colors.white.withOpacity(0.9),
+            color: isDarkMode
+                ? Colors.black.withOpacity(0.5)
+                : Colors.white.withOpacity(0.9),
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
@@ -533,223 +943,6 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
     );
   }
 
-  Widget _buildProfileHeader(
-    Map<String, dynamic> profileData,
-    BuildContext context,
-  ) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final primaryColor = Theme.of(context).primaryColor;
-    final headerHeight = MediaQuery.of(context).size.height * 0.55;
-    final isCurrentUser =
-        widget.userId ==
-        _appData.currentUserId; // Check if this is the current user's profile
-    return Container(
-      height: headerHeight,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors:
-              isDarkMode
-                  ? [
-                    const Color(0xFF1A1A1A),
-                    const Color(0xFF2D2D2D),
-                    primaryColor.withAlpha(300),
-                  ]
-                  : [
-                    primaryColor.withAlpha(800),
-                    primaryColor.withAlpha(600),
-                    const Color(0xFFFFFFFF),
-                  ],
-        ),
-      ),
-      child: Stack(
-        children: [
-          // Animated background elements
-          ...List.generate(6, (index) => _buildFloatingElement(index)),
-
-          // Main content
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  //const SizedBox(height: 10),
-
-                  // Profile picture with verification badge
-                  Stack(
-                    children: [
-                      Hero(
-                      tag: 'profile_picture_${profileData['_id']}',
-                      child: Container(
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: LinearGradient(
-                            colors: [
-                              primaryColor,
-                              primaryColor.withAlpha(70),
-                            ],
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: primaryColor.withAlpha(30),
-                              blurRadius: 20,
-                              spreadRadius: 5,
-                              offset: const Offset(0, 8),
-                            ),
-                          ],
-                        ),
-                        padding: const EdgeInsets.all(4),
-                        child: isCurrentUser
-                            ? Obx(
-                                () => CircleAvatar(
-                                  radius: 70,
-                                  backgroundColor: Colors.white,
-                                  key: ValueKey(
-                                    'profile_${_userController.profilePictureVersion.value}',
-                                  ),
-                                  backgroundImage: _userController.profilePicture.value != null &&
-                                          _userController.profilePicture.value!.isNotEmpty
-                                      ? CachedNetworkImageProvider(
-                                          '${_userController.getFullProfilePicturePath()}?v=${_userController.profilePictureVersion.value}',
-                                        )
-                                      : null,
-                                  child: _userController.profilePicture.value == null ||
-                                          _userController.profilePicture.value!.isEmpty
-                                      ? Text(
-                                          profileData['name']?[0]?.toUpperCase() ?? '?',
-                                          style: TextStyle(
-                                            fontSize: 45,
-                                            fontWeight: FontWeight.bold,
-                                            color: primaryColor,
-                                          ),
-                                        )
-                                      : null,
-                                ),
-                              )
-                            : CircleAvatar(
-                                radius: 70,
-                                backgroundColor: Colors.white,
-                                backgroundImage: profileData['picture'] != null &&
-                                        profileData['picture'].isNotEmpty
-                                    ? CachedNetworkImageProvider(
-                                        'http://182.93.94.210:3066${profileData['picture']}',
-                                      )
-                                    : null,
-                                child: profileData['picture'] == null ||
-                                        profileData['picture'].isEmpty
-                                    ? Text(
-                                        profileData['name']?[0]?.toUpperCase() ?? '?',
-                                        style: TextStyle(
-                                          fontSize: 45,
-                                          fontWeight: FontWeight.bold,
-                                          color: primaryColor,
-                                        ),
-                                      )
-                                    : null,
-                              ),
-                      ),
-                    ),
-                    if (profileData['isVerified'] == true)
-                      Positioned(
-                        bottom: 1,
-                        right: 5,
-                        child: Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: const BoxDecoration(
-                            color: Colors.blue,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.verified,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  // const SizedBox(height: 10),
-
-                  // Name with greeting
-                  Column(
-                    children: [
-                      Text(
-                        _getGreeting(),
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: isDarkMode ? Colors.grey[400] : Colors.white70,
-                          fontWeight: FontWeight.w400,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        profileData['name'] ?? 'No name',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: isDarkMode ? Colors.white : Colors.white,
-                          shadows: [
-                            Shadow(
-                              color: Colors.black.withOpacity(0.3),
-                              blurRadius: 4,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Level and Status Row
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [_buildLevelBadge(profileData['level'])],
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // Bio preview
-                  if (profileData['bio'] != null &&
-                      profileData['bio'].isNotEmpty)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.2),
-                        ),
-                      ),
-                      child: Text(
-                        profileData['bio'],
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: isDarkMode ? Colors.white : Colors.white,
-                          fontStyle: FontStyle.italic,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildFloatingElement(int index) {
     final random = [0.1, 0.3, 0.6, 0.8, 0.2, 0.9][index];
     return Positioned(
@@ -758,7 +951,6 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
       child: TweenAnimationBuilder(
         duration: Duration(seconds: 2 + index),
         tween: Tween<double>(begin: 0, end: 1),
-        // repeats: true,
         builder: (context, double value, child) {
           return Transform.translate(
             offset: Offset(0, 10 * value),
@@ -816,10 +1008,7 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
     );
   }
 
-  Widget _buildProfileInfo(
-    Map<String, dynamic> profileData,
-    BuildContext context,
-  ) {
+  Widget _buildProfileInfo(Map<String, dynamic> profileData, BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
@@ -830,10 +1019,9 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
         borderRadius: BorderRadius.circular(25),
         boxShadow: [
           BoxShadow(
-            color:
-                isDarkMode
-                    ? Colors.black.withAlpha(30)
-                    : Colors.grey.withAlpha(10),
+            color: isDarkMode
+                ? Colors.black.withAlpha(30)
+                : Colors.grey.withAlpha(10),
             blurRadius: 20,
             spreadRadius: 5,
             offset: const Offset(0, 10),
@@ -842,7 +1030,6 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
       ),
       child: Column(
         children: [
-          // Stats Row
           Row(
             children: [
               Expanded(
@@ -851,9 +1038,8 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
                   'Followers',
                   Icons.people_outline,
                   Colors.blue,
-                  onTap:
-                      () =>
-                          showFollowersFollowingDialog(context, widget.userId),
+                  onTap: () =>
+                      showFollowersFollowingDialog(context, widget.userId),
                 ),
               ),
               const SizedBox(width: 15),
@@ -863,9 +1049,8 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
                   'Following',
                   Icons.person_add_outlined,
                   Colors.green,
-                  onTap:
-                      () =>
-                          showFollowersFollowingDialog(context, widget.userId),
+                  onTap: () =>
+                      showFollowersFollowingDialog(context, widget.userId),
                 ),
               ),
               const SizedBox(width: 15),
@@ -928,10 +1113,9 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
               label,
               style: TextStyle(
                 fontSize: 12,
-                color:
-                    Theme.of(context).brightness == Brightness.dark
-                        ? Colors.grey[400]
-                        : Colors.grey[600],
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.grey[400]
+                    : Colors.grey[600],
                 fontWeight: FontWeight.w500,
               ),
               textAlign: TextAlign.center,
@@ -942,15 +1126,11 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
     );
   }
 
-  Widget _buildActionButtons(
-    Map<String, dynamic> profileData,
-    BuildContext context,
-  ) {
+  Widget _buildActionButtons(Map<String, dynamic> profileData, BuildContext context) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
         children: [
-          // Follow Button
           Container(
             width: double.infinity,
             height: 55,
@@ -971,10 +1151,7 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
               onUnfollowSuccess: () => _refreshProfile(),
             ),
           ),
-
           const SizedBox(height: 16),
-
-          // Secondary action buttons
           Row(
             children: [
               Expanded(
@@ -985,35 +1162,18 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder:
-                            (_) => ChatListScreen(
-                              currentUserId: AppData().currentUserId ?? '',
-                              currentUserName: AppData().currentUserName ?? '',
-                              currentUserPicture:
-                                  AppData().currentUserProfilePicture ?? '',
-                              currentUserEmail:
-                                  AppData().currentUserEmail ?? '',
-                            ),
+                        builder: (_) => ChatListScreen(
+                          currentUserId: AppData().currentUserId ?? '',
+                          currentUserName: AppData().currentUserName ?? '',
+                          currentUserPicture:
+                              AppData().currentUserProfilePicture ?? '',
+                          currentUserEmail: AppData().currentUserEmail ?? '',
+                        ),
                       ),
                     );
                   },
                 ),
               ),
-              // const SizedBox(width: 12),
-              // Expanded(
-              //   child: _buildSecondaryButton(
-              //     'Call',
-              //     Icons.phone_outlined,
-              //     () {
-              //       if (profileData['phone'] != null) {
-              //         Clipboard.setData(ClipboardData(text: profileData['phone']));
-              //         ScaffoldMessenger.of(context).showSnackBar(
-              //           const SnackBar(content: Text('Phone number copied!')),
-              //         );
-              //       }
-              //     },
-              //   ),
-              // ),
             ],
           ),
         ],
@@ -1061,10 +1221,7 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
     );
   }
 
-  Widget _buildPersonalInfo(
-    Map<String, dynamic> profileData,
-    BuildContext context,
-  ) {
+  Widget _buildPersonalInfo(Map<String, dynamic> profileData, BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
@@ -1075,10 +1232,9 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
         borderRadius: BorderRadius.circular(25),
         boxShadow: [
           BoxShadow(
-            color:
-                isDarkMode
-                    ? Colors.black.withAlpha(30)
-                    : Colors.grey.withAlpha(10),
+            color: isDarkMode
+                ? Colors.black.withAlpha(30)
+                : Colors.grey.withAlpha(10),
             blurRadius: 20,
             spreadRadius: 5,
             offset: const Offset(0, 10),
@@ -1109,9 +1265,7 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
               ),
             ],
           ),
-
           const SizedBox(height: 25),
-
           _buildInfoRow(
             Icons.email_outlined,
             'Email',
@@ -1119,7 +1273,6 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
             Colors.red,
             onTap: () => _copyToClipboard(profileData['email'], 'Email'),
           ),
-
           if (profileData['phone'] != null && profileData['phone'].isNotEmpty)
             _buildInfoRow(
               Icons.phone_outlined,
@@ -1128,7 +1281,6 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
               Colors.green,
               onTap: () => _copyToClipboard(profileData['phone'], 'Phone'),
             ),
-
           if (profileData['location'] != null &&
               profileData['location'].isNotEmpty)
             _buildInfoRow(
@@ -1137,7 +1289,6 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
               profileData['location'],
               Colors.purple,
             ),
-
           if (profileData['dob'] != null)
             _buildInfoRow(
               Icons.cake_outlined,
@@ -1145,7 +1296,6 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
               _formatDate(profileData['dob']),
               Colors.pink,
             ),
-
           if (profileData['gender'] != null)
             _buildInfoRow(
               Icons.person_outline,
@@ -1158,10 +1308,7 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
     );
   }
 
-  Widget _buildProfessionalInfo(
-    Map<String, dynamic> profileData,
-    BuildContext context,
-  ) {
+  Widget _buildProfessionalInfo(Map<String, dynamic> profileData, BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     if (profileData['profession'] == null &&
@@ -1178,10 +1325,9 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
         borderRadius: BorderRadius.circular(25),
         boxShadow: [
           BoxShadow(
-            color:
-                isDarkMode
-                    ? Colors.black.withOpacity(0.3)
-                    : Colors.grey.withOpacity(0.1),
+            color: isDarkMode
+                ? Colors.black.withOpacity(0.3)
+                : Colors.grey.withOpacity(0.1),
             blurRadius: 20,
             spreadRadius: 5,
             offset: const Offset(0, 10),
@@ -1212,9 +1358,7 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
               ),
             ],
           ),
-
           const SizedBox(height: 25),
-
           if (profileData['profession'] != null &&
               profileData['profession'].isNotEmpty)
             _buildInfoRow(
@@ -1223,7 +1367,6 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
               profileData['profession'],
               Colors.orange,
             ),
-
           if (profileData['education'] != null &&
               profileData['education'].isNotEmpty)
             _buildInfoRow(
@@ -1232,7 +1375,6 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
               profileData['education'],
               Colors.indigo,
             ),
-
           if (profileData['achievements'] != null &&
               profileData['achievements'].isNotEmpty)
             _buildInfoRow(
@@ -1367,128 +1509,12 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
     );
   }
 
-  Widget _buildOptionsSheet() {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF1A1A1A) : Colors.white,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(25)),
-      ),
-      child: SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.grey[400],
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text(
-                'Options',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-            ),
-            _buildOptionTile(Icons.share_outlined, 'Share Profile', () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Share feature coming soon')),
-              );
-            }),
-            _buildOptionTile(Icons.bookmark_outline, 'Save Profile', () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(const SnackBar(content: Text('Profile saved')));
-            }),
-            _buildOptionTile(Icons.report_outlined, 'Report User', () {
-              Navigator.pop(context);
-              _showReportDialog();
-            }),
-            _buildOptionTile(Icons.block_outlined, 'Block User', () {
-              Navigator.pop(context);
-              _showBlockDialog();
-            }),
-            const SizedBox(height: 20),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildOptionTile(IconData icon, String title, VoidCallback onTap) {
-    return ListTile(
-      leading: Icon(icon),
-      title: Text(title),
-      onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
-    );
-  }
-
-  void _showReportDialog() {
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Report User'),
-            content: const Text('Are you sure you want to report this user?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('User reported')),
-                  );
-                },
-                child: const Text('Report'),
-              ),
-            ],
-          ),
-    );
-  }
-
-  void _showBlockDialog() {
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Block User'),
-            content: const Text('Are you sure you want to block this user?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(const SnackBar(content: Text('User blocked')));
-                },
-                child: const Text('Block'),
-              ),
-            ],
-          ),
-    );
-  }
-
   void _copyToClipboard(String? text, String type) {
     if (text != null && text.isNotEmpty) {
       Clipboard.setData(ClipboardData(text: text));
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('$type copied to clipboard')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$type copied to clipboard'))
+      );
     }
   }
 
@@ -1497,18 +1523,8 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
     try {
       final date = DateTime.parse(dateString);
       final months = [
-        'Jan',
-        'Feb',
-        'Mar',
-        'Apr',
-        'May',
-        'Jun',
-        'Jul',
-        'Aug',
-        'Sep',
-        'Oct',
-        'Nov',
-        'Dec',
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
       ];
       return '${date.day} ${months[date.month - 1]} ${date.year}';
     } catch (e) {

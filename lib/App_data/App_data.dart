@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:http/http.dart' as http;
 import 'package:innovator/main.dart';
+import 'package:innovator/screens/Blocked/Blocked_Model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:innovator/screens/comment/JWT_Helper.dart';
 
@@ -194,7 +195,7 @@ class AppData {
   // Helper method to update FCM token on the backend
   Future<void> _updateFcmTokenOnBackend(String fcmToken) async {
     try {
-      final url = Uri.parse('http://182.93.94.210:3064/api/v1/update-fcm-token');
+      final url = Uri.parse('http://182.93.94.210:3066/api/v1/update-fcm-token');
       final body = jsonEncode({
         'userId': currentUserId,
         'fcmToken': fcmToken,
@@ -315,7 +316,7 @@ class AppData {
 
   Future<List<dynamic>> fetchNotifications() async {
   try {
-    final url = Uri.parse('http://182.93.94.210:3064/api/v1/notifications');
+    final url = Uri.parse('http://182.93.94.210:3066/api/v1/notifications');
     final headers = {
       'Content-Type': 'application/json',
       'Authorization': 'Bearer $_authToken',
@@ -343,6 +344,187 @@ class AppData {
   } catch (e) {
     developer.log('Error fetching notifications: $e');
     return [];
+  }
+}
+
+
+
+Future<BlockedUsersResponse> fetchBlockedUsers({
+  int page = 0,
+  int limit = 20,
+}) async {
+  try {
+    developer.log('🚫 Fetching blocked users - Page: $page, Limit: $limit');
+    
+    if (AppData().authToken == null || AppData().authToken!.isEmpty) {
+      throw Exception('Authentication required to fetch blocked users');
+    }
+
+    final queryParams = {
+      'page': page.toString(),
+      'limit': limit.toString(),
+    };
+
+    final uri = Uri.parse('http://182.93.94.210:3066/api/v1/blocked-users')
+        .replace(queryParameters: queryParams);
+
+    final headers = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': 'Bearer ${AppData().authToken}',
+    };
+
+    developer.log('🚫 Request URL: $uri');
+
+    final response = await http.get(uri, headers: headers)
+        .timeout(const Duration(seconds: 30));
+
+    developer.log('🚫 Response Status: ${response.statusCode}');
+    developer.log('🚫 Response Body: ${response.body}');
+
+    if (response.statusCode == 200) {
+      final responseData = jsonDecode(response.body);
+      final blockedUsersResponse = BlockedUsersResponse.fromJson(responseData);
+      
+      developer.log('✅ Successfully fetched ${blockedUsersResponse.blockedUsers.length} blocked users');
+      developer.log('📊 Pagination - Total: ${blockedUsersResponse.pagination.total}, HasMore: ${blockedUsersResponse.pagination.hasMore}');
+      
+      return blockedUsersResponse;
+    } else if (response.statusCode == 401) {
+      throw Exception('Authentication failed - please login again');
+    } else if (response.statusCode == 404) {
+      throw Exception('Blocked users endpoint not found');
+    } else {
+      final errorData = jsonDecode(response.body);
+      final errorMessage = errorData['message'] ?? 'Failed to fetch blocked users';
+      throw Exception('Server error (${response.statusCode}): $errorMessage');
+    }
+  } catch (e) {
+    developer.log('❌ Error fetching blocked users: $e');
+    
+    // Return empty response with error for better error handling
+    return BlockedUsersResponse(
+      status: 500,
+      blockedUsers: [],
+      pagination: BlockedUsersPagination.fromJson({}),
+      error: e.toString(),
+      message: 'Failed to fetch blocked users: ${e.toString()}',
+    );
+  }
+}
+
+// Fetch all blocked users (handles pagination automatically)
+Future<List<BlockedUser>> fetchAllBlockedUsers() async {
+  try {
+    developer.log('🚫 Fetching all blocked users...');
+    
+    List<BlockedUser> allBlockedUsers = [];
+    int currentPage = 0;
+    bool hasMore = true;
+
+    while (hasMore) {
+      final response = await fetchBlockedUsers(
+        page: currentPage,
+        limit: 50, // Larger limit for efficiency
+      );
+
+      if (response.status == 200) {
+        allBlockedUsers.addAll(response.blockedUsers);
+        hasMore = response.pagination.hasMore;
+        currentPage++;
+        
+        developer.log('🚫 Fetched page $currentPage, total users so far: ${allBlockedUsers.length}');
+      } else {
+        developer.log('❌ Error on page $currentPage: ${response.error}');
+        break;
+      }
+    }
+
+    developer.log('✅ Fetched all blocked users - Total: ${allBlockedUsers.length}');
+    return allBlockedUsers;
+  } catch (e) {
+    developer.log('❌ Error fetching all blocked users: $e');
+    return [];
+  }
+}
+
+// Check if a specific user is blocked
+Future<bool> isUserBlocked(String userId) async {
+  try {
+    developer.log('🚫 Checking if user is blocked: $userId');
+    
+    final response = await fetchBlockedUsers(limit: 100); // Get first 100
+    
+    if (response.status == 200) {
+      final isBlocked = response.blockedUsers.any((user) => user.id == userId);
+      developer.log('🚫 User $userId blocked status: $isBlocked');
+      return isBlocked;
+    }
+    
+    return false;
+  } catch (e) {
+    developer.log('❌ Error checking if user is blocked: $e');
+    return false;
+  }
+}
+
+// Get blocked user details by ID
+Future<BlockedUser?> getBlockedUserById(String userId) async {
+  try {
+    developer.log('🚫 Getting blocked user details: $userId');
+    
+    final response = await fetchBlockedUsers(limit: 100);
+    
+    if (response.status == 200) {
+      final blockedUser = response.blockedUsers
+          .where((user) => user.id == userId)
+          .firstOrNull;
+      
+      if (blockedUser != null) {
+        developer.log('✅ Found blocked user: ${blockedUser.name}');
+      } else {
+        developer.log('⚠️ User not found in blocked list: $userId');
+      }
+      
+      return blockedUser;
+    }
+    
+    return null;
+  } catch (e) {
+    developer.log('❌ Error getting blocked user details: $e');
+    return null;
+  }
+}
+
+// Search blocked users by name or email
+Future<List<BlockedUser>> searchBlockedUsers(String query) async {
+  try {
+    developer.log('🚫 Searching blocked users: $query');
+    
+    final allUsers = await fetchAllBlockedUsers();
+    final searchQuery = query.toLowerCase().trim();
+    
+    final filteredUsers = allUsers.where((user) {
+      return user.name.toLowerCase().contains(searchQuery) ||
+             user.email.toLowerCase().contains(searchQuery);
+    }).toList();
+    
+    developer.log('🚫 Found ${filteredUsers.length} users matching "$query"');
+    return filteredUsers;
+  } catch (e) {
+    developer.log('❌ Error searching blocked users: $e');
+    return [];
+  }
+}
+
+// Refresh blocked users cache (useful after blocking/unblocking)
+Future<BlockedUsersResponse> refreshBlockedUsers() async {
+  try {
+    developer.log('🚫 Refreshing blocked users cache...');
+    return await fetchBlockedUsers(page: 0, limit: 20);
+  } catch (e) {
+    developer.log('❌ Error refreshing blocked users: $e');
+    rethrow;
   }
 }
 }

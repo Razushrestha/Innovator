@@ -20,7 +20,11 @@ class ChatController extends GetxController {
   final isSendingMessage = false.obs;
   final mqttInitialized = false.obs;
   final isInitialized = false.obs;
-  final isAppInBackground = false.obs; // Track app state
+  final isAppInBackground = false.obs;
+  
+  // Add online status tracking
+  final isReceiverOnline = false.obs;
+  final receiverLastSeen = Rxn<DateTime>();
 
   final Set<String> _processedMessageIds = <String>{};
 
@@ -32,6 +36,7 @@ class ChatController extends GetxController {
   // Services
   final MQTTService _mqttService = MQTTService();
   final FlutterLocalNotificationsPlugin _notificationsPlugin = FlutterLocalNotificationsPlugin();
+  
   // Chat properties
   String? chatTopic;
   String currentUserId = '';
@@ -50,7 +55,7 @@ class ChatController extends GetxController {
     _initializeNotifications();
   }
 
-Future<void> _initializeNotifications() async {
+  Future<void> _initializeNotifications() async {
     const AndroidNotificationChannel channel = AndroidNotificationChannel(
       'high_importance_channel',
       'High Importance Notifications',
@@ -62,6 +67,7 @@ Future<void> _initializeNotifications() async {
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(channel);
   }
+
   // Setup app lifecycle listener to track when app goes to background
   void _setupAppLifecycleListener() {
     WidgetsBinding.instance.addObserver(_AppLifecycleObserver(this));
@@ -142,7 +148,6 @@ Future<void> _initializeNotifications() async {
     }
   }
 
-  // Initialize notifications
   // Setup MQTT connection and subscriptions
   Future<void> validateAndSetupMQTT() async {
     if (mqttInitialized.value) {
@@ -180,20 +185,63 @@ Future<void> _initializeNotifications() async {
         await _handleUserMessage(payload);
       });
 
+      // Subscribe to notifications
       _mqttService.subscribe('user/$currentUserId/notifications', (String payload) {
         _handleNotification(payload);
       });
 
-      // Subscribe to notifications
-      // _mqttService.subscribe('user/$currentUserId/notifications', (String payload) {
-      //   _handleNotification(payload);
-      // });
+      // Subscribe to receiver's presence updates
+      _mqttService.subscribe('user/$receiverId/presence', (String payload) {
+        _handlePresenceUpdate(payload);
+      });
+
+      // Request current online status of receiver
+      _requestReceiverOnlineStatus();
 
       mqttInitialized.value = true;
       log('ChatController: MQTT setup completed');
     } catch (e) {
       log('ChatController: Error setting up MQTT: $e');
       errorMessage.value = 'Failed to connect to chat service. Please try again.';
+    }
+  }
+
+  // Handle presence updates
+  void _handlePresenceUpdate(String payload) {
+    try {
+      log('ChatController: Received presence update: $payload');
+      final data = jsonDecode(payload);
+      final userId = data['userId']?.toString();
+      final status = data['status']?.toString();
+      final timestamp = data['timestamp']?.toString();
+      
+      if (userId == receiverId) {
+        isReceiverOnline.value = status == 'online';
+        if (timestamp != null) {
+          try {
+            receiverLastSeen.value = DateTime.parse(timestamp);
+          } catch (e) {
+            log('ChatController: Error parsing timestamp: $e');
+          }
+        }
+        log('ChatController: Receiver $receiverId is ${isReceiverOnline.value ? "online" : "offline"}');
+      }
+    } catch (e) {
+      log('ChatController: Error processing presence update: $e');
+    }
+  }
+
+  // Request current online status
+  void _requestReceiverOnlineStatus() {
+    try {
+      _mqttService.publish('presence/request', {
+        'requesterId': currentUserId,
+        'targetUserId': receiverId,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+      log('ChatController: Requested online status for user: $receiverId');
+    } catch (e) {
+      log('ChatController: Error requesting online status: $e');
     }
   }
 
@@ -322,9 +370,6 @@ Future<void> _initializeNotifications() async {
       log('ChatController: Error processing user messages: $e');
     }
   }
-
-  // Handle notifications
-  
 
   // Validate if message is for current chat
   bool _isValidMessage(ChatMessage message) {
@@ -823,6 +868,33 @@ Future<void> _initializeNotifications() async {
         log('ChatController: Error scrolling to bottom: $e');
       }
     }
+  }
+
+  // Get formatted last seen time
+  String getLastSeenText() {
+    if (isReceiverOnline.value) {
+      return 'Online';
+    }
+    
+    if (receiverLastSeen.value != null) {
+      final lastSeen = receiverLastSeen.value!;
+      final now = DateTime.now();
+      final difference = now.difference(lastSeen);
+      
+      if (difference.inMinutes < 1) {
+        return 'Last seen just now';
+      } else if (difference.inMinutes < 60) {
+        return 'Last seen ${difference.inMinutes}m ago';
+      } else if (difference.inHours < 24) {
+        return 'Last seen ${difference.inHours}h ago';
+      } else if (difference.inDays < 7) {
+        return 'Last seen ${difference.inDays}d ago';
+      } else {
+        return 'Last seen long ago';
+      }
+    }
+    
+    return 'Last seen unknown';
   }
 
   @override

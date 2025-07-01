@@ -143,18 +143,12 @@ class _InnovatorHomePageState extends ConsumerState<InnovatorHomePage> {
   @override
   void initState() {
     super.initState();
-    _setupPeriodicNotificationFetch();
+   // _setupPeriodicNotificationFetch();
      //   _addTestNotificationButton();
 
   }
 
-  void _setupPeriodicNotificationFetch() {
-    _notificationTimer?.cancel();
-    _notificationTimer = Timer.periodic(
-      const Duration(minutes: 5),
-      (_) async => await AppData().fetchNotifications(),
-    );
-  }
+ 
 
   @override
   void dispose() {

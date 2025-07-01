@@ -177,7 +177,7 @@ class FeedContent {
       final allUrls = [
         ...files.map((file) => _formatUrl(file)),
         ...optimizedFiles
-            .where((file) => file['url'] != null)
+            .where((file) => file != null && file is Map && file['url'] != null)
             .map((file) => _formatUrl(file['url'])),
       ];
 
@@ -185,15 +185,15 @@ class FeedContent {
 
       _hasImages =
           _mediaUrls.any((url) => FileTypeHelper.isImage(url)) ||
-          optimizedFiles.any((file) => file['type'] == 'image');
+          optimizedFiles.any((file) => file != null && file is Map && file['type'] == 'image');
 
       _hasVideos =
           _mediaUrls.any((url) => FileTypeHelper.isVideo(url)) ||
-          optimizedFiles.any((file) => file['type'] == 'video');
+          optimizedFiles.any((file) => file != null && file is Map && file['type'] == 'video');
 
       _hasPdfs =
           _mediaUrls.any((url) => FileTypeHelper.isPdf(url)) ||
-          optimizedFiles.any((file) => file['type'] == 'pdf');
+          optimizedFiles.any((file) => file != null && file is Map && file['type'] == 'pdf');
 
       _hasWordDocs = _mediaUrls.any((url) => FileTypeHelper.isWordDoc(url));
     } catch (e) {
@@ -215,6 +215,9 @@ class FeedContent {
 
   factory FeedContent.fromJson(Map<String, dynamic> json) {
     try {
+      // Enhanced error handling for user interactions
+      final userInteractions = json['userInteractions'] as Map<String, dynamic>? ?? {};
+      
       return FeedContent(
         id: json['_id'] ?? '',
         status: json['status'] ?? '',
@@ -232,7 +235,8 @@ class FeedContent {
         isShared: json['isShared'] ?? false,
         likes: json['likes'] ?? 0,
         comments: json['comments'] ?? 0,
-        isLiked: json['liked'] ?? false,
+        isLiked: json['liked'] ?? userInteractions['liked'] ?? false,
+        isFollowed: userInteractions['followed'] ?? false,
         engagementLoaded: json['engagementLoaded'] ?? false,
         loadPriority: json['loadPriority'] ?? 'normal',
       );
@@ -260,7 +264,7 @@ class FeedContent {
   String? get bestVideoUrl {
     try {
       final videoFiles =
-          optimizedFiles.where((file) => file['type'] == 'video').toList();
+          optimizedFiles.where((file) => file != null && file is Map && file['type'] == 'video').toList();
       if (videoFiles.isEmpty) return null;
 
       videoFiles.sort((a, b) {
@@ -280,7 +284,7 @@ class FeedContent {
   String? get thumbnailUrl {
     try {
       for (final file in optimizedFiles) {
-        if (file['thumbnail'] != null) {
+        if (file != null && file is Map && file['thumbnail'] != null) {
           return _formatUrl(file['thumbnail']);
         }
       }
@@ -296,6 +300,7 @@ class FeedContent {
     }
   }
 }
+
 
 class ContentResponse {
   final int status;
@@ -376,12 +381,10 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
   final List<FeedContent> _allContents = [];
   final ScrollController _scrollController = ScrollController();
   bool _isLoading = false;
-  String? _nextVideoCursor;
-  String? _nextNormalCursor;
+  String? _nextCursor;
   bool _hasError = false;
   String _errorMessage = '';
-  bool _hasMoreVideos = true;
-  bool _hasMoreNormal = true;
+  bool _hasMoreContent = true;
   final AppData _appData = AppData();
   bool _isRefreshingToken = false;
   bool _isOnline = true;
@@ -389,28 +392,81 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
   Timer? _autoLoadTimer;
   DateTime _lastLoadTime = DateTime.now();
   
-  // Memory management
-  static const int _maxContentItems = 200;
-  static const int _contentToRemove = 50;
+  // Enhanced memory management
+  static const int _maxContentItems = 500; // Increased from 200
+  static const int _contentToRemove = 100; // Increased from 50
+  
+  // Track loading state to prevent duplicate requests
+  bool _isInitialLoadComplete = false;
 
   @override
   void initState() {
     super.initState();
     _requestNotificationPermission();
     _initializeData();
-    _scrollController.addListener(_scrollListener);
+    _setupScrollListener();
     _checkConnectivity();
     _startAutoLoadTimer();
   }
 
-  // ENHANCED AUTO LOAD TIMER - More aggressive loading
-  void _startAutoLoadTimer() {
-    _autoLoadTimer = Timer.periodic(Duration(seconds: 2), (timer) {
+  // ENHANCED SCROLL LISTENER SETUP
+void _setupScrollListener() {
+  _scrollController.addListener(() {
+    // Cancel any existing debounce
+    _debounce?.cancel();
+    
+    // Reduced debounce for better responsiveness
+    _debounce = Timer(const Duration(milliseconds: 200), () {
+      _handleScrollEvent();
+    });
+  });
+}
+
+// IMPROVED SCROLL EVENT HANDLER - Fixed infinite scroll logic
+void _handleScrollEvent() {
+    if (!_scrollController.hasClients || _isLoading || !_hasMoreContent) {
+      debugPrint('❌ Scroll blocked - HasClients: ${_scrollController.hasClients}, Loading: $_isLoading, HasMore: $_hasMoreContent');
+      return;
+    }
+
+    final double currentPosition = _scrollController.position.pixels;
+    final double maxScrollExtent = _scrollController.position.maxScrollExtent;
+    
+    bool shouldLoadMore = false;
+    String triggerReason = '';
+
+    // UPDATED: More conservative trigger - 90% instead of 80%
+    if (maxScrollExtent > 0 && currentPosition >= maxScrollExtent * 0.90) {
+      shouldLoadMore = true;
+      triggerReason = 'Near bottom (90%)';
+    }
+    // Secondary: Within 200px of end (reduced from 500px)
+    else if (maxScrollExtent > 0 && (maxScrollExtent - currentPosition) <= 200) {
+      shouldLoadMore = true;
+      triggerReason = 'Approaching end (200px)';
+    }
+
+    if (shouldLoadMore) {
+      debugPrint('🚀 Loading more content - Trigger: $triggerReason');
+      debugPrint('📍 Position: ${currentPosition.toStringAsFixed(1)} / ${maxScrollExtent.toStringAsFixed(1)}');
+      debugPrint('📊 Current items: ${_allContents.length}');
+      _loadMoreContent();
+    }
+  }
+
+  // ENHANCED AUTO LOAD TIMER - More persistent
+    void _startAutoLoadTimer() {
+    _autoLoadTimer = Timer.periodic(Duration(seconds: 3), (timer) {
+      // Only auto-load for the first few items, then rely on scroll
       if (!_isLoading && 
-          (_hasMoreVideos || _hasMoreNormal) && 
-          _allContents.length < 30) { // Increased threshold
-        debugPrint('🔄 Auto-loading more content. Current items: ${_allContents.length}');
+          _hasMoreContent && 
+          _allContents.length < 8) { // Reduced from 15 to 8
+        
+        debugPrint('🔄 Auto-loading content (${_allContents.length} items)');
         _loadMoreContent();
+      } else {
+        debugPrint('✅ Auto-load timer stopped - switching to scroll-based loading');
+        timer.cancel();
       }
     });
   }
@@ -431,199 +487,66 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
     }
   }
 
+  // IMPROVED INITIALIZATION
   Future<void> _initializeData() async {
     try {
       await _appData.initialize();
       if (await _verifyToken()) {
+        // Load initial larger batch
         await _loadMoreContent();
         
-        // Load more content initially to ensure sufficient items
-        if (_allContents.length < 20 && (_hasMoreVideos || _hasMoreNormal)) {
-          await Future.delayed(Duration(milliseconds: 300));
+        // Load additional batches until we have enough content
+        int attempts = 0;
+        while (_allContents.length < 15 && _hasMoreContent && attempts < 3) {
+          await Future.delayed(Duration(milliseconds: 500));
           await _loadMoreContent();
+          attempts++;
         }
         
-        // Third load if still insufficient
-        if (_allContents.length < 15 && (_hasMoreVideos || _hasMoreNormal)) {
-          await Future.delayed(Duration(milliseconds: 300));
-          await _loadMoreContent();
-        }
+        _isInitialLoadComplete = true;
       }
     } catch (e) {
       debugPrint('Error initializing data: $e');
-      if (await _verifyToken()) {
-        await _loadMoreContent();
-      }
+      setState(() {
+        _hasError = true;
+        _errorMessage = 'Failed to load initial content';
+      });
     }
   }
 
-  // ENHANCED SCROLL LISTENER - More aggressive triggers
-  void _scrollListener() {
-    if (_debounce?.isActive ?? false) return;
-    
-    _debounce = Timer(const Duration(milliseconds: 50), () {
-      if (!_scrollController.hasClients) return;
+  // ENHANCED MEMORY MANAGEMENT
+  void _manageMemoryBetter() {
+    if (_allContents.length > 200) { // Increased threshold
+      final itemsToRemove = 50; // Remove in smaller chunks
       
-      final double currentPosition = _scrollController.position.pixels;
-      final double maxScrollExtent = _scrollController.position.maxScrollExtent;
+      debugPrint('🧹 Memory management: removing $itemsToRemove old items');
       
-      // Multiple aggressive trigger points
-      final threshold20 = maxScrollExtent * 0.2;  // Very early loading
-      final threshold40 = maxScrollExtent * 0.4;  // Early loading
-      final threshold60 = maxScrollExtent * 0.6;  // Medium loading
-      final threshold80 = maxScrollExtent * 0.8;  // Late loading
-      final nearBottom = maxScrollExtent - 100;   // Almost at bottom
+      // Store current scroll position
+      final double currentScrollPosition = _scrollController.hasClients 
+          ? _scrollController.position.pixels 
+          : 0.0;
       
-      // Check if we need more content
-      final hasLowContent = _allContents.length < 25;
-      final isScrollingDown = currentPosition >= threshold20;
-      
-      bool shouldLoad = !_isLoading && 
-                       (_hasMoreVideos || _hasMoreNormal) &&
-                       maxScrollExtent > 0 &&
-                       (isScrollingDown || hasLowContent);
-      
-      if (shouldLoad) {
-        debugPrint('🔄 Scroll loading triggered - Position: ${currentPosition.toInt()}/${maxScrollExtent.toInt()}, Items: ${_allContents.length}');
-        _loadMoreContent();
-      }
-    });
-  }
-
-  // ENHANCED LOAD MORE CONTENT - Better error handling and retry logic
-  Future<void> _loadMoreContent() async {
-    if (_isLoading) {
-      debugPrint('⏳ Already loading, skipping...');
-      return;
-    }
-    
-    if (!_hasMoreNormal && !_hasMoreVideos) {
-      debugPrint('🛑 No more content available');
-      return;
-    }
-    
-    if (_isRefreshingToken) {
-      debugPrint('🔑 Token refresh in progress, skipping...');
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _hasError = false;
-    });
-
-    _lastLoadTime = DateTime.now();
-
-    // Retry logic
-    int retryCount = 0;
-    const maxRetries = 3;
-    
-    while (retryCount < maxRetries) {
-      try {
-        debugPrint('📡 Loading attempt ${retryCount + 1}/$maxRetries');
-        
-        if (!_isOnline) {
-          final cachedContents = await CacheManager.getCachedFeed();
-          setState(() {
-            if (cachedContents.isNotEmpty) {
-              _allContents.clear();
-              _allContents.addAll(cachedContents);
-              _hasMoreVideos = false;
-              _hasMoreNormal = false;
-            }
-            _isLoading = false;
-          });
-          return;
-        }
-
-        if (!await _verifyToken()) {
-          setState(() {
-            _isLoading = false;
-          });
-          return;
-        }
-
-        final contentData = await FeedApiService.fetchContents(
-          videoCursor: _nextVideoCursor,
-          normalCursor: _nextNormalCursor,
-          context: context,
-        );
-
-        // Cache the content
-        try {
-          await CacheManager.cacheFeedContent([
-            ...contentData.videoContents,
-            ...contentData.normalContents,
-          ]);
-        } catch (e) {
-          debugPrint('Cache error (non-critical): $e');
-        }
-
-        if (mounted) {
-          setState(() {
-            final newContents = <FeedContent>[];
-            
-            if (contentData.videoContents.isNotEmpty) {
-              newContents.addAll(contentData.videoContents);
-              debugPrint('✅ Added ${contentData.videoContents.length} video contents');
-            }
-            
-            if (contentData.normalContents.isNotEmpty) {
-              newContents.addAll(contentData.normalContents);
-              debugPrint('✅ Added ${contentData.normalContents.length} normal contents');
-            }
-            
-            _allContents.addAll(newContents);
-            debugPrint('📊 Total feed items: ${_allContents.length}');
-            
-            // Memory management
-            _manageMemory();
-            
-            _nextVideoCursor = contentData.nextVideoCursor;
-            _nextNormalCursor = contentData.nextNormalCursor;
-            
-            _hasMoreVideos = contentData.hasMoreVideos;
-            _hasMoreNormal = contentData.hasMoreNormal;
-            
-            debugPrint('🔄 Has more - Videos: $_hasMoreVideos, Normal: $_hasMoreNormal');
-            
-            _isLoading = false;
-          });
-        }
-
-        // Break out of retry loop on success
-        break;
-
-      } catch (e, stackTrace) {
-        retryCount++;
-        debugPrint('❌ Error in _loadMoreContent attempt $retryCount: $e');
-        
-        if (retryCount >= maxRetries) {
-          if (mounted) {
-            setState(() {
-              _isLoading = false;
-              if (e.toString().contains('Authentication') || e.toString().contains('401')) {
-                _hasError = true;
-                _errorMessage = 'Please login again';
-              } else {
-                _hasError = true;
-                _errorMessage = 'Failed to load content. Please try again.';
-              }
-            });
-          }
-        } else {
-          // Wait before retry
-          await Future.delayed(Duration(seconds: retryCount));
-        }
-      }
-    }
-  }
-
-  void _manageMemory() {
-    if (_allContents.length > _maxContentItems) {
-      final itemsToRemove = _allContents.length - (_maxContentItems - _contentToRemove);
+      // Remove oldest items
       _allContents.removeRange(0, itemsToRemove);
-      debugPrint('🧹 Memory management: Removed $itemsToRemove old content items');
+      
+      // Adjust scroll position
+      if (_scrollController.hasClients) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_scrollController.hasClients) {
+            final double estimatedItemHeight = 400.0; // Conservative estimate
+            final double adjustmentOffset = itemsToRemove * estimatedItemHeight;
+            final double newPosition = math.max(0, currentScrollPosition - adjustmentOffset);
+            
+            try {
+              _scrollController.jumpTo(newPosition);
+            } catch (e) {
+              debugPrint('Error adjusting scroll position: $e');
+            }
+          }
+        });
+      }
+      
+      debugPrint('🧹 Memory management complete. Remaining: ${_allContents.length} items');
     }
   }
 
@@ -681,28 +604,132 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
     }
   }
 
+  // ENHANCED REFRESH METHOD
   Future<void> _refresh() async {
-    debugPrint('🔄 Refreshing feed...');
-    setState(() {
-      _allContents.clear();
-      _nextVideoCursor = null;
-      _nextNormalCursor = null;
-      _hasError = false;
-      _hasMoreVideos = true;
-      _hasMoreNormal = true;
-    });
+  debugPrint('🔄 Refresh initiated');
+  
+  try {
+    debugPrint('🔄 Starting feed refresh...');
     
-    // Clear cache on refresh
-    CacheManager.clearCache();
+    // Reset pagination state before refresh
+    _nextCursor = null;
+    _hasMoreContent = true;
     
-    await _loadMoreContent();
+    // Get fresh content
+    final contentData = await FeedApiService.refreshFeed(context: context);
+    debugPrint('✅ Feed refresh successful, got ${contentData.contents.length} items');
     
-    // Load additional content after refresh
-    if (_allContents.length < 15 && (_hasMoreVideos || _hasMoreNormal)) {
-      await Future.delayed(Duration(milliseconds: 500));
-      await _loadMoreContent();
+    if (mounted) {
+      setState(() {
+        _allContents.clear();
+        _allContents.addAll(contentData.contents);
+        _nextCursor = contentData.nextCursor;
+        _hasMoreContent = contentData.hasMore;
+        _hasError = false;
+        _errorMessage = '';
+      });
+      
+      debugPrint('📊 After refresh - Items: ${_allContents.length}, Cursor: $_nextCursor, HasMore: $_hasMoreContent');
+      
+      // If refresh didn't get enough content, load more immediately
+      if (_allContents.length < 10 && _hasMoreContent) {
+        debugPrint('🔄 Refresh got few items, loading more...');
+        Future.delayed(Duration(milliseconds: 1000), () {
+          if (_hasMoreContent && !_isLoading && mounted) {
+            _loadMoreContent();
+          }
+        });
+      }
+    }
+    
+  } catch (e) {
+    debugPrint('❌ Feed refresh error: $e');
+    if (mounted) {
+      setState(() {
+        _hasError = true;
+        _errorMessage = 'Failed to refresh feed. Please check your connection.';
+      });
     }
   }
+}
+
+  // ENHANCED LOAD MORE CONTENT METHOD - Fixed cursor and hasMore logic
+Future<void> _loadMoreContent() async {
+    if (_isLoading || !_hasMoreContent) {
+      debugPrint('⚠️ Load more blocked - Loading: $_isLoading, HasMore: $_hasMoreContent');
+      return;
+    }
+
+    // Prevent too frequent requests
+    final timeSinceLastLoad = DateTime.now().difference(_lastLoadTime);
+    if (timeSinceLastLoad.inMilliseconds < 1500) { // Increased from 1000ms
+      debugPrint('⚠️ Load more too frequent, waiting...');
+      return;
+    }
+
+    debugPrint('🔄 Starting to load more content...');
+    debugPrint('📍 Current cursor: $_nextCursor');
+    debugPrint('📊 Current content count: ${_allContents.length}');
+    
+    setState(() {
+      _isLoading = true;
+      _hasError = false;
+    });
+
+    _lastLoadTime = DateTime.now();
+
+    try {
+      // REQUEST MORE ITEMS PER CALL
+      final contentData = await FeedApiService.fetchContents(
+        cursor: _nextCursor,
+        limit: 30, // Increased from default
+        context: context,
+      );
+      
+      debugPrint('✅ Load more successful!');
+      debugPrint('📊 New items received: ${contentData.contents.length}');
+      debugPrint('🔄 New cursor: ${contentData.nextCursor}');
+      debugPrint('📋 API hasMore: ${contentData.hasMore}');
+      
+      if (mounted) {
+        setState(() {
+          _allContents.addAll(contentData.contents);
+          _nextCursor = contentData.nextCursor;
+          _hasMoreContent = contentData.hasMore; // Respect API response
+          _isLoading = false;
+        });
+        
+        debugPrint('📊 Total content now: ${_allContents.length}');
+        debugPrint('🔄 Updated hasMore: $_hasMoreContent');
+        
+        // Memory management
+        _manageMemoryBetter();
+        
+        // Only continue auto-loading if we got very few items
+        if (contentData.contents.length < 3 && 
+            contentData.hasMore && 
+            _allContents.length < 50) {
+          debugPrint('🔄 Got very few items, loading more in 3 seconds...');
+          Future.delayed(Duration(seconds: 3), () {
+            if (_hasMoreContent && !_isLoading && mounted) {
+              _loadMoreContent();
+            }
+          });
+        }
+      }
+      
+    } catch (e) {
+      debugPrint('❌ Load more error: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _hasError = true;
+          _errorMessage = 'Failed to load content. Please try again.';
+        });
+      }
+    }
+  }
+
 
   @override
   void dispose() {
@@ -717,144 +744,194 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
     return Scaffold(
       body: RefreshIndicator(
         onRefresh: _refresh,
-        child: _allContents.isEmpty && _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : _hasError && _allContents.isEmpty
-                ? _buildErrorView()
-                : ListView.builder(
-                    controller: _scrollController,
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    cacheExtent: 2000.0, // Increased cache extent
-                    itemCount: _allContents.length + 
-                              (_isLoading ? 1 : 0) + 
-                              (_shouldShowEndMessage() ? 1 : 0),
-                    itemBuilder: (context, index) {
-                      if (index < _allContents.length) {
-                        return _buildContentItem(_allContents[index]);
-                      }
-                      
-                      if (index == _allContents.length && _isLoading) {
-                        return Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            children: [
-                              const Center(child: CircularProgressIndicator()),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Loading more content...',
-                                style: TextStyle(color: Colors.grey[600]),
-                              ),
-                            ],
-                          ),
-                        );
-                      }
-                      
-                      if (_shouldShowEndMessage() && index == _allContents.length + (_isLoading ? 1 : 0)) {
-                        return Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Center(
-                            child: Column(
-                              children: [
-                                Icon(Icons.check_circle, color: Colors.green, size: 48),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'You\'re all caught up!',
-                                  style: TextStyle(
-                                    color: Colors.grey[600],
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Total loaded: ${_allContents.length} posts',
-                                  style: TextStyle(color: Colors.grey, fontSize: 12),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }
-                      
-                      return const SizedBox.shrink();
-                    },
-                  ),
+        color: Colors.blue,
+        backgroundColor: Colors.white,
+        child: _buildMainContent(),
       ),
-      floatingActionButton: GetBuilder<ChatListController>(
-        init: () {
-          if (!Get.isRegistered<ChatListController>()) {
-            Get.put(ChatListController());
-          }
-          return Get.find<ChatListController>();
-        }(),
-        builder: (chatController) {
-          return Obx(() {
-            final unreadCount = chatController.totalUnreadCount;
-            final isLoading = chatController.isLoading.value;
-            final isMqttConnected = chatController.isMqttConnected.value;
+      floatingActionButton: _buildFloatingActionButton(),
+    );
+  }
 
-            return CustomFAB(
-              gifAsset: 'animation/chaticon.gif',
-              onPressed: isLoading
-                  ? () {}
-                  : () async {
-                      try {
-                        if (unreadCount > 0) {
-                          chatController.resetAllUnreadCounts();
-                        }
-
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => ChatListScreen(
-                              currentUserId: AppData().currentUserId ?? '',
-                              currentUserName: AppData().currentUserName ?? '',
-                              currentUserPicture:
-                                  AppData().currentUserProfilePicture ?? '',
-                              currentUserEmail: AppData().currentUserEmail ?? '',
-                            ),
-                          ),
-                        );
-
-                        if (Get.isRegistered<ChatListController>()) {
-                          final controller = Get.find<ChatListController>();
-                          if (!controller.isMqttConnected.value) {
-                            await controller.initializeMQTT();
-                          }
-                          await controller.fetchChats();
-                        }
-                      } catch (e) {
-                        debugPrint('Error in FAB onPressed: $e');
-                        Get.snackbar(
-                          'Error',
-                          'Please Contact to Our Support Team',
-                          snackPosition: SnackPosition.BOTTOM,
-                        );
-                      }
-                    },
-              backgroundColor: Colors.transparent,
-              elevation: 100.0,
-              size: 56.0,
-              showBadge: unreadCount > 0,
-              badgeText: unreadCount > 99 ? '99+' : '$unreadCount',
-              badgeColor: Colors.red,
-              badgeTextColor: Colors.white,
-              badgeSize: 24.0,
-              badgeTextSize: 12.0,
-              animationDuration: Duration(
-                milliseconds: isMqttConnected ? 300 : 500,
+  Widget _buildMainContent() {
+  // Show loading only if we have no content and are loading
+  if (_allContents.isEmpty && _isLoading) {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(),
+          SizedBox(height: 16),
+          Text('Loading feed...'),
+        ],
+      ),
+    );
+  }
+  
+  // Show error only if we have no content and there's an error
+  if (_hasError && _allContents.isEmpty) {
+    return _buildErrorView();
+  }
+  
+  // Show the feed content
+  return ListView.builder(
+    controller: _scrollController,
+    physics: const AlwaysScrollableScrollPhysics(),
+    cacheExtent: 1000.0,
+    itemCount: _allContents.length + 
+              (_isLoading ? 1 : 0) + 
+              (_shouldShowEndMessage() ? 1 : 0),
+    itemBuilder: (context, index) {
+      // Regular content items
+      if (index < _allContents.length) {
+        return _buildContentItem(_allContents[index]);
+      }
+      
+      // Loading indicator at bottom
+      if (index == _allContents.length && _isLoading) {
+        return Container(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 12),
+              Text(
+                'Loading more content...',
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontSize: 14,
+                ),
               ),
-            );
-          });
-        },
-      ),
+              Text(
+                'Items loaded: ${_allContents.length}',
+                style: TextStyle(
+                  color: Colors.grey[400],
+                  fontSize: 12,
+                ),
+              ),
+              if (_nextCursor != null)
+                Text(
+                  'Cursor: ${_nextCursor!.substring(0, 8)}...',
+                  style: TextStyle(
+                    color: Colors.grey[400],
+                    fontSize: 10,
+                  ),
+                ),
+            ],
+          ),
+        );
+      }
+      
+      // End of content message
+      // if (index == _allContents.length && _shouldShowEndMessage()) {
+      //   return Container(
+      //     padding: const EdgeInsets.all(20.0),
+      //     child: Column(
+      //       children: [
+      //         Icon(
+      //           Icons.check_circle_outline,
+      //           color: Colors.grey[400],
+      //           size: 32,
+      //         ),
+      //         const SizedBox(height: 8),
+      //         Text(
+      //           "You're all caught up!",
+      //           style: TextStyle(
+      //             color: Colors.grey[600],
+      //             fontSize: 16,
+      //             fontWeight: FontWeight.w500,
+      //           ),
+      //         ),
+      //         Text(
+      //           'No more posts to show',
+      //           style: TextStyle(
+      //             color: Colors.grey[400],
+      //             fontSize: 12,
+      //           ),
+      //         ),
+      //       ],
+      //     ),
+      //   );
+      // }
+      
+      return const SizedBox.shrink();
+    },
+  );
+}
+
+  Widget _buildFloatingActionButton() {
+    return GetBuilder<ChatListController>(
+      init: () {
+        if (!Get.isRegistered<ChatListController>()) {
+          Get.put(ChatListController());
+        }
+        return Get.find<ChatListController>();
+      }(),
+      builder: (chatController) {
+        return Obx(() {
+          final unreadCount = chatController.totalUnreadCount;
+          final isLoading = chatController.isLoading.value;
+          final isMqttConnected = chatController.isMqttConnected.value;
+
+          return CustomFAB(
+            gifAsset: 'animation/chaticon.gif',
+            onPressed: isLoading
+                ? () {}
+                : () async {
+                    try {
+                      if (unreadCount > 0) {
+                        chatController.resetAllUnreadCounts();
+                      }
+
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ChatListScreen(
+                            currentUserId: AppData().currentUserId ?? '',
+                            currentUserName: AppData().currentUserName ?? '',
+                            currentUserPicture:
+                                AppData().currentUserProfilePicture ?? '',
+                            currentUserEmail: AppData().currentUserEmail ?? '',
+                          ),
+                        ),
+                      );
+
+                      if (Get.isRegistered<ChatListController>()) {
+                        final controller = Get.find<ChatListController>();
+                        if (!controller.isMqttConnected.value) {
+                          await controller.initializeMQTT();
+                        }
+                        await controller.fetchChats();
+                      }
+                    } catch (e) {
+                      debugPrint('Error in FAB onPressed: $e');
+                      Get.snackbar(
+                        'Error',
+                        'Please Contact to Our Support Team',
+                        snackPosition: SnackPosition.BOTTOM,
+                      );
+                    }
+                  },
+            backgroundColor: Colors.transparent,
+            elevation: 100.0,
+            size: 56.0,
+            showBadge: unreadCount > 0,
+            badgeText: unreadCount > 99 ? '99+' : '$unreadCount',
+            badgeColor: Colors.red,
+            badgeTextColor: Colors.white,
+            badgeSize: 24.0,
+            badgeTextSize: 12.0,
+            animationDuration: Duration(
+              milliseconds: isMqttConnected ? 300 : 500,
+            ),
+          );
+        });
+      },
     );
   }
 
   bool _shouldShowEndMessage() {
     return !_isLoading && 
-           !_hasMoreVideos && 
-           !_hasMoreNormal && 
+           !_hasMoreContent && 
            _allContents.isNotEmpty;
   }
 
@@ -884,34 +961,34 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
 
   Widget _buildErrorView() {
     return Center(
+      
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.error_outline, size: 64, color: Colors.grey),
-          SizedBox(height: 16),
-          Text(
-            _errorMessage.isNotEmpty ? _errorMessage : 'Something went wrong',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-          ),
-          SizedBox(height: 16),
-          ElevatedButton(
-            onPressed: _refresh,
-            child: Text('Retry'),
-          ),
+           CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Loading feed...'),
+          // CircularProgressIndicator(
+          //   value: _refresh,
+          // )
+          // ElevatedButton(
+          //   onPressed: _refresh,
+          //   child: Text('Retry'),
+          // ),
         ],
       ),
     );
   }
 }
 
-// Enhanced FeedApiService class
+// ENHANCED FeedApiService CLASS
 class FeedApiService {
   static const String baseUrl = 'http://182.93.94.210:3066';
 
+  // Enhanced method for the new /api/v1/feed API with better pagination
   static Future<ContentData> fetchContents({
-    String? videoCursor,
-    String? normalCursor,
+    String? cursor,
+    int limit = 30,
     required BuildContext context,
   }) async {
     try {
@@ -920,81 +997,45 @@ class FeedApiService {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
       };
-
-      if (authToken != null && authToken.isNotEmpty) {
+      if (authToken != null && authToken.isNotEmpty
+      ) {
         headers['authorization'] = 'Bearer $authToken';
       }
 
       final params = <String, String>{
-        'loadEngagement': 'true',
-        'quality': 'auto',
-        'limit': '30', // Increased limit for better loading
+        'limit': limit.toString(), // INCREASED from 30 to 50 items per request
+        if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
       };
-      
-      if (videoCursor != null && videoCursor.isNotEmpty) {
-        params['videoCursor'] = videoCursor;
-      }
-      if (normalCursor != null && normalCursor.isNotEmpty) {
-        params['normalCursor'] = normalCursor;
-      }
 
-      final uri = Uri.parse('$baseUrl/api/v1/list-contents')
+      final uri = Uri.parse('$baseUrl/api/v1/feed')
           .replace(queryParameters: params);
 
-      debugPrint('🌐 Fetching from: $uri');
+      debugPrint('🔄 Fetching content: ${uri.toString()}');
+      debugPrint('📡 Request headers: $headers');
 
-      final response = await http
-          .get(uri, headers: headers)
-          .timeout(const Duration(seconds: 30));
-
-      debugPrint('📡 Response status: ${response.statusCode}');
-
+      final response = await http.get(uri, headers: headers).timeout(const Duration(seconds: 30));
+      
+      debugPrint('📡 Feed API Response: ${response.statusCode}');
+      debugPrint('📡 Response body length: ${response.body.length}');
+      
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
-        final contentResponse = ContentResponse.fromJson(data);
-
-        if (contentResponse.status == 200) {
-          final List<FeedContent> videoContents = [];
-          final List<FeedContent> normalContents = [];
-
-          // Process contents with reduced timeout
-          for (var item in contentResponse.data.videoContents) {
-            try {
-              final isFollowing = await FollowService.checkFollowStatus(
-                item.author.email,
-              ).timeout(const Duration(seconds: 2));
-              videoContents.add(item.copyWith(isFollowed: isFollowing));
-            } catch (e) {
-              videoContents.add(item);
-            }
-          }
-
-          for (var item in contentResponse.data.normalContents) {
-            try {
-              final isFollowing = await FollowService.checkFollowStatus(
-                item.author.email,
-              ).timeout(const Duration(seconds: 2));
-              normalContents.add(item.copyWith(isFollowed: isFollowing));
-            } catch (e) {
-              normalContents.add(item);
-            }
-          }
-
-          debugPrint('✅ Fetched ${videoContents.length} videos, ${normalContents.length} normal contents');
-
-          return ContentData(
-            videoContents: videoContents,
-            normalContents: normalContents,
-            hasMoreVideos: contentResponse.data.hasMoreVideos,
-            hasMoreNormal: contentResponse.data.hasMoreNormal,
-            nextVideoCursor: contentResponse.data.nextVideoCursor,
-            nextNormalCursor: contentResponse.data.nextNormalCursor,
-            optimizationInfo: contentResponse.data.optimizationInfo,
-          );
-        } else {
-          throw Exception('Invalid response status: ${contentResponse.status}');
+        debugPrint('📊 Feed API Data keys: ${data.keys.toList()}');
+        
+        // Enhanced logging for debugging
+         if (data['data'] != null) {
+          final dataSection = data['data'] as Map<String, dynamic>;
+          final normalList = dataSection['normal'] as List<dynamic>? ?? [];
+          final videosList = dataSection['videos'] as List<dynamic>? ?? [];
+          
+          debugPrint('📊 API Response: ${normalList.length} normal + ${videosList.length} videos = ${normalList.length + videosList.length} total');
+          debugPrint('📊 Has more: ${dataSection['hasMore']}');
+          debugPrint('📊 Next cursor: ${dataSection['nextCursor']}');
         }
+        
+        return ContentData.fromNewFeedApi(data);
       } else if (response.statusCode == 401) {
+        debugPrint('❌ Authentication failed - redirecting to login');
         if (context.mounted) {
           Navigator.pushAndRemoveUntil(
             context,
@@ -1004,121 +1045,196 @@ class FeedApiService {
         }
         throw Exception('Authentication required');
       } else {
+        debugPrint('❌ API Error: ${response.statusCode} - ${response.body}');
         throw Exception('Failed to load data: ${response.statusCode}');
       }
     } catch (e) {
-      debugPrint('❌ FeedApiService error: $e');
+      debugPrint('❌ FeedApiService.fetchContents error: $e');
       rethrow;
     }
   }
-}
 
-class ContentData {
-  final List<FeedContent> videoContents;
-  final List<FeedContent> normalContents;
-  final bool hasMoreVideos;
-  final bool hasMoreNormal;
-  final String? nextVideoCursor;
-  final String? nextNormalCursor;
-  final Map<String, dynamic> optimizationInfo;
-
-  ContentData({
-    required this.videoContents,
-    required this.normalContents,
-    required this.hasMoreVideos,
-    required this.hasMoreNormal,
-    this.nextVideoCursor,
-    this.nextNormalCursor,
-    required this.optimizationInfo,
-  });
-
-  factory ContentData.fromJson(Map<String, dynamic> json) {
+  // Enhanced refresh method with better error handling
+  static Future<ContentData> refreshFeed({
+    required BuildContext context,
+  }) async {
     try {
-      return ContentData(
-        videoContents: (json['videoContents'] as List<dynamic>? ?? [])
-            .map((item) {
-              try {
-                return FeedContent.fromJson(item as Map<String, dynamic>);
-              } catch (e) {
-                debugPrint('Error parsing video content: $e');
-                return null;
-              }
-            })
-            .where((item) => item != null)
-            .cast<FeedContent>()
-            .toList(),
-        normalContents: (json['normalContents'] as List<dynamic>? ?? [])
-            .map((item) {
-              try {
-                return FeedContent.fromJson(item as Map<String, dynamic>);
-              } catch (e) {
-                debugPrint('Error parsing normal content: $e');
-                return null;
-              }
-            })
-            .where((item) => item != null)
-            .cast<FeedContent>()
-            .toList(),
-        hasMoreVideos: json['hasMoreVideos'] as bool? ?? true,
-        hasMoreNormal: json['hasMoreNormal'] as bool? ?? true,
-        nextVideoCursor: json['nextVideoCursor'] as String?,
-        nextNormalCursor: json['nextNormalCursor'] as String?,
-        optimizationInfo: json['optimizationInfo'] as Map<String, dynamic>? ?? {},
-      );
+      final String? authToken = AppData().authToken;
+      final Map<String, String> headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      };
+      if (authToken != null && authToken.isNotEmpty) {
+        headers['authorization'] = 'Bearer $authToken';
+      }
+
+      // INCREASED limit for refresh
+      final uri = Uri.parse('$baseUrl/api/v1/feed').replace(queryParameters: {
+        'refresh': 'true',
+        'limit': '30', // INCREASED from 15 to 30
+      });
+      
+      debugPrint('🔄 Refreshing feed: ${uri.toString()}');
+      debugPrint('📡 Request headers: $headers');
+
+      final response = await http.get(uri, headers: headers).timeout(const Duration(seconds: 30));
+      
+      debugPrint('📡 Refresh API Response: ${response.statusCode}');
+      debugPrint('📡 Response body length: ${response.body.length}');
+      
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        debugPrint('📊 Refresh API Data keys: ${data.keys.toList()}');
+        
+        // Enhanced logging for debugging
+        if (data['data'] != null) {
+          final dataSection = data['data'] as Map<String, dynamic>;
+          debugPrint('📊 Refresh Data section keys: ${dataSection.keys.toList()}');
+          
+          if (dataSection['normal'] != null) {
+            final normalList = dataSection['normal'] as List<dynamic>;
+            debugPrint('📊 Refresh Normal items count: ${normalList.length}');
+          }
+          
+          debugPrint('📊 Refresh Has more: ${dataSection['hasMore']}');
+          debugPrint('📊 Refresh Next cursor: ${dataSection['nextCursor']}');
+        }
+        
+        return ContentData.fromNewFeedApi(data);
+      } else if (response.statusCode == 401) {
+        debugPrint('❌ Refresh authentication failed - redirecting to login');
+        if (context.mounted) {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (_) => LoginPage()),
+            (route) => false,
+          );
+        }
+        throw Exception('Authentication required');
+      } else {
+        debugPrint('❌ Refresh API Error: ${response.statusCode} - ${response.body}');
+        throw Exception('Failed to refresh feed: ${response.statusCode}');
+      }
     } catch (e) {
-      debugPrint('Error parsing ContentData: $e');
-      return ContentData(
-        videoContents: [],
-        normalContents: [],
-        hasMoreVideos: true,
-        hasMoreNormal: true,
-        nextVideoCursor: null,
-        nextNormalCursor: null,
-        optimizationInfo: {},
-      );
+      debugPrint('❌ FeedApiService.refreshFeed error: $e');
+      rethrow;
+    }
+  }
+
+  // Helper method to validate API response structure
+  static bool _validateApiResponse(Map<String, dynamic> data) {
+    try {
+      if (data['data'] == null) {
+        debugPrint('⚠️ API Response missing data field');
+        return false;
+      }
+      
+      final dataSection = data['data'] as Map<String, dynamic>;
+      
+      if (dataSection['normal'] == null) {
+        debugPrint('⚠️ API Response missing normal field in data');
+        return false;
+      }
+      
+      if (dataSection['normal'] is! List) {
+        debugPrint('⚠️ API Response normal field is not a list');
+        return false;
+      }
+      
+      debugPrint('✅ API Response structure is valid');
+      return true;
+    } catch (e) {
+      debugPrint('❌ Error validating API response: $e');
+      return false;
+    }
+  }
+
+  // Method to get feed statistics for debugging
+  static Future<Map<String, dynamic>?> getFeedStats({
+    required BuildContext context,
+  }) async {
+    try {
+      final String? authToken = AppData().authToken;
+      final Map<String, String> headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      };
+      if (authToken != null && authToken.isNotEmpty) {
+        headers['authorization'] = 'Bearer $authToken';
+      }
+
+      final uri = Uri.parse('$baseUrl/api/v1/feed/stats');
+      
+      debugPrint('📊 Getting feed stats: ${uri.toString()}');
+
+      final response = await http.get(uri, headers: headers).timeout(const Duration(seconds: 15));
+      
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        debugPrint('📊 Feed stats: $data');
+        return data;
+      } else {
+        debugPrint('❌ Failed to get feed stats: ${response.statusCode}');
+        return null;
+      }
+    } catch (e) {
+      debugPrint('❌ Error getting feed stats: $e');
+      return null;
     }
   }
 }
+// Updated ContentData class to handle the new API response structure
+class ContentData {
+  final List<FeedContent> contents;
+  final bool hasMore;
+  final String? nextCursor;
 
-// FeedContent extension
-extension FeedContentExtension on FeedContent {
-  FeedContent copyWith({
-    String? id,
-    String? status,
-    String? type,
-    List<String>? files,
-    List<dynamic>? optimizedFiles,
-    Author? author,
-    DateTime? createdAt,
-    DateTime? updatedAt,
-    int? views,
-    bool? isShared,
-    int? likes,
-    int? comments,
-    bool? isLiked,
-    bool? isFollowed,
-    bool? engagementLoaded,
-    String? loadPriority,
-  }) {
-    return FeedContent(
-      id: id ?? this.id,
-      status: status ?? this.status,
-      type: type ?? this.type,
-      files: files ?? this.files,
-      optimizedFiles: optimizedFiles ?? this.optimizedFiles,
-      author: author ?? this.author,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-      views: views ?? this.views,
-      isShared: isShared ?? this.isShared,
-      likes: likes ?? this.likes,
-      comments: comments ?? this.comments,
-      isLiked: isLiked ?? this.isLiked,
-      isFollowed: isFollowed ?? this.isFollowed,
-      engagementLoaded: engagementLoaded ?? this.engagementLoaded,
-      loadPriority: loadPriority ?? this.loadPriority,
-    );
+  ContentData({
+    required this.contents,
+    required this.hasMore,
+    this.nextCursor,
+  });
+
+  // Enhanced factory method for the new API response
+  factory ContentData.fromNewFeedApi(Map<String, dynamic> json) {
+    try {
+      final data = json['data'] as Map<String, dynamic>? ?? {};
+      
+      // The new API returns data.normal (array) and data.hasMore
+      final normalList = data['normal'] as List<dynamic>? ?? [];
+      final hasMore = data['hasMore'] as bool? ?? false;
+      final nextCursor = data['nextCursor'] as String?;
+      
+      debugPrint('📊 API Response Analysis:');
+      debugPrint('   - Normal items: ${normalList.length}');
+      debugPrint('   - Has more: $hasMore');
+      debugPrint('   - Next cursor: $nextCursor');
+      
+      final contents = normalList
+          .map((item) => FeedContent.fromJson(item as Map<String, dynamic>))
+          .where((content) => content.id.isNotEmpty) // Filter out invalid content
+          .toList();
+      
+      debugPrint('   - Valid contents parsed: ${contents.length}');
+      
+      return ContentData(
+        contents: contents,
+        hasMore: hasMore,
+        nextCursor: nextCursor,
+      );
+    } catch (e) {
+      debugPrint('❌ ContentData.fromNewFeedApi error: $e');
+      debugPrint('❌ JSON structure: ${json.toString()}');
+      return ContentData(contents: [], hasMore: false, nextCursor: null);
+    }
   }
+
+  // Default to new API format
+  factory ContentData.fromJson(Map<String, dynamic> json) {
+    return ContentData.fromNewFeedApi(json);
+  }
+
+  
 }
 
 // FeedItem Widget
@@ -1201,7 +1317,7 @@ class _FeedItemState extends State<FeedItem>
 
   Future<void> _recordView() async {
     if (_hasRecordedView) return;
-
+ 
     bool isConnected = await _checkConnectivity();
     if (!isConnected) return;
 
@@ -1507,7 +1623,7 @@ class _FeedItemState extends State<FeedItem>
                                 maxLines: _isExpanded ? null : _maxLinesCollapsed,
                                 overflow: _isExpanded ? null : TextOverflow.ellipsis,
                               ),
-                            ),
+                            ),// Initailize teh Partaa
                             if (needsExpandCollapse)
                               Padding(
                                 padding: const EdgeInsets.only(top: 8.0),
@@ -2260,50 +2376,543 @@ class _FeedItemState extends State<FeedItem>
     });
   }
 
-  void _showQuickspecificSuggestions(BuildContext context) {
-    showModalBottomSheet<String>(
+  // Add this method to the _FeedItemState class
+
+Future<void> _reportUser() async {
+  // Show report dialog
+  String? selectedReason;
+  String description = '';
+  
+  final result = await showDialog<Map<String, String>>(
+    context: context,
+    builder: (BuildContext context) {
+      return StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: Text(
+              'Report User',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.red.shade700,
+              ),
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Why are you reporting ${widget.content.author.name}?',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                  SizedBox(height: 16),
+                  
+                  // Reason selection
+                  Text(
+                    'Reason:',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade800,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  
+                  // Predefined reasons
+                  ...['Spam', 'Harassment', 'Inappropriate content', 'Fake account', 'Copyright violation', 'Other'].map(
+                    (reason) => RadioListTile<String>(
+                      title: Text(reason),
+                      value: reason,
+                      groupValue: selectedReason,
+                      onChanged: (value) {
+                        setState(() {
+                          selectedReason = value;
+                        });
+                      },
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ).toList(),
+                  
+                  SizedBox(height: 16),
+                  
+                  // Description field
+                  Text(
+                    'Additional details (optional):',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade800,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  TextField(
+                    decoration: InputDecoration(
+                      hintText: 'Provide more details about this report...',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      contentPadding: EdgeInsets.all(12),
+                    ),
+                    maxLines: 3,
+                    onChanged: (value) {
+                      description = value;
+                    },
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text(
+                  'Cancel',
+                  style: TextStyle(color: Colors.grey.shade600),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: selectedReason != null
+                    ? () => Navigator.of(context).pop({
+                          'reason': selectedReason!,
+                          'description': description,
+                        })
+                    : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red.shade600,
+                  foregroundColor: Colors.white,
+                ),
+                child: Text('Report'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+
+  // If user confirmed the report, submit it
+  if (result != null) {
+    await _submitReport(result['reason']!, result['description']!);
+  }
+}
+
+Future<void> _submitReport(String reason, String description) async {
+  try {
+    // Show loading dialog
+    showDialog(
       context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return Container(
+      barrierDismissible: false,
+      builder: (context) => Center(
+        child: Container(
+          padding: EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            borderRadius: BorderRadius.circular(12),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                margin: const EdgeInsets.symmetric(vertical: 12),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.copy, color: Colors.blue),
-                title: const Text('Copy content'),
-                onTap: () => Navigator.pop(context, 'copy'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.flag, color: Colors.orange),
-                title: const Text('Report'),
-                onTap: () => Navigator.pop(context, 'report'),
-              ),
-              const SizedBox(height: 16),
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Submitting report...'),
             ],
           ),
-        );
+        ),
+      ),
+    );
+
+    final String? authToken = AppData().authToken;
+    if (authToken == null || authToken.isEmpty) {
+      Navigator.of(context).pop(); // Close loading dialog
+      Get.snackbar(
+        'Error',
+        'Authentication required to report user',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+        icon: Icon(Icons.error, color: Colors.white),
+      );
+      return;
+    }
+
+    final response = await http.post(
+      Uri.parse('http://182.93.94.210:3066/api/v1/report'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'authorization': 'Bearer $authToken',
       },
-    ).then((value) {
-      if (value == 'copy') {
-        Clipboard.setData(ClipboardData(text: widget.content.status));
-        Get.snackbar('Copied', 'Content copied to clipboard');
-      }
-    });
+      body: jsonEncode({
+        'reportedUserId': widget.content.author.id,
+        'reason': reason,
+        'description': description.isNotEmpty ? description : reason,
+      }),
+    ).timeout(Duration(seconds: 30));
+
+    Navigator.of(context).pop(); // Close loading dialog
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      final responseData = jsonDecode(response.body);
+      
+      Get.snackbar(
+        'Report Submitted',
+        'Thank you for your report. We will review it shortly.',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+        icon: Icon(Icons.check_circle, color: Colors.white),
+        duration: Duration(seconds: 4),
+      );
+      
+      debugPrint('Report submitted successfully: ${responseData.toString()}');
+      
+    } else if (response.statusCode == 401) {
+      // Unauthorized - redirect to login
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => LoginPage()),
+        (route) => false,
+      );
+    } else {
+      // Handle other error responses
+      final responseData = jsonDecode(response.body);
+      final errorMessage = responseData['message'] ?? 'Failed to submit report';
+      
+      Get.snackbar(
+        'Error',
+        errorMessage,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+        icon: Icon(Icons.error, color: Colors.white),
+      );
+      
+      debugPrint('Report submission failed: ${response.statusCode} - ${response.body}');
+    }
+
+  } catch (e) {
+    Navigator.of(context).pop(); // Close loading dialog if it's still open
+    
+    debugPrint('Error submitting report: $e');
+    
+    Get.snackbar(
+      'Error',
+      'Network error. Please check your connection and try again.',
+      backgroundColor: Colors.red,
+      colorText: Colors.white,
+      icon: Icon(Icons.error, color: Colors.white),
+    );
   }
+}
+
+Future<void> _blockUser() async {
+  // Show block confirmation dialog
+  String? selectedReason;
+  String description = '';
+  
+  final result = await showDialog<Map<String, String>>(
+    context: context,
+    builder: (BuildContext context) {
+      return StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: Text(
+              'Block User',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.red.shade700,
+              ),
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Are you sure you want to block ${widget.content.author.name}?',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'Blocked users won\'t be able to see your posts or contact you.',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                  SizedBox(height: 16),
+                  
+                  // Reason selection
+                  Text(
+                    'Reason for blocking:',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade800,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  
+                  // Predefined reasons
+                  ...['Spamming my posts', 'Harassment', 'Inappropriate behavior', 'Fake account', 'Unwanted contact', 'Other'].map(
+                    (reason) => RadioListTile<String>(
+                      title: Text(reason),
+                      value: reason,
+                      groupValue: selectedReason,
+                      onChanged: (value) {
+                        setState(() {
+                          selectedReason = value;
+                        });
+                      },
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ).toList(),
+                  
+                  SizedBox(height: 16),
+                  
+                  // Additional details field
+                  Text(
+                    'Additional details (optional):',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade800,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  TextField(
+                    decoration: InputDecoration(
+                      hintText: 'Provide more details...',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      contentPadding: EdgeInsets.all(12),
+                    ),
+                    maxLines: 2,
+                    onChanged: (value) {
+                      description = value;
+                    },
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text(
+                  'Cancel',
+                  style: TextStyle(color: Colors.grey.shade600),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: selectedReason != null
+                    ? () => Navigator.of(context).pop({
+                          'reason': selectedReason!,
+                          'description': description,
+                        })
+                    : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red.shade600,
+                  foregroundColor: Colors.white,
+                ),
+                child: Text('Block User'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+
+  // If user confirmed the block, submit it
+  if (result != null) {
+    await _submitBlockUser(result['reason']!, result['description']!);
+  }
+}
+
+Future<void> _submitBlockUser(String reason, String description) async {
+  try {
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Center(
+        child: Container(
+          padding: EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Blocking user...'),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final String? authToken = AppData().authToken;
+    if (authToken == null || authToken.isEmpty) {
+      Navigator.of(context).pop(); // Close loading dialog
+      Get.snackbar(
+        'Error',
+        'Authentication required to block user',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+        icon: Icon(Icons.error, color: Colors.white),
+      );
+      return;
+    }
+
+    // Prepare request body
+    final requestBody = {
+      'userId': widget.content.author.id,
+      'reason': description.isNotEmpty ? description : reason,
+      'blockType': 'full',
+    };
+
+    debugPrint('🚫 Blocking user with data: ${jsonEncode(requestBody)}');
+
+    final response = await http.post(
+      Uri.parse('http://182.93.94.210:3066/api/v1/block-user'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'authorization': 'Bearer $authToken',
+      },
+      body: jsonEncode(requestBody),
+    ).timeout(Duration(seconds: 30));// Initialing  the timeout for the 30 second 
+
+    Navigator.of(context).pop(); // Close loading dialog
+
+    debugPrint('🚫 Block API Response: ${response.statusCode}');
+    debugPrint('🚫 Block API Response Body: ${response.body}');
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      final responseData = jsonDecode(response.body);
+      
+      Get.snackbar(
+        'User Blocked',
+        'You have successfully blocked ${widget.content.author.name}. They will no longer be able to see your posts or contact you.',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+        icon: Icon(Icons.block, color: Colors.white),
+        duration: Duration(seconds: 5),
+      );
+      
+      debugPrint('✅ User blocked successfully: ${responseData.toString()}');
+      
+      // Optionally, you might want to remove this post from the feed or refresh the feed
+      // You could emit an event or callback to the parent widget to handle this
+      
+    } else if (response.statusCode == 401) {
+      // Unauthorized - redirect to login
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => LoginPage()),
+        (route) => false,
+      );
+    } else if (response.statusCode == 409) {
+      // User already blocked
+      final responseData = jsonDecode(response.body);
+      final message = responseData['message'] ?? 'User is already blocked';
+      
+      Get.snackbar(
+        'Already Blocked',
+        message,
+        backgroundColor: Colors.orange,
+        colorText: Colors.white,
+        icon: Icon(Icons.info, color: Colors.white),
+      );
+    } else {
+      // Handle other error responses
+      final responseData = jsonDecode(response.body);
+      final errorMessage = responseData['message'] ?? 'Failed to block user';
+      
+      Get.snackbar(
+        'Error',
+        errorMessage,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+        icon: Icon(Icons.error, color: Colors.white),
+      );
+      
+      debugPrint('❌ Block submission failed: ${response.statusCode} - ${response.body}');
+    }
+
+  } catch (e) {
+    Navigator.of(context).pop(); // Close loading dialog if it's still open
+    
+    debugPrint('❌ Error blocking user: $e');
+    
+    Get.snackbar(
+      'Error',
+      'Network error. Please check your connection and try again.',
+      backgroundColor: Colors.red,
+      colorText: Colors.white,
+      icon: Icon(Icons.error, color: Colors.white),
+    );
+  }
+}
+
+// Update the _showQuickspecificSuggestions method to call _reportUser
+void _showQuickspecificSuggestions(BuildContext context) {
+  showModalBottomSheet<String>(
+    context: context,
+    backgroundColor: Colors.transparent,
+    builder: (context) {
+      return Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.copy, color: Colors.blue),
+              title: const Text('Copy content'),
+              onTap: () => Navigator.pop(context, 'copy'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.flag, color: Colors.orange),
+              title: const Text('Report'),
+              onTap: () => Navigator.pop(context, 'report'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.block, color: Colors.red),
+              title: const Text('Block'),
+              onTap: () => Navigator.pop(context, 'block'),
+            ),
+            const SizedBox(height: 25),
+          ],
+        ),
+      );
+    },
+  ).then((value) {
+    if (value == 'copy') {
+      Clipboard.setData(ClipboardData(text: widget.content.status));
+      Get.snackbar('Copied', 'Content copied to clipboard');
+    } else if (value == 'report') {
+      // Call the report function
+      _reportUser();
+    }else if (value == 'block') {
+      // Call the block function
+      _blockUser();
+    }
+  });
+}
 }
 
 // AutoPlayVideoWidget with enhanced performance
@@ -2817,4 +3426,4 @@ extension DateTimeExtension on DateTime {
       return 'Just now';
     }
   }
-}
+}//
