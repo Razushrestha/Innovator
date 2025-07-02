@@ -479,7 +479,7 @@ class _CartScreenState extends State<CartScreen>
                                           ),
                                         ),
                                         child: Text(
-                                          '\$${(item.price * item.quantity).toStringAsFixed(2)}',
+                                          '\NPR ${(item.price * item.quantity).toStringAsFixed(2)}',
                                           style: TextStyle(
                                             fontWeight: FontWeight.bold,
                                             color: _priceColor,

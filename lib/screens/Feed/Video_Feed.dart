@@ -280,6 +280,9 @@ class VideoFeedPage extends StatefulWidget {
   _VideoFeedPageState createState() => _VideoFeedPageState();
 }
 
+// Fixed Video Feed Page with proper pagination handling
+
+
 class _VideoFeedPageState extends State<VideoFeedPage> {
   final List<FeedContent> _videoContents = [];
   final ScrollController _scrollController = ScrollController();
@@ -297,6 +300,13 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
   
   // Track loaded video IDs to avoid duplicates
   final Set<String> _loadedVideoIds = {};
+  
+  // Add a flag to prevent multiple simultaneous API calls
+  bool _isLoadingMore = false;
+  
+  // Counter for failed attempts to prevent infinite loops
+  int _failedAttempts = 0;
+  final int _maxFailedAttempts = 5;
 
   @override
   void initState() {
@@ -310,7 +320,7 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
       await AppData().initialize();
       
       if (AppData().isAuthenticated) {
-        await _loadVideoContent();
+        await _loadInitialContent();
       } else {
         setState(() {
           _hasError = true;
@@ -325,9 +335,16 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
     }
   }
 
+  Future<void> _loadInitialContent() async {
+    // Load multiple videos initially to have a good starting set
+    for (int i = 0; i < 5 && _hasMoreVideos && _failedAttempts < _maxFailedAttempts; i++) {
+      await _loadSingleVideo();
+      if (_videoContents.length >= 3) break; // Stop when we have enough content
+    }
+  }
+
   Future<void> _checkConnectivity() async {
     try {
-      // First try a simple HTTP request to your API server
       final testResponse = await http.get(
         Uri.parse('http://182.93.94.210:3066/api/v1/health'),
         headers: {
@@ -337,10 +354,9 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
       ).timeout(Duration(seconds: 10));
       
       setState(() {
-        _isOnline = testResponse.statusCode == 200 || testResponse.statusCode == 404; // 404 is OK if health endpoint doesn't exist
+        _isOnline = testResponse.statusCode == 200 || testResponse.statusCode == 404;
       });
     } catch (e) {
-      // Fallback to Google DNS check
       try {
         final result = await InternetAddress.lookup('8.8.8.8');
         setState(() {
@@ -354,16 +370,15 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
     }
   }
 
-  Future<void> _loadVideoContent() async {
-    if (_isLoading || !_hasMoreVideos) return;
+  Future<void> _loadSingleVideo() async {
+    if (_isLoadingMore || !_hasMoreVideos || _failedAttempts >= _maxFailedAttempts) return;
 
     setState(() {
-      _isLoading = true;
+      _isLoadingMore = true;
       _hasError = false;
     });
 
     try {
-      // Make API request to get single video reel
       final response = await _makeApiRequest();
       
       if (response.statusCode == 200) {
@@ -379,31 +394,33 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
               content.author.email,
             );
             
-            // Update the existing content with follow status instead of creating a new one
             content.isFollowing = isFollowing;
 
             setState(() {
               _videoContents.add(content);
               _loadedVideoIds.add(content.id);
               _hasMoreVideos = content.hasMore;
-              _isOnline = true; // We successfully got data, so we're online
+              _isOnline = true;
+              _failedAttempts = 0; // Reset failed attempts on success
             });
           } else {
-            // If duplicate or no videos, try to load next one
-            if (_hasMoreVideos && content.hasMore) {
-              // Add small delay to prevent rapid successive calls
+            // If duplicate or no videos, increment failed attempts
+            _failedAttempts++;
+            
+            // If we still have more videos according to API, try again
+            if (_hasMoreVideos && content.hasMore && _failedAttempts < _maxFailedAttempts) {
               await Future.delayed(Duration(milliseconds: 500));
-              _loadVideoContent();
+              await _loadSingleVideo();
             } else {
-              // No more videos available
               setState(() {
                 _hasMoreVideos = false;
               });
             }
           }
         } else {
+          _failedAttempts++;
           setState(() {
-            _hasError = true;
+            _hasError = _failedAttempts >= _maxFailedAttempts;
             _errorMessage = apiResponse.error ?? 'Failed to load video content';
           });
         }
@@ -418,32 +435,33 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
             MaterialPageRoute(builder: (_) => LoginPage()),
             (route) => false);
       } else if (response.statusCode == 404) {
-        // No more content available
         setState(() {
           _hasMoreVideos = false;
         });
       } else {
+        _failedAttempts++;
         setState(() {
-          _hasError = true;
+          _hasError = _failedAttempts >= _maxFailedAttempts;
           _errorMessage = 'Failed to load videos: ${response.statusCode}';
-          _isOnline = false; // Mark as offline if we get HTTP errors
+          _isOnline = false;
         });
       }
     } catch (e) {
+      _failedAttempts++;
       setState(() {
-        _hasError = true;
+        _hasError = _failedAttempts >= _maxFailedAttempts;
         _errorMessage = 'Connection Error: ${e.toString()}';
         _isOnline = false;
       });
     } finally {
       setState(() {
+        _isLoadingMore = false;
         _isLoading = false;
       });
     }
   }
 
   Future<http.Response> _makeApiRequest() async {
-    // Updated to use the new video-reel endpoint
     final url = Uri.parse('http://182.93.94.210:3066/api/v1/video-reel');
     
     try {
@@ -473,10 +491,11 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
       _hasError = false;
       _hasMoreVideos = true;
       _currentPage = 0;
+      _failedAttempts = 0; // Reset failed attempts
     });
     
     try {
-      await _loadVideoContent();
+      await _loadInitialContent();
       if (_videoContents.isNotEmpty && _pageController.hasClients) {
         _pageController.animateToPage(
           0,
@@ -511,96 +530,41 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
       child: PageView.builder(
         controller: _pageController,
         scrollDirection: Axis.vertical,
-        // Prevent scrolling when no more videos and not loading
-        physics: (!_hasMoreVideos && !_isLoading && _videoContents.isNotEmpty) 
-            ? NeverScrollableScrollPhysics() 
-            : AlwaysScrollableScrollPhysics(),
-        itemCount: _videoContents.length + (_hasMoreVideos ? 1 : 0),
-        onPageChanged: (index) {
+        // Always allow scrolling - we'll handle the logic inside
+        physics: AlwaysScrollableScrollPhysics(),
+        // Important: Only show actual video count, no extra loading items
+        itemCount: _videoContents.length,
+        onPageChanged: (index) async {
           setState(() {
             _currentPage = index;
           });
-          // Load more videos when approaching the end
-          if (index >= _videoContents.length - 2 && _hasMoreVideos && !_isLoading) {
-            _loadVideoContent();
+          
+          // Load more videos when approaching the end (2 videos before the last one)
+          if (index >= _videoContents.length - 2 && 
+              _hasMoreVideos && 
+              !_isLoadingMore && 
+              _failedAttempts < _maxFailedAttempts) {
+            
+            // Load multiple videos at once to prevent the blank screen
+            for (int i = 0; i < 3 && _hasMoreVideos && _failedAttempts < _maxFailedAttempts; i++) {
+              await _loadSingleVideo();
+              // Add small delay between requests to prevent overwhelming the server
+              if (i < 2) await Future.delayed(Duration(milliseconds: 200));
+            }
           }
         },
         itemBuilder: (context, index) {
-          if (index == _videoContents.length) {
-            // Show loading or "no more videos" message
-            if (_isLoading) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CircularProgressIndicator(color: Colors.deepOrange),
-                    SizedBox(height: 16),
-                    Text(
-                      'Loading more videos...',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  ],
-                ),
-              );
-            } else if (!_hasMoreVideos) {
-              // No more videos available - this should not be reached due to physics but keep as fallback
-              return Container(
-                color: Colors.black,
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Lottie.asset(
-                        'animation/No-Content.json', 
-                        height: 150,
-                        repeat: false,
-                      ),
-                      SizedBox(height: 20),
-                      Text(
-                        'You\'ve reached the end!',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        'Pull down to refresh for new content',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 14,
-                        ),
-                      ),
-                      SizedBox(height: 20),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.deepOrange,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                          padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                        ),
-                        onPressed: _refresh,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.refresh, color: Colors.white, size: 20),
-                            SizedBox(width: 8),
-                            Text(
-                              'Refresh for more',
-                              style: TextStyle(color: Colors.white),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }
-            return SizedBox.shrink();
+          // Only build widgets for actual video content
+          if (index >= _videoContents.length) {
+            return Container(
+              color: Colors.black,
+              child: Center(
+                child: CircularProgressIndicator(color: Colors.deepOrange),
+              ),
+            );
           }
+          
+          final isLastVideo = !_hasMoreVideos && index == _videoContents.length - 1;
           
           return ReelsVideoItem(
             content: _videoContents[index],
@@ -616,9 +580,85 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
               });
             },
             isCurrent: index == _currentPage,
-            isLastVideo: !_hasMoreVideos && index == _videoContents.length - 1,
+            isLastVideo: isLastVideo,
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildLoadingIndicator() {
+    return Container(
+      color: Colors.black,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(color: Colors.deepOrange),
+            SizedBox(height: 16),
+            Text(
+              'Loading videos...',
+              style: TextStyle(color: Colors.white),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNoMoreContent() {
+    return Container(
+      color: Colors.black,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Lottie.asset(
+            //   'animation/No-Content.json', 
+            //   height: 150,
+            //   repeat: false,
+            // ),
+            // SizedBox(height: 20),
+            // Text(
+            //   'You\'ve reached the end!',
+            //   style: TextStyle(
+            //     color: Colors.white,
+            //     fontSize: 18,
+            //     fontWeight: FontWeight.bold,
+            //   ),
+            // ),
+            // SizedBox(height: 8),
+            // Text(
+            //   'Pull down to refresh for new content',
+            //   style: TextStyle(
+            //     color: Colors.white70,
+            //     fontSize: 14,
+            //   ),
+            // ),
+            SizedBox(height: 20),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.deepOrange,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(30),
+                ),
+                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
+              onPressed: _refresh,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.refresh, color: Colors.white, size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    'Refresh for more',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -677,7 +717,7 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
                 ],
               ),
             )
-          else if (_videoContents.isEmpty && !_isLoading && !_isRefreshing)
+          else if (_videoContents.isEmpty && !_isLoadingMore && !_isRefreshing)
             Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -705,21 +745,46 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
               ),
             )
           else if (_isRefreshing && _videoContents.isEmpty)
-            Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(color: Colors.deepOrange),
-                  SizedBox(height: 16),
-                  Text(
-                    'Loading fresh content...',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                ],
-              ),
-            )
+            _buildLoadingIndicator()
+          else if (_videoContents.isNotEmpty)
+            _buildReelsView()
           else
-            _buildReelsView(),
+            _buildLoadingIndicator(),
+          
+          // Loading indicator overlay when loading more content
+          if (_isLoadingMore && _videoContents.isNotEmpty)
+            Positioned(
+              bottom: 20,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.7),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.deepOrange,
+                        ),
+                      ),
+                      SizedBox(width: 8),
+                      Text(
+                        'Loading more...',
+                        style: TextStyle(color: Colors.white, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           
           Positioned(
             top: mq.height * 0.01,
@@ -1443,8 +1508,8 @@ class AutoPlayVideoWidgetState extends State<AutoPlayVideoWidget>
       curve: Curves.easeOut,
     ));
     
-    // Use playback settings from API - start unmuted for better user experience
-    _isMuted = widget.playbackSettings?.muted ?? false;
+    // Force video to start unmuted for better user experience
+    _isMuted = false; // Always start unmuted
     _initializeVideoPlayer();
   }
 

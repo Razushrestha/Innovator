@@ -1490,30 +1490,43 @@ class _FeedItemState extends State<FeedItem>
                                 ),
                               ),
                               if (!isOwnContent) ...[
-                                const SizedBox(width: 8.0),
-                                Container(
-                                  width: 4.0,
-                                  height: 4.0,
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.shade400,
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                                const SizedBox(width: 8.0),
-                                AnimatedContainer(
-                                  duration: const Duration(milliseconds: 200),
-                                  child: FollowButton(
-                                    targetUserEmail: widget.content.author.email,
-                                    initialFollowStatus: widget.content.isFollowed,
-                                    onFollowSuccess: () {
-                                      widget.onFollowToggled(true);
-                                    },
-                                    onUnfollowSuccess: () {
-                                      widget.onFollowToggled(false);
-                                    },
-                                  ),
-                                ),
-                              ],
+  const SizedBox(width: 8.0),
+  Container(
+    width: 4.0,
+    height: 4.0,
+    decoration: BoxDecoration(
+      color: Colors.grey.shade400,
+      shape: BoxShape.circle,
+    ),
+  ),
+  const SizedBox(width: 8.0),
+  AnimatedContainer(
+    duration: const Duration(milliseconds: 200),
+    key: ValueKey('follow_${widget.content.author.email}_${widget.content.author.id}'), // Unique key
+    child: FollowButton(
+      targetUserEmail: widget.content.author.email,
+      initialFollowStatus: widget.content.isFollowed,
+      onFollowSuccess: () {
+        debugPrint('✅ Follow success callback for ${widget.content.author.email}');
+        if (mounted) {
+          setState(() {
+            widget.content.isFollowed = true;
+          });
+          widget.onFollowToggled(true);
+        }
+      },
+      onUnfollowSuccess: () {
+        debugPrint('✅ Unfollow success callback for ${widget.content.author.email}');
+        if (mounted) {
+          setState(() {
+            widget.content.isFollowed = false;
+          });
+          widget.onFollowToggled(false);
+        }
+      },
+    ),
+  ),
+],
                             ],
                           ),
                           const SizedBox(height: 4.0),
