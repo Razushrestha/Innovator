@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:innovator/Authorization/Login.dart';
+import 'package:innovator/Authorization/firebase_services.dart';
 import 'package:innovator/helper/dialogs.dart';
 import 'package:innovator/main.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
@@ -154,15 +155,33 @@ class _SignupState extends State<Signup> {
         // Successfully registered
         final responseData = jsonDecode(response.body);
         
-        // You might want to store user info or token here
-        // For example, if the API returns a user object or token:
-        // final user = responseData['user'];
-        // final token = responseData['token'];
-        // Save these to shared preferences or other storage
+        // Extract user data from response
+        Map<String, dynamic>? userData;
+        if (responseData['user'] is Map) {
+          userData = Map<String, dynamic>.from(responseData['user']);
+        } else if (responseData['data'] is Map) {
+          userData = Map<String, dynamic>.from(responseData['data']);
+        }
+
+        // Generate a user ID if not present
+        String userId = userData?['_id'] ?? 
+                       userData?['id'] ?? 
+                       userData?['userId'] ?? 
+                       DateTime.now().millisecondsSinceEpoch.toString();
+
+        // Save user to Firestore
+        await FirebaseService.saveUserToFirestore(
+          userId: userId,
+          name: nameController.text.trim(),
+          email: emailController.text.trim(),
+          phone: completePhoneNumber,
+          dob: dobController.text,
+          provider: 'email',
+        );
 
         Dialogs.showSnackbar(context, 'Account successfully created');
         
-        // Navigate to home page
+        // Navigate to login page
         Navigator.pushReplacement(context, MaterialPageRoute(
           builder: (context) => LoginPage(),
         ));

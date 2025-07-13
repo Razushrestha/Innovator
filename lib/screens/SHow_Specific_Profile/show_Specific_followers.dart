@@ -404,9 +404,9 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> wit
         elevation: 0,
         bottom: TabBar(
           controller: _tabController,
-          labelColor: const Color.fromRGBO(235, 111, 70, 1),
+          labelColor: const Color.fromRGBO(244, 135, 6, 1),
           unselectedLabelColor: Colors.grey,
-          indicatorColor: const Color.fromRGBO(235, 111, 70, 1),
+          indicatorColor: const Color.fromRGBO(244, 135, 6, 1),
           tabs: [
             Tab(
               child: Row(
@@ -837,9 +837,9 @@ class _FollowersFollowingContentState extends State<FollowersFollowingContent> w
         // Tab Bar
         TabBar(
           controller: _tabController,
-          labelColor: const Color.fromRGBO(235, 111, 70, 1),
+          labelColor: const Color.fromRGBO(244, 135, 6, 1),
           unselectedLabelColor: Colors.grey,
-          indicatorColor: const Color.fromRGBO(235, 111, 70, 1),
+          indicatorColor: const Color.fromRGBO(244, 135, 6, 1),
           tabs: [
             Tab(
               child: Row(

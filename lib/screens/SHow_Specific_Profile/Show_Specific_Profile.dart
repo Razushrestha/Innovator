@@ -9,7 +9,6 @@ import 'package:innovator/controllers/user_controller.dart';
 import 'package:innovator/screens/Feed/Inner_Homepage.dart';
 import 'package:innovator/screens/Follow/follow_Button.dart';
 import 'package:flutter/services.dart';
-import 'package:innovator/screens/chatrrom/Screen/chat_listscreen.dart';
 import 'package:innovator/screens/comment/comment_screen.dart';
 import 'package:innovator/screens/show_Specific_Profile/User_Image_Gallery.dart';
 import 'package:innovator/screens/show_Specific_Profile/show_Specific_followers.dart';
@@ -1159,18 +1158,18 @@ class _SpecificUserProfilePageState extends State<SpecificUserProfilePage>
                   'Message',
                   Icons.message_outlined,
                   () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ChatListScreen(
-                          currentUserId: AppData().currentUserId ?? '',
-                          currentUserName: AppData().currentUserName ?? '',
-                          currentUserPicture:
-                              AppData().currentUserProfilePicture ?? '',
-                          currentUserEmail: AppData().currentUserEmail ?? '',
-                        ),
-                      ),
-                    );
+                    // Navigator.push(
+                    //   context,
+                    //   MaterialPageRoute(
+                    //     builder: (_) => ChatListScreen(
+                    //       currentUserId: AppData().currentUserId ?? '',
+                    //       currentUserName: AppData().currentUserName ?? '',
+                    //       currentUserPicture:
+                    //           AppData().currentUserProfilePicture ?? '',
+                    //       currentUserEmail: AppData().currentUserEmail ?? '',
+                    //     ),
+                    //   ),
+                    // );
                   },
                 ),
               ),

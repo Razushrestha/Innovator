@@ -39,7 +39,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
   String? _errorMessage;
 
   // Theme colors
-  static const Color primaryColor = Color.fromRGBO(235, 111, 70, 1);
+  static const Color primaryColor = Color.fromRGBO(244, 135, 6, 1);
   static const Color primaryColorLight = Color.fromRGBO(235, 111, 70, 0.1);
   static const Color cardColor = Colors.white;
   static const Color backgroundColor = Color(0xFFF8F9FA);

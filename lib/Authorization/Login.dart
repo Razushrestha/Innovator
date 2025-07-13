@@ -5,10 +5,11 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:innovator/App_data/App_data.dart';
 import 'package:innovator/Authorization/Forget_PWD.dart';
+import 'package:innovator/Authorization/firebase_services.dart';
 import 'package:innovator/Authorization/signup.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_messaging/firebase_messaging.dart'; // Added for FCM
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:get/get.dart';
 import 'package:innovator/helper/dialogs.dart';
 import 'package:innovator/innovator_home.dart';
@@ -25,7 +26,7 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final Color preciseGreen = Color.fromRGBO(235, 111, 70, 1);
+  final Color preciseGreen = Color.fromRGBO(244, 135, 6, 1);
   bool _isPasswordVisible = false;
   bool isLogin = true;
   bool _isLoading = false;
@@ -54,8 +55,6 @@ class _LoginPageState extends State<LoginPage> {
     super.initState();
     _requestNotificationPermission();
   }
-
-
 
   // Request notification permission for FCM
   Future<void> _requestNotificationPermission() async {
@@ -232,6 +231,15 @@ class _LoginPageState extends State<LoginPage> {
           await AppData().setCurrentUser(userData);
           developer.log('User data saved successfully with _id: ${userData['_id']}');
 
+          // Save to Firestore
+          await FirebaseService.saveUserToFirestore(
+            userId: user.uid,
+            name: user.displayName ?? user.email?.split('@')[0] ?? 'User',
+            email: user.email ?? '',
+            photoURL: user.photoURL,
+            provider: 'google',
+          );
+
           // Save FCM token
           try {
             final token = await _firebaseMessaging.getToken();
@@ -248,9 +256,6 @@ class _LoginPageState extends State<LoginPage> {
           }
 
           Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => Homepage()), (route) => false,);
-
-          // Navigate to home page
-          
 
           Dialogs.showSnackbar(context, 'Welcome back! Signed in with Google.');
           return true;
@@ -366,6 +371,15 @@ class _LoginPageState extends State<LoginPage> {
       developer.log('Google Register API Response: ${response.statusCode} - ${response.body}');
 
       if (response.statusCode == 200 || response.statusCode == 201) {
+        // Save to Firestore
+        await FirebaseService.saveUserToFirestore(
+          userId: user.uid,
+          name: user.displayName ?? user.email?.split('@')[0] ?? 'User',
+          email: user.email ?? '',
+          photoURL: user.photoURL,
+          provider: 'google',
+        );
+
         await _handleSuccessfulLogin(response.body);
         Dialogs.showSnackbar(context, 'Account created successfully with Google!');
         return true;
@@ -469,6 +483,19 @@ class _LoginPageState extends State<LoginPage> {
         userData['fcmTokens'] ??= [];
         await AppData().setCurrentUser(userData);
         developer.log('User data saved successfully: $userData');
+
+        // Save to Firestore for regular login
+        if (userData['_id'] != null) {
+          await FirebaseService.saveUserToFirestore(
+            userId: userData['_id'],
+            name: userData['name'] ?? '',
+            email: userData['email'] ?? '',
+            phone: userData['phone'],
+            dob: userData['dob'],
+            photoURL: userData['photoURL'],
+            provider: userData['provider'] ?? 'email',
+          );
+        }
       } catch (e) {
         developer.log('Error saving user data: $e');
         Dialogs.showSnackbar(context, 'Error saving user data');
@@ -529,8 +556,7 @@ class _LoginPageState extends State<LoginPage> {
     try {
       await _googleSignIn.signOut();
       await FirebaseAuth.instance.signOut();
-_handleGoogleSignIn();
-      
+      _handleGoogleSignIn();
     } catch (e) {
       developer.log('Error showing account picker: $e');
       _handleGoogleSignIn();
@@ -540,9 +566,10 @@ _handleGoogleSignIn();
   @override
   Widget build(BuildContext context) {
     final Size screenSize = MediaQuery.of(context).size;
-final mq = MediaQuery.of(context).size;
-  final theme = Theme.of(context);
-      return Theme(
+    final mq = MediaQuery.of(context).size;
+    final theme = Theme.of(context);
+    
+    return Theme(
       data: ThemeData(primaryColor: preciseGreen),
       child: Scaffold(
         appBar: AppBar(

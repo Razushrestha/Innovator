@@ -8,7 +8,6 @@ import 'package:innovator/innovator_home.dart';
 import 'package:innovator/screens/Profile/profile_page.dart';
 import 'package:innovator/screens/show_Specific_Profile/Show_Specific_Profile.dart';
 import 'package:intl/intl.dart';
-import 'package:innovator/screens/chatrrom/Screen/chatscreen.dart';
 import 'package:innovator/screens/comment/comment_screen.dart';
 import 'package:innovator/screens/Feed/post_detail_screen.dart';
 import 'package:innovator/screens/Profile/profile_screen.dart';
@@ -1307,21 +1306,21 @@ class _NotificationListScreenState extends State<NotificationListScreen>
 
   void _navigateToChat(NotificationModel notification) {
     if (notification.sender != null) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => ChatScreen(
-            currentUserId: AppData().currentUserId ?? '',
-            currentUserName: AppData().currentUserName ?? '',
-            currentUserPicture: AppData().currentUserProfilePicture ?? '',
-            currentUserEmail: AppData().currentUserEmail ?? '',
-            receiverId: notification.sender!.id,
-            receiverName: notification.sender!.name ?? 'Unknown',
-            receiverPicture: notification.sender!.picture ?? '',
-            receiverEmail: notification.sender!.email,
-          ),
-        ),
-      );
+      // Navigator.push(
+      //   context,
+      //   MaterialPageRoute(
+      //     builder: (context) => ChatScreen(
+      //       currentUserId: AppData().currentUserId ?? '',
+      //       currentUserName: AppData().currentUserName ?? '',
+      //       currentUserPicture: AppData().currentUserProfilePicture ?? '',
+      //       currentUserEmail: AppData().currentUserEmail ?? '',
+      //       receiverId: notification.sender!.id,
+      //       receiverName: notification.sender!.name ?? 'Unknown',
+      //       receiverPicture: notification.sender!.picture ?? '',
+      //       receiverEmail: notification.sender!.email,
+      //     ),
+      //   ),
+      // );
     }
   }
 

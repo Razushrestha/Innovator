@@ -165,7 +165,7 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text('Reset Password', style: TextStyle(color: Colors.white)),
-        backgroundColor: Color.fromRGBO(235, 111, 70, 1),
+        backgroundColor: Color.fromRGBO(244, 135, 6, 1),
         leading: IconButton(
           icon: Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
@@ -176,7 +176,7 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
         child: Column(
           children: [
             Container(
-              color: Color.fromRGBO(235, 111, 70, 1),
+              color: Color.fromRGBO(244, 135, 6, 1),
               width: mq.width,
               height: mq.height * 0.15,
               child: Center(
@@ -198,7 +198,7 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
                     style: TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
-                      color: Color.fromRGBO(235, 111, 70, 1),
+                      color: Color.fromRGBO(244, 135, 6, 1),
                     ),
                   ),
                   SizedBox(height: 10),
@@ -229,13 +229,13 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
                     ],
                     decoration: InputDecoration(
                       labelText: 'Enter OTP',
-                      prefixIcon: Icon(Icons.lock_outline, color: Color.fromRGBO(235, 111, 70, 1)),
+                      prefixIcon: Icon(Icons.lock_outline, color: Color.fromRGBO(244, 135, 6, 1)),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(20),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(20),
-                        borderSide: BorderSide(color: Color.fromRGBO(235, 111, 70, 1), width: 2),
+                        borderSide: BorderSide(color: Color.fromRGBO(244, 135, 6, 1), width: 2),
                       ),
                     ),
                   ),
@@ -245,7 +245,7 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
                     obscureText: !_isPasswordVisible,
                     decoration: InputDecoration(
                       labelText: 'New Password',
-                      prefixIcon: Icon(Icons.lock, color: Color.fromRGBO(235, 111, 70, 1)),
+                      prefixIcon: Icon(Icons.lock, color: Color.fromRGBO(244, 135, 6, 1)),
                       suffixIcon: IconButton(
                         icon: Icon(
                           _isPasswordVisible ? Icons.visibility_off : Icons.visibility,
@@ -262,7 +262,7 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(20),
-                        borderSide: BorderSide(color: Color.fromRGBO(235, 111, 70, 1), width: 2),
+                        borderSide: BorderSide(color: Color.fromRGBO(244, 135, 6, 1), width: 2),
                       ),
                     ),
                   ),
@@ -272,7 +272,7 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
                     obscureText: !_isConfirmPasswordVisible,
                     decoration: InputDecoration(
                       labelText: 'Confirm Password',
-                      prefixIcon: Icon(Icons.lock_clock, color: Color.fromRGBO(235, 111, 70, 1)),
+                      prefixIcon: Icon(Icons.lock_clock, color: Color.fromRGBO(244, 135, 6, 1)),
                       suffixIcon: IconButton(
                         icon: Icon(
                           _isConfirmPasswordVisible ? Icons.visibility_off : Icons.visibility,
@@ -289,7 +289,7 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(20),
-                        borderSide: BorderSide(color: Color.fromRGBO(235, 111, 70, 1), width: 2),
+                        borderSide: BorderSide(color: Color.fromRGBO(244, 135, 6, 1), width: 2),
                       ),
                     ),
                   ),
@@ -297,7 +297,7 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
                   ElevatedButton(
                     onPressed: _isLoading ? null : verifyOTP,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Color.fromRGBO(235, 111, 70, 1),
+                      backgroundColor: Color.fromRGBO(244, 135, 6, 1),
                       padding: EdgeInsets.symmetric(horizontal: 40, vertical: 15),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(20),
@@ -324,7 +324,7 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
                     child: Text(
                       'Didn\'t receive the code? Resend',
                       style: TextStyle(
-                        color: Color.fromRGBO(235, 111, 70, 1),
+                        color: Color.fromRGBO(244, 135, 6, 1),
                         fontWeight: FontWeight.bold,
                       ),
                     ),

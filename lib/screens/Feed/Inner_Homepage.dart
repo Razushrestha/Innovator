@@ -21,8 +21,9 @@ import 'package:innovator/screens/Likes/content-Like-Button.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart';
 import 'package:innovator/screens/SHow_Specific_Profile/Show_Specific_Profile.dart';
-import 'package:innovator/screens/chatrrom/Screen/chat_listscreen.dart';
-import 'package:innovator/screens/chatrrom/controller/chatlist_controller.dart';
+import 'package:innovator/screens/chatApp/chat_homepage.dart';
+import 'package:innovator/screens/chatApp/controller/chat_controller.dart';
+
 import 'package:innovator/screens/chatrrom/sound/soundplayer.dart';
 import 'package:innovator/screens/comment/JWT_Helper.dart';
 import 'package:innovator/screens/comment/comment_section.dart';
@@ -385,6 +386,54 @@ class FileTypeHelper {
   }
 }
 
+class CursorHelper {
+  // Check if a string is a valid MongoDB ObjectId
+  static bool isValidObjectId(String? cursor) {
+    if (cursor == null || cursor.isEmpty) return false;
+    
+    // MongoDB ObjectId is 24 hex characters
+    final objectIdRegex = RegExp(r'^[0-9a-fA-F]{24}$');
+    return objectIdRegex.hasMatch(cursor);
+  }
+
+  // Extract ObjectId from cursor if it contains one
+  static String? extractObjectId(String? cursor) {
+    if (cursor == null || cursor.isEmpty) return null;
+    
+    // If it's already a valid ObjectId, return it
+    if (isValidObjectId(cursor)) return cursor;
+    
+    // Try to extract ObjectId from cursor string
+    final objectIdRegex = RegExp(r'[0-9a-fA-F]{24}');
+    final match = objectIdRegex.firstMatch(cursor);
+    
+    if (match != null) {
+      final extractedId = match.group(0);
+      if (extractedId != null && isValidObjectId(extractedId)) {
+        return extractedId;
+      }
+    }
+    
+    return null;
+  }
+
+  // Clean cursor for API usage
+  static String? cleanCursor(String? cursor) {
+    if (cursor == null || cursor.isEmpty || cursor == 'null') return null;
+    
+    // If it's a valid ObjectId, return it
+    if (isValidObjectId(cursor)) return cursor;
+    
+    // Try to extract ObjectId
+    final extractedId = extractObjectId(cursor);
+    if (extractedId != null) return extractedId;
+    
+    // If no valid ObjectId found, return null to start fresh
+    debugPrint('⚠️ Invalid cursor format: $cursor - will start fresh');
+    return null;
+  }
+}
+
 class Inner_HomePage extends StatefulWidget {
   const Inner_HomePage({Key? key}) : super(key: key);
 
@@ -393,192 +442,443 @@ class Inner_HomePage extends StatefulWidget {
 }
 
 class _Inner_HomePageState extends State<Inner_HomePage> {
-  final ChatListController chatController = Get.put(ChatListController());
   final List<FeedContent> _allContents = [];
   final ScrollController _scrollController = ScrollController();
+  final AppData _appData = AppData();
+  
+  // Loading and error states
   bool _isLoading = false;
-  String? _nextCursor;
   bool _hasError = false;
   String _errorMessage = '';
   bool _hasMoreContent = true;
-  final AppData _appData = AppData();
+  String? _nextCursor;
   bool _isRefreshingToken = false;
   bool _isOnline = true;
-  Timer? _debounce;
-  Timer? _autoLoadTimer;
+  bool _isInitialLoad = true;
+  bool _hasInitialData = false;
+  bool _isLoadingMore = false;
+  
+  // Pagination handling
+  int _currentOffset = 0;
+  bool _useCursorPagination = true;
+  
+  // Scroll management
+  Timer? _scrollDebounce;
+  bool _isNearBottom = false;
+  double _lastScrollPosition = 0;
+  static const double _scrollThreshold = 0.8;
+  static const int _preloadDistance = 300;
+  
+  // Memory management
+  static const int _maxContentItems = 300;
+  static const int _itemsToRemoveOnCleanup = 100;
+  
+  // Rate limiting - REDUCED interval
   DateTime _lastLoadTime = DateTime.now();
-
-  // Enhanced memory management
-  static const int _maxContentItems = 500; // Increased from 200
-  static const int _contentToRemove = 100; // Increased from 50
-
-  // Track loading state to prevent duplicate requests
-  bool _isInitialLoadComplete = false;
+  static const int _minimumLoadInterval = 500;
 
   @override
   void initState() {
     super.initState();
     _requestNotificationPermission();
-    _initializeData();
-    _setupScrollListener();
+    _initializeInfiniteScroll();
     _checkConnectivity();
-    _startAutoLoadTimer();
   }
 
-  // ENHANCED SCROLL LISTENER SETUP
+  // ENHANCED: Initialize infinite scroll
+  Future<void> _initializeInfiniteScroll() async {
+    try {
+      await _appData.initialize();
+      if (await _verifyToken()) {
+        await _loadInitialContent();
+        _setupScrollListener();
+        _isInitialLoad = false;
+        _hasInitialData = true;
+      }
+    } catch (e) {
+      debugPrint('❌ Error initializing infinite scroll: $e');
+      _handleError('Failed to initialize feed');
+    }
+  }
+
+  // ENHANCED: Setup scroll listener
   void _setupScrollListener() {
     _scrollController.addListener(() {
-      // Cancel any existing debounce
-      _debounce?.cancel();
-
-      // Reduced debounce for better responsiveness
-      _debounce = Timer(const Duration(milliseconds: 200), () {
+      _scrollDebounce?.cancel();
+      _scrollDebounce = Timer(const Duration(milliseconds: 150), () {
         _handleScrollEvent();
       });
     });
   }
 
-  // IMPROVED SCROLL EVENT HANDLER - Fixed infinite scroll logic
+  // ENHANCED: Handle scroll events with better logic
   void _handleScrollEvent() {
-    if (!_scrollController.hasClients || _isLoading || !_hasMoreContent) {
-      debugPrint(
-        '❌ Scroll blocked - HasClients: ${_scrollController.hasClients}, Loading: $_isLoading, HasMore: $_hasMoreContent',
-      );
+    if (!_scrollController.hasClients || _isLoading || !_hasMoreContent || _isLoadingMore) {
       return;
     }
 
-    final double currentPosition = _scrollController.position.pixels;
-    final double maxScrollExtent = _scrollController.position.maxScrollExtent;
+    final position = _scrollController.position;
+    final currentScroll = position.pixels;
+    final maxScroll = position.maxScrollExtent;
+    
+    if (maxScroll <= 0) return;
 
-    bool shouldLoadMore = false;
-    String triggerReason = '';
-
-    // UPDATED: More conservative trigger - 90% instead of 80%
-    if (maxScrollExtent > 0 && currentPosition >= maxScrollExtent * 0.90) {
-      shouldLoadMore = true;
-      triggerReason = 'Near bottom (90%)';
-    }
-    // Secondary: Within 200px of end (reduced from 500px)
-    else if (maxScrollExtent > 0 &&
-        (maxScrollExtent - currentPosition) <= 200) {
-      shouldLoadMore = true;
-      triggerReason = 'Approaching end (200px)';
-    }
-
+    final scrollPercentage = currentScroll / maxScroll;
+    _isNearBottom = scrollPercentage >= _scrollThreshold;
+    
+    final shouldLoadMore = _shouldLoadMoreContent(currentScroll, maxScroll, scrollPercentage);
+    
     if (shouldLoadMore) {
-      debugPrint('🚀 Loading more content - Trigger: $triggerReason');
-      debugPrint(
-        '📍 Position: ${currentPosition.toStringAsFixed(1)} / ${maxScrollExtent.toStringAsFixed(1)}',
-      );
-      debugPrint('📊 Current items: ${_allContents.length}');
+      debugPrint('🚀 Infinite scroll triggered');
+      debugPrint('📊 Scroll: ${scrollPercentage.toStringAsFixed(2)} (${currentScroll.toInt()}/${maxScroll.toInt()})');
+      debugPrint('📦 Current items: ${_allContents.length}');
+      
       _loadMoreContent();
     }
+    
+    _lastScrollPosition = currentScroll;
   }
-
-  // ENHANCED AUTO LOAD TIMER - More persistent
-  void _startAutoLoadTimer() {
-    _autoLoadTimer = Timer.periodic(Duration(seconds: 3), (timer) {
-      // Only auto-load for the first few items, then rely on scroll
-      if (!_isLoading && _hasMoreContent && _allContents.length < 8) {
-        // Reduced from 15 to 8
-
-        debugPrint('🔄 Auto-loading content (${_allContents.length} items)');
-        _loadMoreContent();
-      } else {
-        debugPrint(
-          '✅ Auto-load timer stopped - switching to scroll-based loading',
-        );
-        timer.cancel();
-      }
-    });
-  }
-
-  Future<void> _checkConnectivity() async {
-    try {
-      final result = await InternetAddress.lookup('google.com');
-      setState(() {
-        _isOnline = result.isNotEmpty && result[0].rawAddress.isNotEmpty;
-      });
-      if (_isOnline) {
-        _refresh();
-      }
-    } on SocketException catch (_) {
-      setState(() {
-        _isOnline = false;
-      });
+  
+  // ENHANCED: Improved load more logic with better conditions
+  bool _shouldLoadMoreContent(double currentScroll, double maxScroll, double scrollPercentage) {
+    // Don't load if already loading or no more content
+    if (_isLoading || !_hasMoreContent || _isLoadingMore) {
+      debugPrint('⏸️ Skip loading - isLoading: $_isLoading, hasMore: $_hasMoreContent, isLoadingMore: $_isLoadingMore');
+      return false;
     }
+    
+    // Rate limiting check - but more lenient
+    final timeSinceLastLoad = DateTime.now().difference(_lastLoadTime);
+    if (timeSinceLastLoad.inMilliseconds < _minimumLoadInterval) {
+      debugPrint('⏳ Rate limited - ${timeSinceLastLoad.inMilliseconds}ms < ${_minimumLoadInterval}ms');
+      return false;
+    }
+    
+    // Multiple trigger conditions - any of these should trigger loading
+    
+    // Condition 1: Reached scroll threshold
+    if (scrollPercentage >= _scrollThreshold) {
+      debugPrint('✅ Trigger condition 1: Scroll threshold reached (${scrollPercentage.toStringAsFixed(2)} >= $_scrollThreshold)');
+      return true;
+    }
+    
+    // Condition 2: Close to bottom by distance
+    final distanceFromBottom = maxScroll - currentScroll;
+    if (distanceFromBottom <= _preloadDistance) {
+      debugPrint('✅ Trigger condition 2: Distance from bottom (${distanceFromBottom.toInt()} <= $_preloadDistance)');
+      return true;
+    }
+    
+    // Condition 3: Very close to bottom
+    if (scrollPercentage >= 0.85) {
+      debugPrint('✅ Trigger condition 3: Very close to bottom (${scrollPercentage.toStringAsFixed(2)} >= 0.85)');
+      return true;
+    }
+    
+    // Condition 4: If we have very few items left to show
+    if (_allContents.length < 20 && scrollPercentage >= 0.7) {
+      debugPrint('✅ Trigger condition 4: Few items and moderate scroll (${_allContents.length} items, ${scrollPercentage.toStringAsFixed(2)} >= 0.7)');
+      return true;
+    }
+    
+    return false;
   }
 
-  // IMPROVED INITIALIZATION
-  Future<void> _initializeData() async {
+  // ENHANCED: Load initial content with cursor format testing
+  Future<void> _loadInitialContent() async {
+    debugPrint('🔄 Loading initial content...');
+    
+    setState(() {
+      _isLoading = true;
+      _hasError = false;
+      _errorMessage = '';
+    });
+
     try {
-      await _appData.initialize();
-      if (await _verifyToken()) {
-        // Load initial larger batch
-        await _loadMoreContent();
+      // Test cursor format first
+      await FeedApiService.testCursorFormat();
+      
+      final ContentData? contentData = await FeedApiService.fetchContents(
+        cursor: null,
+        limit: 20,
+        contentType: 'normal',
+        context: context,
+      );
 
-        // Load additional batches until we have enough content
-        int attempts = 0;
-        while (_allContents.length < 15 && _hasMoreContent && attempts < 3) {
-          await Future.delayed(Duration(milliseconds: 500));
-          await _loadMoreContent();
-          attempts++;
-        }
+      if (contentData == null) {
+        throw Exception('No initial data received from API');
+      }
 
-        _isInitialLoadComplete = true;
+      if (mounted) {
+        setState(() {
+          _allContents.clear();
+          _allContents.addAll(contentData.contents);
+          _nextCursor = contentData.nextCursor;
+          _hasMoreContent = contentData.hasMore;
+          _isLoading = false;
+          _currentOffset = contentData.contents.length;
+          _useCursorPagination = true; // Reset to try cursor first
+        });
+
+        debugPrint('✅ Initial content loaded: ${_allContents.length} items');
+        debugPrint('📊 Has more: $_hasMoreContent');
+        debugPrint('📊 Next cursor: $_nextCursor');
+        debugPrint('📊 Is cursor valid ObjectId: ${CursorHelper.isValidObjectId(_nextCursor)}');
       }
     } catch (e) {
-      debugPrint('Error initializing data: $e');
-      setState(() {
-        _hasError = true;
-        _errorMessage = 'Failed to load initial content';
-      });
+      debugPrint('❌ Error loading initial content: $e');
+      _handleError('Failed to load initial content: ${e.toString()}');
     }
   }
 
-  // ENHANCED MEMORY MANAGEMENT
-  void _manageMemoryBetter() {
-    if (_allContents.length > 200) {
-      // Increased threshold
-      final itemsToRemove = 50; // Remove in smaller chunks
+  // ENHANCED: Load more content with cursor validation
+  Future<void> _loadMoreContent() async {
+    if (_isLoading || !_hasMoreContent || _isLoadingMore) {
+      debugPrint('⏸️ Load more cancelled - already loading or no more content');
+      return;
+    }
 
-      debugPrint('🧹 Memory management: removing $itemsToRemove old items');
+    debugPrint('🔄 Loading more content...');
+    debugPrint('📍 Current cursor: $_nextCursor');
+    debugPrint('📍 Current offset: $_currentOffset');
+    debugPrint('📦 Current items: ${_allContents.length}');
 
-      // Store current scroll position
-      final double currentScrollPosition =
-          _scrollController.hasClients
-              ? _scrollController.position.pixels
-              : 0.0;
+    setState(() {
+      _isLoading = true;
+      _isLoadingMore = true;
+      _hasError = false;
+    });
 
-      // Remove oldest items
+    _lastLoadTime = DateTime.now();
+
+    try {
+      ContentData? contentData;
+      
+      if (_useCursorPagination) {
+        // Try cursor-based pagination first
+        try {
+          contentData = await FeedApiService.fetchContents(
+            cursor: _nextCursor,
+            limit: 20,
+            contentType: 'normal',
+            context: context,
+          );
+        } catch (e) {
+          debugPrint('❌ Cursor-based pagination failed: $e');
+          
+          // If cursor fails, try offset-based pagination
+          if (e.toString().contains('Invalid cursor')) {
+            debugPrint('🔄 Switching to offset-based pagination...');
+            _useCursorPagination = false;
+            _currentOffset = _allContents.length;
+            
+            contentData = await FeedApiService.fetchContentsWithOffset(
+              offset: _currentOffset,
+              limit: 20,
+              contentType: 'normal',
+              context: context,
+            );
+          } else {
+            rethrow;
+          }
+        }
+      } else {
+        // Use offset-based pagination
+        contentData = await FeedApiService.fetchContentsWithOffset(
+          offset: _currentOffset,
+          limit: 20,
+          contentType: 'normal',
+          context: context,
+        );
+      }
+
+      if (contentData == null) {
+        throw Exception('No data received from API');
+      }
+
+      // Debug the response
+      _debugApiResponse(contentData);
+
+      if (mounted) {
+        setState(() {
+          _allContents.addAll(contentData!.contents);
+          
+          if (_useCursorPagination) {
+            _nextCursor = contentData.nextCursor;
+          } else {
+            _currentOffset += contentData.contents.length;
+          }
+          
+          _hasMoreContent = contentData.hasMore;
+          _isLoading = false;
+          _isLoadingMore = false;
+        });
+
+        debugPrint('✅ More content loaded: ${contentData.contents.length} new items');
+        debugPrint('📦 Total items: ${_allContents.length}');
+        debugPrint('📊 Has more: $_hasMoreContent');
+        debugPrint('📊 Next cursor: $_nextCursor');
+        debugPrint('📊 Current offset: $_currentOffset');
+        debugPrint('📊 Using cursor pagination: $_useCursorPagination');
+
+        if (_allContents.length > _maxContentItems) {
+          _manageMemoryUsage();
+        }
+      }
+    } catch (e) {
+      debugPrint('❌ Error loading more content: $e');
+      
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _isLoadingMore = false;
+          _hasError = true;
+          //_errorMessage = 'Failed to load more content: ${e.toString()}';
+        });
+      }
+    }
+  }
+
+  // Debug API response with null safety
+  void _debugApiResponse(ContentData? contentData) {
+    if (contentData == null) {
+      debugPrint('🔍 API Response Debug: contentData is null');
+      return;
+    }
+
+    debugPrint('🔍 API Response Debug:');
+    debugPrint('   - Contents received: ${contentData.contents.length}');
+    debugPrint('   - Has more: ${contentData.hasMore}');
+    debugPrint('   - Next cursor: ${contentData.nextCursor}');
+    debugPrint('   - Total items in feed: ${_allContents.length}');
+    
+    if (contentData.contents.isEmpty && contentData.hasMore) {
+      debugPrint('⚠️ WARNING: API says hasMore=true but returned 0 items');
+    }
+  }
+
+  // ENHANCED: Better memory management
+  void _manageMemoryUsage() {
+    if (_allContents.length <= _maxContentItems) return;
+
+    debugPrint('🧹 Managing memory - removing old items');
+    debugPrint('📦 Items before cleanup: ${_allContents.length}');
+
+    // Remove fewer items to avoid aggressive cleanup
+    final itemsToRemove = (_allContents.length - _maxContentItems + 50).clamp(0, _itemsToRemoveOnCleanup);
+    
+    if (itemsToRemove > 0) {
+      final currentScrollPosition = _scrollController.hasClients 
+          ? _scrollController.position.pixels 
+          : 0.0;
+
       _allContents.removeRange(0, itemsToRemove);
 
-      // Adjust scroll position
+      debugPrint('📦 Items after cleanup: ${_allContents.length}');
+
+      // Adjust scroll position to prevent jump
       if (_scrollController.hasClients) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (_scrollController.hasClients) {
-            final double estimatedItemHeight = 400.0; // Conservative estimate
-            final double adjustmentOffset = itemsToRemove * estimatedItemHeight;
-            final double newPosition = math.max(
-              0,
-              currentScrollPosition - adjustmentOffset,
-            );
-
+            final estimatedItemHeight = 400.0;
+            final scrollAdjustment = itemsToRemove * estimatedItemHeight;
+            final newScrollPosition = math.max(0.0, currentScrollPosition - scrollAdjustment);
+            
             try {
-              _scrollController.jumpTo(newPosition);
+              _scrollController.jumpTo(newScrollPosition);
+              debugPrint('📍 Adjusted scroll position to: $newScrollPosition');
             } catch (e) {
-              debugPrint('Error adjusting scroll position: $e');
+              debugPrint('❌ Error adjusting scroll position: $e');
             }
           }
         });
       }
-
-      debugPrint(
-        '🧹 Memory management complete. Remaining: ${_allContents.length} items',
-      );
     }
   }
 
+  // ENHANCED: Refresh with cursor reset
+  Future<void> _refresh() async {
+    debugPrint('🔄 Refreshing feed...');
+    
+    HapticFeedback.mediumImpact();
+    
+    setState(() {
+      _isLoading = true;
+      _hasError = false;
+      _errorMessage = '';
+    });
+
+    // Reset pagination state
+    _nextCursor = null;
+    _currentOffset = 0;
+    _hasMoreContent = true;
+    _useCursorPagination = true;
+    _lastLoadTime = DateTime.now().subtract(Duration(seconds: 2));
+
+    try {
+      final ContentData? contentData = await FeedApiService.refreshFeed(
+        contentType: 'normal',
+        context: context,
+      );
+
+      if (contentData == null) {
+        throw Exception('No refresh data received from API');
+      }
+
+      if (mounted) {
+        setState(() {
+          _allContents.clear();
+          _allContents.addAll(contentData.contents);
+          _nextCursor = contentData.nextCursor;
+          _hasMoreContent = contentData.hasMore;
+          _isLoading = false;
+          _currentOffset = contentData.contents.length;
+        });
+
+        debugPrint('✅ Feed refreshed: ${_allContents.length} items');
+
+        if (_scrollController.hasClients) {
+          _scrollController.animateTo(
+            0,
+            duration: Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('❌ Error refreshing feed: $e');
+      _handleError('Failed to refresh feed');
+    }
+  }
+
+  // Retry with different parameters
+  Future<void> _retryLoadWithDifferentParams() async {
+    debugPrint('🔄 Retrying with different parameters...');
+    
+    setState(() {
+      _nextCursor = null;
+      _currentOffset = 0;
+      _hasMoreContent = true;
+      _hasError = false;
+      _useCursorPagination = true;
+    });
+    
+    await _loadMoreContent();
+  }
+
+  // Error handling
+  void _handleError(String message) {
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+        _isLoadingMore = false;
+        _hasError = true;
+        _errorMessage = message;
+      });
+    }
+  }
+
+  // Utility methods
   Future<void> _requestNotificationPermission() async {
     try {
       if (await Permission.notification.isDenied) {
@@ -590,19 +890,16 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
         }
       }
 
-      NotificationSettings settings = await FirebaseMessaging.instance
-          .requestPermission(
-            alert: true,
-            badge: true,
-            sound: true,
-            criticalAlert: true,
-            provisional: false,
-          );
+      NotificationSettings settings = await FirebaseMessaging.instance.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+        criticalAlert: true,
+        provisional: false,
+      );
 
       if (Platform.isAndroid) {
-        debugPrint(
-          'Running on Android, please ensure battery optimization is disabled for Innovator',
-        );
+        debugPrint('Running on Android, please ensure battery optimization is disabled for Innovator');
       }
     } catch (e) {
       debugPrint('Error requesting notification permission: $e');
@@ -633,344 +930,166 @@ class _Inner_HomePageState extends State<Inner_HomePage> {
     }
   }
 
-  // ENHANCED REFRESH METHOD
-  Future<void> _refresh() async {
-  debugPrint('🔄 Refresh initiated - clearing all state');
-  
-  try {
-    // CRITICAL: Reset ALL pagination state before refresh
-    setState(() {
-      _isLoading = true;
-      _hasError = false;
-      _errorMessage = '';
-    });
-    
-    // Clear pagination state BEFORE making API call
-    _nextCursor = null;
-    _hasMoreContent = true;
-    
-    debugPrint('🔄 Starting fresh feed refresh...');
-    
-    // Get fresh content with explicit refresh parameter
-    final contentData = await FeedApiService.refreshFeed(context: context);
-    debugPrint('✅ Feed refresh successful, got ${contentData.contents.length} items');
-    debugPrint('📊 API hasMore: ${contentData.hasMore}');
-    debugPrint('📊 API nextCursor: ${contentData.nextCursor}');
-    
-    if (mounted) {
+  Future<void> _checkConnectivity() async {
+    try {
+      final result = await InternetAddress.lookup('google.com');
       setState(() {
-        // Clear existing content first
-        _allContents.clear();
-        
-        // Add new content
-        _allContents.addAll(contentData.contents);
-        
-        // Update pagination state from API response
-        _nextCursor = contentData.nextCursor;
-        _hasMoreContent = contentData.hasMore;
-        
-        // Reset loading and error states
-        _isLoading = false;
-        _hasError = false;
-        _errorMessage = '';
+        _isOnline = result.isNotEmpty && result[0].rawAddress.isNotEmpty;
       });
-      
-      debugPrint('📊 After refresh - Items: ${_allContents.length}');
-      debugPrint('📊 Updated cursor: $_nextCursor');
-      debugPrint('📊 Updated hasMore: $_hasMoreContent');
-      
-      // Force scroll to top after refresh
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          0,
-          duration: Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
+      if (_isOnline) {
+        _refresh();
       }
-    }
-    
-  } catch (e) {
-    debugPrint('❌ Feed refresh error: $e');
-    if (mounted) {
+    } on SocketException catch (_) {
       setState(() {
-        _isLoading = false;
-        _hasError = true;
-        _errorMessage = 'Failed to refresh feed. Please check your connection.';
+        _isOnline = false;
       });
     }
   }
-}
 
-// FIXED: Enhanced load more content with better error handling
-Future<void> _loadMoreContent() async {
-  // Block loading if already loading or no more content
-  if (_isLoading || !_hasMoreContent) {
-    debugPrint('⚠️ Load more blocked - Loading: $_isLoading, HasMore: $_hasMoreContent');
-    return;
-  }
-
-  // Prevent too frequent requests
-  final timeSinceLastLoad = DateTime.now().difference(_lastLoadTime);
-  if (timeSinceLastLoad.inMilliseconds < 2000) {
-    debugPrint('⚠️ Load more too frequent, waiting...');
-    return;
-  }
-
-  debugPrint('🔄 Starting to load more content...');
-  debugPrint('📍 Current cursor: $_nextCursor');
-  debugPrint('📊 Current content count: ${_allContents.length}');
-  
-  setState(() {
-    _isLoading = true;
-    _hasError = false;
-  });
-
-  _lastLoadTime = DateTime.now();
-
-  try {
-    final contentData = await FeedApiService.fetchContents(
-      cursor: _nextCursor, // This should be null for first load, proper cursor for subsequent
-      limit: 20,
-      context: context,
-    );
-    
-    debugPrint('✅ Load more successful!');
-    debugPrint('📊 New items received: ${contentData.contents.length}');
-    debugPrint('🔄 New cursor: ${contentData.nextCursor}');
-    debugPrint('📋 API hasMore: ${contentData.hasMore}');
-    
-    if (mounted) {
-      setState(() {
-        _allContents.addAll(contentData.contents);
-        _nextCursor = contentData.nextCursor;
-        _hasMoreContent = contentData.hasMore; // CRITICAL: Respect API response
-        _isLoading = false;
-      });
-      
-      debugPrint('📊 Total content now: ${_allContents.length}');
-      debugPrint('🔄 Updated hasMore: $_hasMoreContent');
-      
-      // Memory management
-      _manageMemoryBetter();
-    }
-    
-  } catch (e) {
-    debugPrint('❌ Load more error: $e');
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-        _hasError = true;
-        _errorMessage = 'Failed to load content. Please try again.';
-      });
-    }
-  }
-}
-
-  @override
-  void dispose() {
-    _debounce?.cancel();
-    _autoLoadTimer?.cancel();
-    _scrollController.dispose();
-    super.dispose();
-  }
-
+  // Build methods
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: RefreshIndicator(
-        onRefresh: () async {
-        // Add haptic feedback for better UX
-        HapticFeedback.mediumImpact();
-        
-        // Call refresh and wait for completion
-        await _refresh();
-        
-        // Small delay to ensure UI updates
-        await Future.delayed(Duration(milliseconds: 300));
-      },
+        onRefresh: _refresh,
         color: Colors.blue,
         backgroundColor: Colors.white,
-        child: _buildMainContent(),
+        child: _buildContent(),
       ),
       floatingActionButton: _buildFloatingActionButton(),
     );
   }
 
-  Widget _buildMainContent() {
-    // Show loading only if we have no content and are loading
-    if (_allContents.isEmpty && _isLoading) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('Loading feed...'),
-          ],
-        ),
-      );
+  Widget _buildContent() {
+    if (_isInitialLoad && _allContents.isEmpty) {
+      return _buildInitialLoadingState();
     }
 
-    // Show error only if we have no content and there's an error
     if (_hasError && _allContents.isEmpty) {
-      return _buildErrorView();
+      return _buildErrorState();
     }
 
-    // Show the feed content
-    return ListView.builder(
-      controller: _scrollController,
-      physics: const AlwaysScrollableScrollPhysics(),
-      cacheExtent: 1000.0,
-      itemCount:
-          _allContents.length +
-          (_isLoading ? 1 : 0) +
-          (_shouldShowEndMessage() ? 1 : 0),
-      itemBuilder: (context, index) {
-        // Regular content items
-        if (index < _allContents.length) {
-          return _buildContentItem(_allContents[index]);
-        }
+    return _buildInfiniteScrollList();
+  }
 
-        // Loading indicator at bottom
-        if (index == _allContents.length && _isLoading) {
-          return Container(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              children: [
-                const CircularProgressIndicator(),
-                const SizedBox(height: 12),
-                Text(
-                  'Loading more content...',
-                  style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                ),
-                Text(
-                  'Items loaded: ${_allContents.length}',
-                  style: TextStyle(color: Colors.grey[400], fontSize: 12),
-                ),
-                if (_nextCursor != null)
-                  Text(
-                    'Cursor: ${_nextCursor!.substring(0, 8)}...',
-                    style: TextStyle(color: Colors.grey[400], fontSize: 10),
-                  ),
-              ],
+  Widget _buildInitialLoadingState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(strokeWidth: 2),
+          SizedBox(height: 16),
+          Text(
+            'Loading your feed...',
+            style: TextStyle(
+              fontSize: 16,
+              color: Colors.grey[600],
             ),
-          );
-        }
+          ),
+        ],
+      ),
+    );
+  }
 
-        // End of content message
-        // if (index == _allContents.length && _shouldShowEndMessage()) {
-        //   return Container(
-        //     padding: const EdgeInsets.all(20.0),
-        //     child: Column(
-        //       children: [
-        //         Icon(
-        //           Icons.check_circle_outline,
-        //           color: Colors.grey[400],
-        //           size: 32,
-        //         ),
-        //         const SizedBox(height: 8),
-        //         Text(
-        //           "You're all caught up!",
-        //           style: TextStyle(
-        //             color: Colors.grey[600],
-        //             fontSize: 16,
-        //             fontWeight: FontWeight.w500,
-        //           ),
-        //         ),
-        //         Text(
-        //           'No more posts to show',
-        //           style: TextStyle(
-        //             color: Colors.grey[400],
-        //             fontSize: 12,
-        //           ),
-        //         ),
-        //       ],
+  // Enhanced error state with retry options
+  Widget _buildErrorState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.error_outline,
+            size: 64,
+            color: Colors.grey[400],
+          ),
+          SizedBox(height: 16),
+          Text(
+            'Oops! Something went wrong',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey[800],
+            ),
+          ),
+          SizedBox(height: 8),
+          Text(
+            _errorMessage,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[600],
+            ),
+            textAlign: TextAlign.center,
+          ),
+          SizedBox(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ElevatedButton.icon(
+                onPressed: _refresh,
+                icon: Icon(Icons.refresh),
+                label: Text('Refresh'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+              SizedBox(width: 12),
+              ElevatedButton.icon(
+                onPressed: _retryLoadWithDifferentParams,
+                icon: Icon(Icons.replay),
+                label: Text('Retry'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ENHANCED: Debug information in the infinite scroll list
+  Widget _buildInfiniteScrollList() {
+    return Column(
+      children: [
+        // Debug info (remove in production)
+        // if (kDebugMode) ...[
+        //   Container(
+        //     padding: EdgeInsets.all(8),
+        //     color: Colors.yellow.withOpacity(0.1),
+        //     child: Text(
+        //       'Debug: ${_allContents.length} items, hasMore: $_hasMoreContent, cursor: $_nextCursor, offset: $_currentOffset, useCursor: $_useCursorPagination',
+        //       style: TextStyle(fontSize: 10),
         //     ),
-        //   );
-        // }
+        //   ),
+        // ],
+        Expanded(
+          child: ListView.builder(
+            controller: _scrollController,
+            physics: AlwaysScrollableScrollPhysics(),
+            cacheExtent: 1000.0,
+            itemCount: _allContents.length + (_isLoading ? 1 : 0) + (_shouldShowEndMessage() ? 1 : 0),
+            itemBuilder: (context, index) {
+              if (index < _allContents.length) {
+                return _buildContentItem(_allContents[index]);
+              }
 
-        return const SizedBox.shrink();
-      },
+              if (index == _allContents.length && _isLoading) {
+                return _buildLoadingIndicator();
+              }
+
+              if (index == _allContents.length && _shouldShowEndMessage()) {
+                return _buildEndMessage();
+              }
+
+              return SizedBox.shrink();
+            },
+          ),
+        ),
+      ],
     );
-  }
-
-  Widget _buildFloatingActionButton() {
-    return GetBuilder<ChatListController>(
-      init: () {
-        if (!Get.isRegistered<ChatListController>()) {
-          Get.put(ChatListController());
-        }
-        return Get.find<ChatListController>();
-      }(),
-      builder: (chatController) {
-        return Obx(() {
-          final unreadCount = chatController.totalUnreadCount;
-          final isLoading = chatController.isLoading.value;
-          final isMqttConnected = chatController.isMqttConnected.value;
-
-          return CustomFAB(
-            gifAsset: 'animation/chaticon.gif',
-            onPressed:
-                isLoading
-                    ? () {}
-                    : () async {
-                      try {
-                        if (unreadCount > 0) {
-                          chatController.resetAllUnreadCounts();
-                        }
-
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder:
-                                (_) => ChatListScreen(
-                                  currentUserId: AppData().currentUserId ?? '',
-                                  currentUserName:
-                                      AppData().currentUserName ?? '',
-                                  currentUserPicture:
-                                      AppData().currentUserProfilePicture ?? '',
-                                  currentUserEmail:
-                                      AppData().currentUserEmail ?? '',
-                                ),
-                          ),
-                        );
-
-                        if (Get.isRegistered<ChatListController>()) {
-                          final controller = Get.find<ChatListController>();
-                          if (!controller.isMqttConnected.value) {
-                            await controller.initializeMQTT();
-                          }
-                          await controller.fetchChats();
-                        }
-                      } catch (e) {
-                        debugPrint('Error in FAB onPressed: $e');
-                        Get.snackbar(
-                          'Error',
-                          'Please Contact to Our Support Team',
-                          snackPosition: SnackPosition.BOTTOM,
-                        );
-                      }
-                    },
-            backgroundColor: Colors.transparent,
-            elevation: 100.0,
-            size: 56.0,
-            showBadge: unreadCount > 0,
-            badgeText: unreadCount > 99 ? '99+' : '$unreadCount',
-            badgeColor: Colors.red,
-            badgeTextColor: Colors.white,
-            badgeSize: 24.0,
-            badgeTextSize: 12.0,
-            animationDuration: Duration(
-              milliseconds: isMqttConnected ? 300 : 500,
-            ),
-          );
-        });
-      },
-    );
-  }
-
-  bool _shouldShowEndMessage() {
-    return !_isLoading && !_hasMoreContent && _allContents.isNotEmpty;
   }
 
   Widget _buildContentItem(FeedContent content) {
@@ -990,31 +1109,126 @@ Future<void> _loadMoreContent() async {
           if (mounted) {
             setState(() {
               content.isFollowed = isFollowed;
-            });
+            }); 
           }
         },
       ),
     );
   }
 
-  Widget _buildErrorView() {
-    return Center(
+  // ENHANCED: Better loading indicator that shows current state
+  Widget _buildLoadingIndicator() {
+    return Container(
+      padding: EdgeInsets.all(20),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 16),
-          Text('Loading feed...'),
-          // CircularProgressIndicator(
-          //   value: _refresh,
-          // )
-          // ElevatedButton(
-          //   onPressed: _refresh,
-          //   child: Text('Retry'),
-          // ),
+          CircularProgressIndicator(strokeWidth: 2),
+          SizedBox(height: 12),
+          Text(
+            'Loading more content...',
+            style: TextStyle(
+              color: Colors.grey[600],
+              fontSize: 14,
+            ),
+          ),
+          if (_allContents.isNotEmpty) ...[
+            SizedBox(height: 4),
+            Text(
+              'Loaded ${_allContents.length} items',
+              style: TextStyle(
+                color: Colors.grey[400],
+                fontSize: 12,
+              ),
+            ),
+            // Show hasMore status for debugging
+            if (_hasMoreContent) ...[
+              SizedBox(height: 2),
+              Text(
+                'More content available',
+                style: TextStyle(
+                  color: Colors.green[400],
+                  fontSize: 10,
+                ),
+              ),
+            ],
+            // Show pagination method
+            SizedBox(height: 2),
+            Text(
+              _useCursorPagination ? 'Using cursor pagination' : 'Using offset pagination',
+              style: TextStyle(
+                color: Colors.blue[400],
+                fontSize: 10,
+              ),
+            ),
+          ],
         ],
       ),
     );
+  }
+
+  Widget _buildEndMessage() {
+    return Container(
+      padding: EdgeInsets.all(20),
+      child: Column(
+        children: [
+          Icon(
+            Icons.check_circle_outline,
+            color: Colors.grey[400],
+            size: 32,
+          ),
+          SizedBox(height: 8),
+          Text(
+            "You're all caught up!",
+            style: TextStyle(
+              color: Colors.grey[600],
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          Text(
+            'No more posts to show',
+            style: TextStyle(
+              color: Colors.grey[400],
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  bool _shouldShowEndMessage() {
+    return !_isLoading && !_hasMoreContent && _allContents.isNotEmpty;
+  }
+
+  Widget _buildFloatingActionButton() {
+return CustomFAB(
+      
+      gifAsset: 'animation/chaticon.gif',
+        backgroundColor: Colors.transparent,
+
+        onPressed: () {
+          // Register controller if not already registered
+          if (!Get.isRegistered<FireChatController>()) {
+            Get.put(FireChatController());
+          }
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const OptimizedChatHomePage(),
+            ),
+          );
+        },
+        
+       
+      
+    );  }
+
+  @override
+  void dispose() {
+    _scrollDebounce?.cancel();
+    _scrollController.dispose();
+    super.dispose();
   }
 }
 
@@ -1051,61 +1265,11 @@ class FeedApiResponse {
 class FeedApiService {
   static const String baseUrl = 'http://182.93.94.210:3066';
 
-  // Method using ContentResponse (if you want to keep this structure)
-  static Future<ContentData> fetchContentsWithResponse({
-    String? cursor,
-    int limit = 20,
-    required BuildContext context,
-  }) async {
-    try {
-      final String? authToken = AppData().authToken;
-      final Map<String, String> headers = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      };
-      if (authToken != null && authToken.isNotEmpty) {
-        headers['authorization'] = 'Bearer $authToken';
-      }
-
-      final Map<String, String> params = {
-        'limit': limit.toString(),
-      };
-      
-      if (cursor != null && cursor.isNotEmpty) {
-        params['cursor'] = cursor;
-      }
-
-      final uri = Uri.parse('$baseUrl/api/v1/feed').replace(
-        queryParameters: params,
-      );
-
-      final response = await http.get(uri, headers: headers).timeout(
-        const Duration(seconds: 30),
-      );
-      
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> responseJson = json.decode(response.body);
-        
-        // Option 1: Use ContentResponse
-        final contentResponse = ContentResponse.fromJson(responseJson);
-        return contentResponse.data;
-        
-        // Option 2: Direct parsing (alternative)
-        // return ContentData.fromNewFeedApi(responseJson);
-        
-      } else {
-        throw Exception('Failed to load data: ${response.statusCode}');
-      }
-    } catch (e) {
-      debugPrint('❌ FeedApiService.fetchContentsWithResponse error: $e');
-      rethrow;
-    }
-  }
-
-  // Direct method (recommended - simpler and more efficient)
+  // Main method with cursor validation
   static Future<ContentData> fetchContents({
     String? cursor,
     int limit = 20,
+    String contentType = 'normal',
     required BuildContext context,
   }) async {
     try {
@@ -1120,23 +1284,70 @@ class FeedApiService {
 
       final Map<String, String> params = {
         'limit': limit.toString(),
+        'contentType': contentType,
       };
       
-      if (cursor != null && cursor.isNotEmpty) {
-        params['cursor'] = cursor;
+      // Clean and validate cursor
+      final cleanedCursor = CursorHelper.cleanCursor(cursor);
+      
+      if (cleanedCursor != null) {
+        params['cursor'] = cleanedCursor;
+        debugPrint('🔍 Using cleaned cursor: $cleanedCursor (original: $cursor)');
+      } else {
+        debugPrint('🔍 No valid cursor - loading initial content (original cursor: $cursor)');
       }
 
-      final uri = Uri.parse('$baseUrl/api/v1/feed').replace(
+      final uri = Uri.parse('$baseUrl/api/v1/random-feed').replace(
         queryParameters: params,
       );
+
+      debugPrint('🌐 Fetching from: $uri');
 
       final response = await http.get(uri, headers: headers).timeout(
         const Duration(seconds: 30),
       );
       
+      debugPrint('📡 Response status: ${response.statusCode}');
+      debugPrint('📡 Response body preview: ${response.body.substring(0, math.min(500, response.body.length))}...');
+      
       if (response.statusCode == 200) {
         final Map<String, dynamic> responseJson = json.decode(response.body);
-        return ContentData.fromNewFeedApi(responseJson);
+        final contentData = ContentData.fromNewFeedApi(responseJson);
+        
+        // Log the cursor we received for debugging
+        debugPrint('📍 Received cursor: ${contentData.nextCursor}');
+        if (contentData.nextCursor != null) {
+          debugPrint('📍 Cursor is valid ObjectId: ${CursorHelper.isValidObjectId(contentData.nextCursor)}');
+        }
+        
+        return contentData;
+      } else if (response.statusCode == 400) {
+        try {
+          final Map<String, dynamic> errorJson = json.decode(response.body);
+          final errorMessage = errorJson['message'] ?? 'Bad request';
+          debugPrint('❌ 400 Error details: $errorMessage');
+          debugPrint('❌ Original cursor: $cursor');
+          debugPrint('❌ Cleaned cursor: $cleanedCursor');
+          
+          // If cursor is invalid, try without cursor
+          if (errorMessage.contains('Invalid cursor') && cursor != null) {
+            debugPrint('🔄 Cursor invalid, retrying without cursor...');
+            return await fetchContents(
+              cursor: null,
+              limit: limit,
+              contentType: contentType,
+              context: context,
+            );
+          }
+          
+          throw Exception('Bad request: $errorMessage');
+        } catch (e) {
+          if (e.toString().contains('Bad request:')) {
+            rethrow;
+          }
+          debugPrint('❌ 400 Error - Could not parse error response: ${response.body}');
+          throw Exception('Bad request - Invalid cursor or parameters');
+        }
       } else if (response.statusCode == 401) {
         if (context.mounted) {
           Navigator.pushAndRemoveUntil(
@@ -1155,14 +1366,111 @@ class FeedApiService {
     }
   }
 
-  static Future<ContentData> refreshFeed({
+  // Alternative method using different cursor approach
+  static Future<ContentData> fetchContentsWithOffset({
+    int offset = 0,
+    int limit = 20,
+    String contentType = 'normal',
     required BuildContext context,
   }) async {
-    // Same implementation as fetchContents but without cursor
-    return fetchContents(cursor: null, limit: 20, context: context);
+    try {
+      final String? authToken = AppData().authToken;
+      final Map<String, String> headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      };
+      if (authToken != null && authToken.isNotEmpty) {
+        headers['authorization'] = 'Bearer $authToken';
+      }
+
+      final Map<String, String> params = {
+        'limit': limit.toString(),
+        'contentType': contentType,
+        'offset': offset.toString(),
+      };
+
+      final uri = Uri.parse('$baseUrl/api/v1/random-feed').replace(
+        queryParameters: params,
+      );
+
+      debugPrint('🌐 Fetching with offset: $uri');
+
+      final response = await http.get(uri, headers: headers).timeout(
+        const Duration(seconds: 30),
+      );
+      
+      debugPrint('📡 Response status: ${response.statusCode}');
+      
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> responseJson = json.decode(response.body);
+        return ContentData.fromNewFeedApi(responseJson);
+      } else {
+        throw Exception('Failed to load data: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('❌ FeedApiService.fetchContentsWithOffset error: $e');
+      rethrow;
+    }
+  }
+
+  // Test method to understand cursor format
+  static Future<void> testCursorFormat() async {
+    try {
+      final String? authToken = AppData().authToken;
+      final Map<String, String> headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      };
+      if (authToken != null && authToken.isNotEmpty) {
+        headers['authorization'] = 'Bearer $authToken';
+      }
+
+      final uri = Uri.parse('$baseUrl/api/v1/random-feed?limit=5&contentType=normal');
+      
+      debugPrint('🧪 Testing cursor format: $uri');
+      
+      final response = await http.get(uri, headers: headers).timeout(
+        const Duration(seconds: 10),
+      );
+      
+      debugPrint('🧪 Test response status: ${response.statusCode}');
+      
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> responseJson = json.decode(response.body);
+        final data = responseJson['data'] as Map<String, dynamic>? ?? {};
+        final nextCursor = data['nextCursor'];
+        
+        debugPrint('🧪 Received cursor: $nextCursor');
+        debugPrint('🧪 Cursor type: ${nextCursor.runtimeType}');
+        debugPrint('🧪 Is valid ObjectId: ${CursorHelper.isValidObjectId(nextCursor)}');
+        
+        if (nextCursor != null && !CursorHelper.isValidObjectId(nextCursor)) {
+          debugPrint('🧪 Attempting to extract ObjectId from: $nextCursor');
+          final extracted = CursorHelper.extractObjectId(nextCursor);
+          debugPrint('🧪 Extracted ObjectId: $extracted');
+        }
+      }
+      
+    } catch (e) {
+      debugPrint('🧪 Test cursor format error: $e');
+    }
+  }
+
+  // Other methods remain the same...
+  static Future<ContentData> refreshFeed({
+    String contentType = 'normal',
+    required BuildContext context,
+  }) async {
+    debugPrint('🔄 Refreshing feed with contentType: $contentType');
+    return fetchContents(
+      cursor: null, 
+      limit: 20, 
+      contentType: contentType,
+      context: context,
+    );
   }
 }
-// Updated ContentData class to handle the new API response structure
+// ENHANCED CONTENT DATA CLASS
 class ContentData {
   final List<FeedContent> contents;
   final bool hasMore;
@@ -1174,17 +1482,28 @@ class ContentData {
     this.nextCursor,
   });
 
-  // MAIN METHOD: For the new API response structure
   factory ContentData.fromNewFeedApi(Map<String, dynamic> json) {
     try {
-      final data = json['data'] as Map<String, dynamic>? ?? json; // Handle both nested and direct data
+      debugPrint('📊 Raw API Response structure:');
+      debugPrint('   - Status: ${json['status']}');
+      debugPrint('   - Message: ${json['message']}');
       
-      // Parse normal items and videos
+      final data = json['data'] as Map<String, dynamic>? ?? {};
+      
+      debugPrint('📊 Data structure keys: ${data.keys.toList()}');
+      
+      // Parse different content arrays from the API response
+      final normalContentList = data['normalContent'] as List<dynamic>? ?? [];
+      final videoContentList = data['videoContent'] as List<dynamic>? ?? [];
+      
+      // Also check for 'normal' and 'videos' keys (backup)
       final normalList = data['normal'] as List<dynamic>? ?? [];
       final videosList = data['videos'] as List<dynamic>? ?? [];
       
-      // Combine both arrays
+      // Combine all content arrays
       final allItems = <dynamic>[];
+      allItems.addAll(normalContentList);
+      allItems.addAll(videoContentList);
       allItems.addAll(normalList);
       allItems.addAll(videosList);
       
@@ -1193,15 +1512,25 @@ class ContentData {
       final nextCursor = data['nextCursor'] as String?;
       
       debugPrint('📊 ContentData parsing:');
-      debugPrint('   - Normal items: ${normalList.length}');
-      debugPrint('   - Video items: ${videosList.length}');
+      debugPrint('   - Normal content items: ${normalContentList.length}');
+      debugPrint('   - Video content items: ${videoContentList.length}');
+      debugPrint('   - Normal items (backup): ${normalList.length}');
+      debugPrint('   - Video items (backup): ${videosList.length}');
       debugPrint('   - Total items: ${allItems.length}');
       debugPrint('   - Has more: $hasMore');
       debugPrint('   - Next cursor: $nextCursor');
       
       final contents = allItems
-          .map((item) => FeedContent.fromJson(item as Map<String, dynamic>))
-          .where((content) => content.id.isNotEmpty)
+          .map((item) {
+            try {
+              return FeedContent.fromJson(item as Map<String, dynamic>);
+            } catch (e) {
+              debugPrint('❌ Error parsing individual content item: $e');
+              return null;
+            }
+          })
+          .where((content) => content != null && content.id.isNotEmpty)
+          .cast<FeedContent>()
           .toList();
       
       debugPrint('   - Valid contents parsed: ${contents.length}');
@@ -1218,45 +1547,13 @@ class ContentData {
     }
   }
 
-  // COMPATIBILITY METHOD: Alias for fromNewFeedApi (for ContentResponse compatibility)
   factory ContentData.fromJson(Map<String, dynamic> json) {
     return ContentData.fromNewFeedApi(json);
   }
 
-  // LEGACY METHOD: For old API response structure (if needed)
-  factory ContentData.fromLegacyApi(Map<String, dynamic> json) {
-    try {
-      // Handle old structure where contents might be directly in the response
-      final List<dynamic> contentsList = json['contents'] as List<dynamic>? ?? 
-                                        json['data'] as List<dynamic>? ?? 
-                                        [];
-      
-      final contents = contentsList
-          .map((item) => FeedContent.fromJson(item as Map<String, dynamic>))
-          .where((content) => content.id.isNotEmpty)
-          .toList();
-      
-      // For legacy API, assume there's more content if we got a full page
-      final hasMore = contents.length >= 10; // Adjust based on your page size
-      
-      return ContentData(
-        contents: contents,
-        hasMore: hasMore,
-        nextCursor: null, // Legacy API might not have cursor
-      );
-    } catch (e) {
-      debugPrint('❌ ContentData.fromLegacyApi error: $e');
-      return ContentData(contents: [], hasMore: false, nextCursor: null);
-    }
-  }
-
-  // UTILITY METHOD: Check if this is empty
   bool get isEmpty => contents.isEmpty;
-
-  // UTILITY METHOD: Get total count
   int get totalCount => contents.length;
 
-  // UTILITY METHOD: Debug representation
   @override
   String toString() {
     return 'ContentData(contents: ${contents.length}, hasMore: $hasMore, nextCursor: $nextCursor)';

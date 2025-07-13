@@ -1,37 +1,25 @@
 import 'dart:async';
-import 'dart:developer';
-import 'dart:developer' as developer;
 
-import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 import 'package:innovator/App_data/App_data.dart';
 import 'package:innovator/Authorization/Login.dart';
-import 'package:innovator/controllers/user_controller.dart';
-import 'package:innovator/innovator_home.dart';
 import 'package:innovator/main.dart';
-import 'package:innovator/screens/Eliza_ChatBot/Elizahomescreen.dart';
 import 'package:innovator/screens/Likes/Content-Like-Service.dart';
 import 'package:innovator/screens/Likes/content-Like-Button.dart';
-import 'package:innovator/screens/chatrrom/Screen/chat_listscreen.dart';
-import 'package:innovator/screens/chatrrom/controller/chatlist_controller.dart';
+
 import 'package:innovator/screens/chatrrom/sound/soundplayer.dart';
 import 'package:innovator/screens/comment/comment_section.dart';
-import 'package:innovator/widget/CustomizeFAB.dart';
 import 'package:innovator/widget/Feed&Post.dart';
 import 'dart:convert';
 import 'package:video_player/video_player.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:lottie/lottie.dart';
 import 'dart:io';
 import 'package:innovator/screens/Follow/follow_Button.dart';
 import 'package:innovator/screens/Follow/follow-Service.dart';
-import 'package:visibility_detector/visibility_detector.dart';
 
 // Updated Models for new API structure
 class Author {
@@ -801,70 +789,70 @@ class _VideoFeedPageState extends State<VideoFeedPage> {
           ),
         ],
       ),
-      floatingActionButton: GetBuilder<ChatListController>(
-        init: () {
-          if (!Get.isRegistered<ChatListController>()) {
-            Get.put(ChatListController());
-          }
-          return Get.find<ChatListController>();
-        }(),
-        builder: (chatController) {
-          return Obx(() {
-            final unreadCount = chatController.totalUnreadCount;
-            final isLoading = chatController.isLoading.value;
-            final isMqttConnected = chatController.isMqttConnected.value;
+      // floatingActionButton: GetBuilder<ChatListController>(
+      //   init: () {
+      //     if (!Get.isRegistered<ChatListController>()) {
+      //       Get.put(ChatListController());
+      //     }
+      //     return Get.find<ChatListController>();
+      //   }(),
+      //   builder: (chatController) {
+      //     return Obx(() {
+      //       final unreadCount = chatController.totalUnreadCount;
+      //       final isLoading = chatController.isLoading.value;
+      //       final isMqttConnected = chatController.isMqttConnected.value;
 
-            return CustomFAB(
-              gifAsset: 'animation/chaticon.gif',
-              onPressed: isLoading
-                  ? () {}
-                  : () async {
-                      try {
-                        if (unreadCount > 0) {
-                          chatController.resetAllUnreadCounts();
-                        }
-                        final result = await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => ChatListScreen(
-                              currentUserId: AppData().currentUserId ?? '',
-                              currentUserName: AppData().currentUserName ?? '',
-                              currentUserPicture: AppData().currentUserProfilePicture ?? '',
-                              currentUserEmail: AppData().currentUserEmail ?? '',
-                            ),
-                          ),
-                        );
-                        if (Get.isRegistered<ChatListController>()) {
-                          final controller = Get.find<ChatListController>();
-                          if (!controller.isMqttConnected.value) {
-                            await controller.initializeMQTT();
-                          }
-                          await controller.fetchChats();
-                        }
-                      } catch (e) {
-                        Get.snackbar(
-                          'Error',
-                          'Please Contact to Our Support Team',
-                          snackPosition: SnackPosition.BOTTOM,
-                        );
-                      }
-                    },
-              backgroundColor: Colors.transparent,
-              elevation: 100.0,
-              size: 56.0,
-              showBadge: unreadCount > 0,
-              badgeText: unreadCount > 99 ? '99+' : '$unreadCount',
-              badgeColor: Colors.red,
-              badgeTextColor: Colors.white,
-              badgeSize: 24.0,
-              badgeTextSize: 12.0,
-              animationDuration: Duration(
-                milliseconds: isMqttConnected ? 300 : 500,
-              ),
-            );
-          });
-        },
-      ),
+      //       return CustomFAB(
+      //         gifAsset: 'animation/chaticon.gif',
+      //         onPressed: isLoading
+      //             ? () {}
+      //             : () async {
+      //                 try {
+      //                   if (unreadCount > 0) {
+      //                     chatController.resetAllUnreadCounts();
+      //                   }
+      //                   final result = await Navigator.push(
+      //                     context,
+      //                     MaterialPageRoute(
+      //                       builder: (_) => ChatListScreen(
+      //                         currentUserId: AppData().currentUserId ?? '',
+      //                         currentUserName: AppData().currentUserName ?? '',
+      //                         currentUserPicture: AppData().currentUserProfilePicture ?? '',
+      //                         currentUserEmail: AppData().currentUserEmail ?? '',
+      //                       ),
+      //                     ),
+      //                   );
+      //                   if (Get.isRegistered<ChatListController>()) {
+      //                     final controller = Get.find<ChatListController>();
+      //                     if (!controller.isMqttConnected.value) {
+      //                       await controller.initializeMQTT();
+      //                     }
+      //                     await controller.fetchChats();
+      //                   }
+      //                 } catch (e) {
+      //                   Get.snackbar(
+      //                     'Error',
+      //                     'Please Contact to Our Support Team',
+      //                     snackPosition: SnackPosition.BOTTOM,
+      //                   );
+      //                 }
+      //               },
+      //         backgroundColor: Colors.transparent,
+      //         elevation: 100.0,
+      //         size: 56.0,
+      //         showBadge: unreadCount > 0,
+      //         badgeText: unreadCount > 99 ? '99+' : '$unreadCount',
+      //         badgeColor: Colors.red,
+      //         badgeTextColor: Colors.white,
+      //         badgeSize: 24.0,
+      //         badgeTextSize: 12.0,
+      //         animationDuration: Duration(
+      //           milliseconds: isMqttConnected ? 300 : 500,
+      //         ),
+      //       );
+      //     });
+      //   },
+      // ),
     );
   }
 }
@@ -1185,55 +1173,55 @@ class _ReelsVideoItemState extends State<ReelsVideoItem> {
           _buildCommentsSection(),
           
           // Show "End of Videos" overlay on last video when no more videos
-          if (widget.isLastVideo)
-            Positioned(
-              top: MediaQuery.of(context).size.height * 0.3,
-              left: 0,
-              right: 0,
-              child: Container(
-                padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                child: Column(
-                  children: [
-                    Container(
-                      padding: EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.8),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.deepOrange, width: 2),
-                      ),
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.check_circle,
-                            color: Colors.deepOrange,
-                            size: 40,
-                          ),
-                          SizedBox(height: 12),
-                          Text(
-                            'You\'ve reached the end!',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          SizedBox(height: 8),
-                          Text(
-                            'Pull down to refresh for new content',
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 14,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+          // if (widget.isLastVideo)
+          //   Positioned(
+          //     top: MediaQuery.of(context).size.height * 0.3,
+          //     left: 0,
+          //     right: 0,
+          //     child: Container(
+          //       padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+          //       child: Column(
+          //         children: [
+          //           Container(
+          //             padding: EdgeInsets.all(16),
+          //             decoration: BoxDecoration(
+          //               color: Colors.black.withOpacity(0.8),
+          //               borderRadius: BorderRadius.circular(20),
+          //               border: Border.all(color: Colors.deepOrange, width: 2),
+          //             ),
+          //             child: Column(
+          //               children: [
+          //                 Icon(
+          //                   Icons.check_circle,
+          //                   color: Colors.deepOrange,
+          //                   size: 40,
+          //                 ),
+          //                 SizedBox(height: 12),
+          //                 Text(
+          //                   'You\'ve reached the end!',
+          //                   style: TextStyle(
+          //                     color: Colors.white,
+          //                     fontSize: 18,
+          //                     fontWeight: FontWeight.bold,
+          //                   ),
+          //                   textAlign: TextAlign.center,
+          //                 ),
+          //                 SizedBox(height: 8),
+          //                 Text(
+          //                   'Pull down to refresh for new content',
+          //                   style: TextStyle(
+          //                     color: Colors.white70,
+          //                     fontSize: 14,
+          //                   ),
+          //                   textAlign: TextAlign.center,
+          //                 ),
+          //               ],
+          //             ),
+          //           ),
+          //         ],
+          //       ),
+          //     ),
+          //   ),
         ],
       ),
     );

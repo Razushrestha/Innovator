@@ -10,6 +10,10 @@ import 'package:innovator/firebase_options.dart';
 import 'package:innovator/screens/Feed/Services/Feed_Cache_service.dart';
 import 'package:innovator/screens/Splash_Screen/splash_screen.dart';
 import 'package:innovator/controllers/user_controller.dart';
+import 'package:innovator/screens/chatApp/SearchchatUser.dart';
+import 'package:innovator/screens/chatApp/chat_homepage.dart';
+import 'package:innovator/screens/chatApp/chatscreen.dart';
+import 'package:innovator/screens/chatApp/controller/chat_controller.dart';
 import 'package:innovator/services/Notification_services.dart';
 import 'package:innovator/services/fcm_handler.dart';
 import 'package:innovator/utils/Drawer/drawer_cache_manager.dart';
@@ -159,7 +163,6 @@ class _InnovatorHomePageState extends ConsumerState<InnovatorHomePage> {
   @override
   Widget build(BuildContext context) {
      mq = MediaQuery.of(context).size; // Set once at build time
-// ronit sniriva ronut s  jronit   jdb ronih
 
     return GetMaterialApp(
       navigatorKey: navigatorKey,
@@ -167,6 +170,32 @@ class _InnovatorHomePageState extends ConsumerState<InnovatorHomePage> {
       theme: _buildAppTheme(),
       debugShowCheckedModeBanner: false,
       home: SplashScreen(),
+      onInit: () {
+        // Put the controller globally - this fixes the "not found" error
+        Get.put<FireChatController>(FireChatController(), permanent: true);
+      },
+      getPages: [
+       
+        GetPage(
+          name: '/home',
+          page: () => const OptimizedChatHomePage(),
+          // Ensure controller is available
+          binding: BindingsBuilder(() {
+            Get.lazyPut<FireChatController>(() => FireChatController());
+          }),
+        ),
+        GetPage(
+          name: '/search',
+          page: () => const OptimizedSearchUsersPage(),
+        ),
+        GetPage(
+          name: '/chat',
+          page: () => OptimizedChatScreen(
+            receiverUser: Get.arguments['receiverUser'],
+            currentUser: Get.arguments['currentUser'],
+          ),
+        ),
+      ],
      // getPages: _buildAppPages(),
     );
   }

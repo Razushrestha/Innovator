@@ -75,8 +75,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         await prefs.setInt(key, value);
       } else if (value is double) {
         await prefs.setDouble(key, value);
-        // ROnit Shrivastav Ronit Shrivastav Ronit Ashrivasta  Ronit Shrivastac Ronit Shrivastav ro  ron  iu ronit ronit 
-        // ro  ronit shrivasrac ronit sjiufd  ronit ronr  ias     ronit shrivasta ronit rshriqqqqqwertronit Ronit shrivastav ronit Shrivastav ronit ronit Shrivastav ronit Shrivastv   ron iuvef j hvbf jhbrojf nbronigtef h
       }
       
       // Show success feedback

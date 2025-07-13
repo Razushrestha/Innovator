@@ -18,7 +18,6 @@ import 'package:innovator/screens/Privacy_Policy/privacy_screen.dart';
 import 'package:innovator/screens/Profile/profile_page.dart';
 import 'package:innovator/screens/Report/Report_screen.dart';
 import 'package:innovator/screens/Settings/settings.dart';
-import 'package:innovator/screens/chatrrom/Screen/chat_listscreen.dart';
 import 'package:innovator/utils/Drawer/drawer_cache_manager.dart';
 import 'package:lottie/lottie.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -411,26 +410,26 @@ class _CustomDrawerState extends State<CustomDrawer>
                                   icon: Icons.message_rounded,
                                   title: 'Messages',
                                   onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder:
-                                            (_) => ChatListScreen(
-                                              currentUserId:
-                                                  AppData().currentUserId ?? '',
-                                              currentUserName:
-                                                  AppData().currentUserName ??
-                                                  '',
-                                              currentUserPicture:
-                                                  AppData()
-                                                      .currentUserProfilePicture ??
-                                                  '',
-                                              currentUserEmail:
-                                                  AppData().currentUserEmail ??
-                                                  '',
-                                            ),
-                                      ),
-                                    );
+                                    // Navigator.push(
+                                    //   context,
+                                    //   MaterialPageRoute(
+                                    //     builder:
+                                    //         (_) => ChatListScreen(
+                                    //           currentUserId:
+                                    //               AppData().currentUserId ?? '',
+                                    //           currentUserName:
+                                    //               AppData().currentUserName ??
+                                    //               '',
+                                    //           currentUserPicture:
+                                    //               AppData()
+                                    //                   .currentUserProfilePicture ??
+                                    //               '',
+                                    //           currentUserEmail:
+                                    //               AppData().currentUserEmail ??
+                                    //               '',
+                                    //         ),
+                                    //   ),
+                                    // );
                                   },
                                   delay: 100,
                                 ),

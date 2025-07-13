@@ -85,7 +85,7 @@ class _Forgot_PWDState extends State<Forgot_PWD> {
             width: MediaQuery.of(context).size.width,
             height: MediaQuery.of(context).size.height / 2.0,
             decoration: const BoxDecoration(
-              color: Color.fromRGBO(235, 111, 70, 1),
+              color: Color.fromRGBO(244, 135, 6, 1),
               borderRadius: BorderRadius.only(bottomRight: Radius.circular(70)),
             ),
             // child: Padding(
@@ -117,7 +117,7 @@ class _Forgot_PWDState extends State<Forgot_PWD> {
                       style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
-                        color: Color.fromRGBO(235, 111, 70, 1),
+                        color: Color.fromRGBO(244, 135, 6, 1),
                       ),
                     ),
                     SizedBox(height: 20),
@@ -135,17 +135,17 @@ class _Forgot_PWDState extends State<Forgot_PWD> {
                       keyboardType: TextInputType.emailAddress,
                       decoration: InputDecoration(
                         hintText: 'Enter Email',
-                        prefixIcon: Icon(Icons.email, color: Color.fromRGBO(235, 111, 70, 1)),
+                        prefixIcon: Icon(Icons.email, color: Color.fromRGBO(244, 135, 6, 1)),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(20),
-                          borderSide: BorderSide(color: Color.fromRGBO(235, 111, 70, 1)),
+                          borderSide: BorderSide(color: Color.fromRGBO(244, 135, 6, 1)),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(20),
-                          borderSide: BorderSide(color: Color.fromRGBO(235, 111, 70, 1), width: 2),
+                          borderSide: BorderSide(color: Color.fromRGBO(244, 135, 6, 1), width: 2),
                         ),
                         labelText: 'Email',
-                        labelStyle: TextStyle(color: Color.fromRGBO(235, 111, 70, 1)),
+                        labelStyle: TextStyle(color: Color.fromRGBO(244, 135, 6, 1)),
                       ),
                     ),
                     SizedBox(height: 30),
@@ -165,7 +165,7 @@ class _Forgot_PWDState extends State<Forgot_PWD> {
                               style: TextStyle(fontSize: 16, color: Colors.white),
                             ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Color.fromRGBO(235, 111, 70, 1),
+                        backgroundColor: Color.fromRGBO(244, 135, 6, 1),
                         padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20),
@@ -179,11 +179,11 @@ class _Forgot_PWDState extends State<Forgot_PWD> {
                       onPressed: () {
                         Navigator.pop(context);
                       },
-                      icon: Icon(Icons.arrow_back, color: Color.fromRGBO(235, 111, 70, 1)),
+                      icon: Icon(Icons.arrow_back, color: Color.fromRGBO(244, 135, 6, 1)),
                       label: Text(
                         'Back to Login',
                         style: TextStyle(
-                          color: Color.fromRGBO(235, 111, 70, 1),
+                          color: Color.fromRGBO(244, 135, 6, 1),
                           fontSize: 14,
                         ),
                       ),

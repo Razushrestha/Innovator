@@ -544,7 +544,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
               children: [
                 TabBar(
                   controller: _tabController,
-                  labelColor: Color.fromRGBO(235, 111, 70, 1),
+                  labelColor: Color.fromRGBO(244, 135, 6, 1),
                   unselectedLabelColor: Colors.grey,
                   tabs: [Tab(text: 'Followers'), Tab(text: 'Following')],
                 ),
@@ -624,7 +624,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                                 follow.picture == null
                                     ? Icon(
                                       Icons.person,
-                                      color: Color.fromRGBO(235, 111, 70, 1),
+                                      color: Color.fromRGBO(244, 135, 6, 1),
                                     )
                                     : null,
                           ),
@@ -743,7 +743,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                                 follower.picture == null
                                     ? Icon(
                                       Icons.person,
-                                      color: Color.fromRGBO(235, 111, 70, 1),
+                                      color: Color.fromRGBO(244, 135, 6, 1),
                                     )
                                     : null,
                           ),
@@ -845,7 +845,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                                   ? Icon(
                                     Icons.person,
                                     size: 60,
-                                    color: Color.fromRGBO(235, 111, 70, 1),
+                                    color: Color.fromRGBO(244, 135, 6, 1),
                                   )
                                   : null,
                         ),
@@ -858,7 +858,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                           child: Container(
                             padding: EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: Color.fromRGBO(235, 111, 70, 1),
+                              color: Color.fromRGBO(244, 135, 6, 1),
                               shape: BoxShape.circle,
                             ),
                             child:
@@ -894,7 +894,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                       ),
                       ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Color.fromRGBO(235, 111, 70, 1),
+                          backgroundColor: Color.fromRGBO(244, 135, 6, 1),
                         ),
                         onPressed: () {
                           Navigator.of(context).pushReplacement(
@@ -940,7 +940,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                       child: Text(
                         'Followers',
                         style: TextStyle(
-                          color: Color.fromRGBO(235, 111, 70, 1),
+                          color: Color.fromRGBO(244, 135, 6, 1),
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -963,7 +963,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                       child: Text(
                         'Following',
                         style: TextStyle(
-                          color: Color.fromRGBO(235, 111, 70, 1),
+                          color: Color.fromRGBO(244, 135, 6, 1),
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -978,7 +978,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                     child: Text(
                       '${profile.level.toUpperCase()} LEVEL',
                       style: TextStyle(
-                        color: Color.fromRGBO(235, 111, 70, 1),
+                        color: Color.fromRGBO(244, 135, 6, 1),
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -1122,7 +1122,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                               style: TextStyle(color: Colors.white),
                             ),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Color.fromRGBO(235, 111, 70, 1),
+                              backgroundColor: Color.fromRGBO(244, 135, 6, 1),
                             ),
                           ),
                         ],
@@ -1181,7 +1181,7 @@ class ProfileInfoCard extends StatelessWidget {
         padding: const EdgeInsets.all(16.0),
         child: Row(
           children: [
-            Icon(icon, color: Color.fromRGBO(235, 111, 70, 1)),
+            Icon(icon, color: Color.fromRGBO(244, 135, 6, 1)),
             SizedBox(width: 16),
             Expanded(
               child: Column(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:innovator/App_data/App_data.dart';
+import 'package:innovator/screens/Course/models/api_models.dart';
 import 'dart:convert';
 import 'dart:developer' as developer;
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
@@ -110,7 +111,7 @@ class ApiResponse {
 class NotesTab extends StatefulWidget {
   final String? courseId; // Pass the specific course ID if needed
 
-  const NotesTab({Key? key, this.courseId}) : super(key: key);
+  const NotesTab({Key? key, this.courseId, required List<Note> notes}) : super(key: key);
 
   @override
   State<NotesTab> createState() => _NotesTabState();
